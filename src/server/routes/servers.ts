@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { db } from '../../db'
-import { servers, organizationUsers, messages } from '../../db/schema'
-import { eq, and, desc, sql } from 'drizzle-orm'
+import { servers, organizationUsers, messages, statistics } from '../../db/schema'
+import { eq, and, desc, gte, sql, isNotNull } from 'drizzle-orm'
 
 const router = Router()
 
@@ -241,25 +241,91 @@ router.get('/:id/statistics', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Server not found' })
         }
 
-        // Get message counts
-        const stats = await db
+        const since = new Date()
+        since.setDate(since.getDate() - days)
+
+        // Counts grouped by status
+        const statusCounts = await db
             .select({
                 status: messages.status,
-                count: sql<number>`count(*)`.as('count'),
+                count: sql<number>`count(*)`,
             })
             .from(messages)
             .where(eq(messages.serverId, serverId))
             .groupBy(messages.status)
 
-        // Get recent activity
+        const countMap: Record<string, number> = {}
+        for (const row of statusCounts) {
+            countMap[row.status] = Number(row.count)
+        }
+
+        const sent = (countMap['sent'] || 0) + (countMap['delivered'] || 0)
+        const delivered = countMap['delivered'] || 0
+        const bounced = countMap['bounced'] || 0
+        const held = countMap['held'] || 0
+        const pending = (countMap['pending'] || 0) + (countMap['queued'] || 0)
+
+        // Opened count from messages
+        const [openedRow] = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(messages)
+            .where(and(eq(messages.serverId, serverId), isNotNull(messages.openedAt)))
+
+        const opened = Number(openedRow?.count || 0)
+
+        // Total clicks from statistics table
+        const [clickRow] = await db
+            .select({ total: sql<number>`coalesce(sum(links_clicked), 0)` })
+            .from(statistics)
+            .where(eq(statistics.serverId, serverId))
+
+        const clicked = Number(clickRow?.total || 0)
+
+        const total = sent + (countMap['failed'] || 0) + pending + held + bounced
+
+        // Daily stats for the last N days
+        const daily = await db
+            .select({
+                date: statistics.date,
+                sent: statistics.messagesSent,
+                delivered: statistics.messagesDelivered,
+                opened: statistics.messagesOpened,
+                clicked: statistics.linksClicked,
+                bounced: statistics.messagesBounced,
+                held: statistics.messagesHeld,
+            })
+            .from(statistics)
+            .where(and(eq(statistics.serverId, serverId), gte(statistics.date, since)))
+            .orderBy(statistics.date)
+
+        // Recent messages
         const recentMessages = await db.query.messages.findMany({
             where: eq(messages.serverId, serverId),
             orderBy: [desc(messages.createdAt)],
-            limit: 10,
+            limit: 20,
+            columns: {
+                id: true,
+                subject: true,
+                fromAddress: true,
+                toAddresses: true,
+                status: true,
+                direction: true,
+                openedAt: true,
+                sentAt: true,
+                deliveredAt: true,
+                createdAt: true,
+            },
         })
 
         res.json({
-            statistics: stats,
+            summary: { total, sent, delivered, bounced, held, pending, opened, clicked },
+            rates: {
+                deliveryRate: sent > 0 ? Math.round((delivered / sent) * 1000) / 10 : 0,
+                openRate:     sent > 0 ? Math.round((opened   / sent) * 1000) / 10 : 0,
+                clickRate:    sent > 0 ? Math.round((clicked  / sent) * 1000) / 10 : 0,
+                bounceRate:   sent > 0 ? Math.round((bounced  / sent) * 1000) / 10 : 0,
+            },
+            daily,
             recentMessages,
         })
     } catch (error) {

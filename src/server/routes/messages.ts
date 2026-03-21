@@ -4,6 +4,7 @@ import { db } from '../../db'
 import { messages, servers, organizationUsers, deliveries } from '../../db/schema'
 import { eq, and, desc, like, sql } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
+import { injectTracking, incrementStat, fireWebhooks } from '../lib/tracking'
 
 const router = Router()
 
@@ -181,11 +182,20 @@ router.post('/', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Server is suspended' })
         }
 
+        // Inject open/click tracking into HTML before storing
+        const messageToken = uuidv4()
+        let htmlBody = data.htmlBody
+
+        if (htmlBody && !server.privacyMode && (server.trackOpens || server.trackClicks)) {
+            const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 9001}`
+            htmlBody = injectTracking(htmlBody, messageToken, baseUrl, server.trackOpens, server.trackClicks)
+        }
+
         // Create message
         const [message] = await db.insert(messages).values({
             serverId: data.serverId,
             messageId: `<${uuidv4()}@${server.defaultFromAddress?.split('@')[1] || 'mail.local'}>`,
-            token: uuidv4(),
+            token: messageToken,
             direction: 'outgoing',
             fromAddress: data.from,
             toAddresses: data.to,
@@ -193,7 +203,7 @@ router.post('/', async (req: Request, res: Response) => {
             bccAddresses: data.bcc || [],
             subject: data.subject,
             plainBody: data.plainBody,
-            htmlBody: data.htmlBody,
+            htmlBody,
             headers: data.headers || {},
             attachments: data.attachments || [],
             status: 'queued',
@@ -211,8 +221,17 @@ router.post('/', async (req: Request, res: Response) => {
             })
         }
 
-        // In a real implementation, this would trigger the email sending process
-        // For now, we'll just return the message
+        // Fire message_sent webhook + update stats (non-blocking)
+        Promise.allSettled([
+            incrementStat(data.serverId, 'messagesSent'),
+            fireWebhooks(data.serverId, 'message_sent', {
+                messageId: message.id,
+                subject: message.subject,
+                from: message.fromAddress,
+                to: message.toAddresses,
+                recipients: allRecipients.length,
+            }),
+        ]).catch(() => {})
 
         res.status(201).json({
             message,

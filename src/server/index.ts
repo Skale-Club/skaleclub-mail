@@ -74,6 +74,8 @@ import messageRoutes from './routes/messages'
 import webhookRoutes from './routes/webhooks'
 import credentialRoutes from './routes/credentials'
 import routeRoutes from './routes/routes'
+import systemRoutes from './routes/system'
+import trackRoutes from './routes/track'
 
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
@@ -84,6 +86,10 @@ app.use('/api/messages', messageRoutes)
 app.use('/api/webhooks', webhookRoutes)
 app.use('/api/credentials', credentialRoutes)
 app.use('/api/routes', routeRoutes)
+app.use('/api/system', systemRoutes)
+
+// Public tracking endpoints — no auth, no rate-limit (high-volume pixel requests)
+app.use('/t', trackRoutes)
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
