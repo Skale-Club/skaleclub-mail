@@ -1,0 +1,361 @@
+import { Router, Request, Response } from 'express'
+import { z } from 'zod'
+import { db } from '../../db'
+import { webhooks, webhookRequests, servers, organizationUsers } from '../../db/schema'
+import { eq, and, desc } from 'drizzle-orm'
+
+const router = Router()
+
+// Validation schemas
+const createWebhookSchema = z.object({
+    serverId: z.string().uuid(),
+    name: z.string().min(1).max(100),
+    url: z.string().url(),
+    secret: z.string().optional(),
+    active: z.boolean().default(true),
+    events: z.array(z.enum([
+        'message_sent',
+        'message_delivered',
+        'message_bounced',
+        'message_held',
+        'message_opened',
+        'link_clicked',
+        'domain_verified',
+        'spam_alert'
+    ])).min(1),
+})
+
+const updateWebhookSchema = z.object({
+    name: z.string().min(1).max(100).optional(),
+    url: z.string().url().optional(),
+    secret: z.string().optional(),
+    active: z.boolean().optional(),
+    events: z.array(z.string()).min(1).optional(),
+})
+
+// Helper to check access
+async function checkWebhookAccess(userId: string, serverId: string) {
+    const server = await db.query.servers.findFirst({
+        where: eq(servers.id, serverId),
+    })
+
+    if (!server) return { server: null, membership: null }
+
+    const membership = await db.query.organizationUsers.findFirst({
+        where: and(
+            eq(organizationUsers.organizationId, server.organizationId),
+            eq(organizationUsers.userId, userId)
+        ),
+    })
+
+    return { server, membership }
+}
+
+// List webhooks for server
+router.get('/', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        const serverId = req.query.serverId as string
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        if (!serverId) {
+            return res.status(400).json({ error: 'Server ID required' })
+        }
+
+        const { server, membership } = await checkWebhookAccess(userId, serverId)
+
+        if (!server || !membership) {
+            return res.status(403).json({ error: 'Access denied' })
+        }
+
+        const webhooksList = await db.query.webhooks.findMany({
+            where: eq(webhooks.serverId, serverId),
+            orderBy: [desc(webhooks.createdAt)],
+        })
+
+        res.json({ webhooks: webhooksList })
+    } catch (error) {
+        console.error('Error fetching webhooks:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+// Get webhook by ID
+router.get('/:id', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        const webhookId = req.params.id
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        const webhook = await db.query.webhooks.findFirst({
+            where: eq(webhooks.id, webhookId),
+            with: {
+                server: true,
+            },
+        })
+
+        if (!webhook) {
+            return res.status(404).json({ error: 'Webhook not found' })
+        }
+
+        const { server, membership } = await checkWebhookAccess(userId, webhook.serverId)
+
+        if (!server || !membership) {
+            return res.status(403).json({ error: 'Access denied' })
+        }
+
+        res.json({ webhook })
+    } catch (error) {
+        console.error('Error fetching webhook:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+// Create webhook
+router.post('/', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        const data = createWebhookSchema.parse(req.body)
+
+        const { server, membership } = await checkWebhookAccess(userId, data.serverId)
+
+        if (!server || !membership || membership.role !== 'admin') {
+            return res.status(403).json({ error: 'Only admins can create webhooks' })
+        }
+
+        const [webhook] = await db.insert(webhooks).values({
+            serverId: data.serverId,
+            name: data.name,
+            url: data.url,
+            secret: data.secret,
+            active: data.active,
+            events: data.events,
+        }).returning()
+
+        res.status(201).json({ webhook })
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({ error: error.errors })
+        }
+        console.error('Error creating webhook:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+// Update webhook
+router.patch('/:id', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        const webhookId = req.params.id
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        const updates = updateWebhookSchema.parse(req.body)
+
+        const webhook = await db.query.webhooks.findFirst({
+            where: eq(webhooks.id, webhookId),
+        })
+
+        if (!webhook) {
+            return res.status(404).json({ error: 'Webhook not found' })
+        }
+
+        const { server, membership } = await checkWebhookAccess(userId, webhook.serverId)
+
+        if (!server || !membership || membership.role !== 'admin') {
+            return res.status(403).json({ error: 'Only admins can update webhooks' })
+        }
+
+        const [updatedWebhook] = await db
+            .update(webhooks)
+            .set({
+                ...updates,
+                updatedAt: new Date(),
+            })
+            .where(eq(webhooks.id, webhookId))
+            .returning()
+
+        res.json({ webhook: updatedWebhook })
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({ error: error.errors })
+        }
+        console.error('Error updating webhook:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+// Delete webhook
+router.delete('/:id', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        const webhookId = req.params.id
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        const webhook = await db.query.webhooks.findFirst({
+            where: eq(webhooks.id, webhookId),
+        })
+
+        if (!webhook) {
+            return res.status(404).json({ error: 'Webhook not found' })
+        }
+
+        const { server, membership } = await checkWebhookAccess(userId, webhook.serverId)
+
+        if (!server || !membership || membership.role !== 'admin') {
+            return res.status(403).json({ error: 'Only admins can delete webhooks' })
+        }
+
+        // Delete webhook requests first
+        await db.delete(webhookRequests).where(eq(webhookRequests.webhookId, webhookId))
+        // Delete webhook
+        await db.delete(webhooks).where(eq(webhooks.id, webhookId))
+
+        res.json({ message: 'Webhook deleted successfully' })
+    } catch (error) {
+        console.error('Error deleting webhook:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+// Get webhook request history
+router.get('/:id/requests', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        const webhookId = req.params.id
+        const limit = parseInt(req.query.limit as string) || 50
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        const webhook = await db.query.webhooks.findFirst({
+            where: eq(webhooks.id, webhookId),
+        })
+
+        if (!webhook) {
+            return res.status(404).json({ error: 'Webhook not found' })
+        }
+
+        const { server, membership } = await checkWebhookAccess(userId, webhook.serverId)
+
+        if (!server || !membership) {
+            return res.status(403).json({ error: 'Access denied' })
+        }
+
+        const requests = await db.query.webhookRequests.findMany({
+            where: eq(webhookRequests.webhookId, webhookId),
+            orderBy: [desc(webhookRequests.createdAt)],
+            limit,
+        })
+
+        res.json({ requests })
+    } catch (error) {
+        console.error('Error fetching webhook requests:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+// Test webhook
+router.post('/:id/test', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        const webhookId = req.params.id
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        const webhook = await db.query.webhooks.findFirst({
+            where: eq(webhooks.id, webhookId),
+        })
+
+        if (!webhook) {
+            return res.status(404).json({ error: 'Webhook not found' })
+        }
+
+        const { server, membership } = await checkWebhookAccess(userId, webhook.serverId)
+
+        if (!server || !membership || membership.role !== 'admin') {
+            return res.status(403).json({ error: 'Only admins can test webhooks' })
+        }
+
+        // Create a test payload
+        const testPayload = {
+            event: 'test',
+            timestamp: new Date().toISOString(),
+            server: {
+                id: server.id,
+                name: server.name,
+            },
+            data: {
+                message: 'This is a test webhook from SkaleClub Mail',
+            },
+        }
+
+        try {
+            const response = await fetch(webhook.url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Webhook-Secret': webhook.secret || '',
+                    'X-Webhook-Event': 'test',
+                },
+                body: JSON.stringify(testPayload),
+            })
+
+            const responseBody = await response.text()
+
+            // Log the request
+            await db.insert(webhookRequests).values({
+                webhookId: webhook.id,
+                event: 'test',
+                payload: testPayload,
+                responseCode: response.status,
+                responseBody: responseBody.substring(0, 5000),
+                success: response.ok,
+            })
+
+            res.json({
+                success: response.ok,
+                statusCode: response.status,
+                response: responseBody.substring(0, 1000),
+            })
+        } catch (fetchError) {
+            // Log failed request
+            await db.insert(webhookRequests).values({
+                webhookId: webhook.id,
+                event: 'test',
+                payload: testPayload,
+                success: false,
+                error: fetchError instanceof Error ? fetchError.message : 'Unknown error',
+            })
+
+            res.status(400).json({
+                success: false,
+                error: fetchError instanceof Error ? fetchError.message : 'Failed to send webhook',
+            })
+        }
+    } catch (error) {
+        console.error('Error testing webhook:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+export default router
