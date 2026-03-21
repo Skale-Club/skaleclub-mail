@@ -29,36 +29,9 @@ const updatePasswordSchema = z.object({
     password: z.string().min(8, 'Password must be at least 8 characters'),
 })
 
-// Register new user
-router.post('/register', async (req: Request, res: Response) => {
-    try {
-        const { email, password, firstName, lastName } = registerSchema.parse(req.body)
-
-        const { data, error } = await supabase.auth.signUp({
-            email,
-            password,
-            options: {
-                data: {
-                    firstName,
-                    lastName,
-                },
-            },
-        })
-
-        if (error) {
-            return res.status(400).json({ error: error.message })
-        }
-
-        res.status(201).json({
-            message: 'Registration successful. Please check your email to verify your account.',
-            user: data.user,
-        })
-    } catch (error) {
-        if (error instanceof z.ZodError) {
-            return res.status(400).json({ error: error.errors })
-        }
-        res.status(500).json({ error: 'Internal server error' })
-    }
+// Public registration is disabled — only admins can create users via /api/users
+router.post('/register', (req: Request, res: Response) => {
+    res.status(403).json({ error: 'Self-registration is disabled. Please contact an administrator.' })
 })
 
 // Login

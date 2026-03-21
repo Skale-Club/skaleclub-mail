@@ -76,14 +76,7 @@ export default function Login() {
                         </Button>
                     </form>
                 </CardContent>
-                <CardFooter className="flex justify-center">
-                    <p className="text-sm text-muted-foreground">
-                        Don't have an account?{' '}
-                        <a href="/register" className="text-primary hover:underline">
-                            Create one
-                        </a>
-                    </p>
-                </CardFooter>
+
             </Card>
         </div>
     )
