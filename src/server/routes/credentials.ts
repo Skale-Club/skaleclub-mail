@@ -1,11 +1,11 @@
-import { Router, Request, Response } from 'express'
-import { z } from 'zod'
-import { db } from '../../db'
-import { credentials, servers, organizationUsers } from '../../db/schema'
-import { eq, and } from 'drizzle-orm'
-import { v4 as uuidv4 } from 'uuid'
+import { Router, Request, Response } from 'express';
+import { z } from 'zod';
+import { db } from '../../db';
+import { credentials, servers, organizationUsers } from '../../db/schema';
+import { eq, desc } from 'drizzle-orm';
+import { v4 as uuidv4 } from 'uuid';
 
-const router = Router()
+const router = Router();
 
 // Validation schemas
 const createCredentialSchema = z.object({
@@ -14,18 +14,18 @@ const createCredentialSchema = z.object({
     type: z.enum(['smtp', 'api']),
     key: z.string().min(1),
     secret: z.string().optional(),
-})
+});
 
 const updateCredentialSchema = z.object({
     name: z.string().min(1).max(100).optional(),
     secret: z.string().optional(),
-})
+});
 
 // Helper to check access
 async function checkCredentialAccess(userId: string, serverId: string) {
     const server = await db.query.servers.findFirst({
         where: eq(servers.id, serverId),
-    })
+    });
 
     if (!server) return { server: null, membership: null }
 
@@ -69,9 +69,7 @@ router.get('/', async (req: Request, res: Response) => {
         console.error('Error fetching credentials:', error)
         res.status(500).json({ error: 'Internal server error' })
     }
-})
-
-)
+});
 
 // Create credential
 router.post('/', async (req: Request, res: Response) => {
@@ -93,12 +91,17 @@ router.post('/', async (req: Request, res: Response) => {
         const key = uuidv4()
         const secret = uuidv4()
 
+        // Hash the secret before inserting
+        let hashedSecret: string | null =        if (data.secret) {
+            hashedSecret = await hashSecret(data.secret)
+        }
+
         const [credential] = await db.insert(credentials).values({
             serverId: data.serverId,
             name: data.name,
             type: data.type,
             key: data.key || key,
-            secretHash: data.secret ? await hashSecret(data.secret) : null,
+            secretHash: hashedSecret,
         }).returning()
 
         res.status(201).json({ credential })
@@ -109,7 +112,7 @@ router.post('/', async (req: Request, res: Response) => {
         console.error('Error creating credential:', error)
         res.status(500).json({ error: 'Internal server error' })
     }
-})
+});
 
 // Regenerate credential key
 router.post('/:id/regenerate', async (req: Request, res: Response) => {
@@ -137,12 +140,13 @@ router.post('/:id/regenerate', async (req: Request, res: Response) => {
 
         const newKey = uuidv4()
         const newSecret = uuidv4()
+        const hashedNewSecret = await hashSecret(newSecret)
 
         const [updatedCredential] = await db
             .update(credentials)
             .set({
                 key: newKey,
-                secretHash: await hashSecret(newSecret),
+                secretHash: hashedNewSecret,
                 updatedAt: new Date(),
             })
             .where(eq(credentials.id, credentialId))
@@ -157,7 +161,7 @@ router.post('/:id/regenerate', async (req: Request, res: Response) => {
         console.error('Error regenerating credential:', error)
         res.status(500).json({ error: 'Internal server error' })
     }
-})
+});
 
 // Delete credential
 router.delete('/:id', async (req: Request, res: Response) => {
@@ -190,14 +194,14 @@ router.delete('/:id', async (req: Request, res: Response) => {
         console.error('Error deleting credential:', error)
         res.status(500).json({ error: 'Internal server error' })
     }
-})
+});
 
 // Helper function to hash secret
 async function hashSecret(secret: string): Promise<string> {
     // In a real implementation, use bcrypt or crypto
     const encoder = new TextEncoder()
     const data = encoder.encode(secret)
-    return data.toString('base64')
+    return Buffer.from(data).toString('base64')
 }
 
 export default router
