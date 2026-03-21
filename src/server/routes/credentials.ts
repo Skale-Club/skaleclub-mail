@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { db } from '../../db';
 import { credentials, servers, organizationUsers } from '../../db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
@@ -92,7 +92,8 @@ router.post('/', async (req: Request, res: Response) => {
         const secret = uuidv4()
 
         // Hash the secret before inserting
-        let hashedSecret: string | null =        if (data.secret) {
+        let hashedSecret: string | null = null
+        if (data.secret) {
             hashedSecret = await hashSecret(data.secret)
         }
 
@@ -198,10 +199,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
 // Helper function to hash secret
 async function hashSecret(secret: string): Promise<string> {
-    // In a real implementation, use bcrypt or crypto
-    const encoder = new TextEncoder()
-    const data = encoder.encode(secret)
-    return Buffer.from(data).toString('base64')
+    const { createHash } = await import('crypto')
+    return createHash('sha256').update(secret).digest('hex')
 }
 
 export default router

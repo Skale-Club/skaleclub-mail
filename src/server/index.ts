@@ -1,10 +1,8 @@
+import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
-import { config } from 'dotenv'
-
-config()
 
 const app = express()
 const PORT = process.env.PORT || 9001
@@ -31,6 +29,39 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 // Health check
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() })
+})
+
+// Auth middleware - extract user ID from Supabase JWT
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_ANON_KEY!,
+)
+
+app.use('/api', async (req, res, next) => {
+    // Skip auth for auth routes
+    if (req.path.startsWith('/auth')) {
+        return next()
+    }
+
+    const authHeader = req.headers.authorization
+    if (!authHeader?.startsWith('Bearer ')) {
+        return next()
+    }
+
+    try {
+        const token = authHeader.replace('Bearer ', '')
+        const { data: { user }, error } = await supabase.auth.getUser(token)
+
+        if (!error && user) {
+            req.headers['x-user-id'] = user.id
+        }
+    } catch {
+        // Continue without user context
+    }
+
+    next()
 })
 
 // API Routes

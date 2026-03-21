@@ -4,10 +4,10 @@ import { supabase } from '../lib/supabase'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
-import { Card, from '../components/ui/card'
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/card'
 
 export default function Login() {
-    const [pathname, useLocation()
+    const [, navigate] = useLocation()
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [isLoading, setIsLoading] = useState(false)
@@ -82,6 +82,7 @@ export default function Login() {
                         <a href="/register" className="text-primary hover:underline">
                             Create one
                         </a>
+                    </p>
                 </CardFooter>
             </Card>
         </div>

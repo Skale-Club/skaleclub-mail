@@ -14,7 +14,7 @@ import Dashboard from './pages/Dashboard'
 // Simple auth check component
 function AuthCheck({ children }: { children: React.ReactNode }) {
     const { user, isLoading } = useAuth()
-    const [pathname] = window.location.pathname
+    const pathname = window.location.pathname
 
     if (isLoading) {
         return (

@@ -1,6 +1,6 @@
 import React from 'react'
 import { useAuth } from '../hooks/useAuth'
-import { Card, CardContent, from '../components/ui/card'
+import { Card, CardContent } from '../components/ui/card'
 
 export default function Dashboard() {
   const { user } = useAuth()

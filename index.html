@@ -1,65 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
-
-<head>
+  <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SkaleClub Mail</title>
-    <link rel="stylesheet" href="/src/index.css" />
     <link rel="icon" href="/src/favicon.ico" type="image/x-icon" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" rel="apple-touch-icon">
-
-<body class="min-h-screen bg-background">
-    <div class="container">
-        <div class="container mx-auto px-4">
-            < margin-left: auto; margin-right: auto; padding-left: 0.75rem; } @media (max-width: 640px) { .container {
-                max-width: 1400px; } } } </style>
-                </head>
-
-                <body>
-                    <div id="root"></div>
-                    <App />
-                    </App>
-                    <script type="module" src="./main.tsx"></script>
-                    <script type="module" src="./App.tsx"></script>
-                    </head>
-
-                    <body>
-                        <div id="root"></div>
-                        <App />
-                        <Router />
-                        <Route path="/" element={<Dashboard />} />
-                        <Route path="/login" element={<LoginForm />} />
-                        <Route path="/register" element={<RegisterForm />} />
-                        <Route path="/forgot-password" element={<ForgotPasswordForm />} />
-                        <Route path="/reset-password" element={<ResetPasswordForm />} />
-                        <Route path="/organizations" element={<OrganizationsPage />} />
-                        <Route path="/organizations/new" element={<NewOrganizationForm />} />
-                        <Route path="/organizations/:organizationId" element={<OrganizationPage />} />
-                        <Route path="/servers" element={<ServersPage />} />
-                        <Route path="/servers/new" element={<NewServerForm />} />
-                        <Route path="/servers/:serverId" element={<ServerPage />} />
-                        <Route path="/servers/:serverId/domains" element={<DomainsPage />} />
-                        <Route path="/servers/:serverId/messages" element={<MessagesPage />} />
-                        <Route path="/servers/:serverId/webhooks" element={<WebhooksPage />} />
-                        <Route path="/domains" element={<DomainsPage />} />
-                        <Route path="/domains/:domainId" element={<DomainPage />} />
-                        <Route path="/domains/:domainId/verify" element={<VerifyDomainPage />} />
-                        <Route path="/messages" element={<MessagesPage />} />
-                        <Route path="/messages" element={<MessagesPage />} />
-                        <Route path="/messages/:messageId" element={<MessagePage />} />
-                        <Route path="/messages/:messageId/deliveries" element={<MessageDeliveriesPage />} />
-                        <Route path="/messages/new" element={<NewMessageForm />} />
-                        <Route path="/webhooks" element={<WebhooksPage />} />
-                        <Route path="/webhooks/new" element={<NewWebhookForm />} />
-                        <Route path="/webhooks/:webhookId" element={<WebhookPage />} />
-                        <Route path="/webhooks/:webhookId/requests" element={<WebhookRequestsPage />} />
-                        <Route path="/credentials" element={<CredentialsPage />} />
-                        <Route path="/credentials/new" element={<NewCredentialForm />} />
-                        <Route path="/routes" element={<RoutesPage />} />
-                        <Route path="/routes/new" element={<NewRouteForm />} />
-                        <Route path="/routes/:routeId" element={<RoutePage />} />
-                        </App>
-                    </body>
-
+  </head>
+  <body class="min-h-screen bg-background">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>

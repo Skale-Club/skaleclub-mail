@@ -106,8 +106,8 @@ router.post('/', async (req: Request, res: Response) => {
     }
 })
 
-// Get route by ID
-router.get('/:id', async (req: Request, res: Response) => {
+// Update route
+router.put('/:id', async (req: Request, res: Response) => {
     try {
         const userId = req.headers['x-user-id'] as string
         const routeId = req.params.id
@@ -115,6 +115,8 @@ router.get('/:id', async (req: Request, res: Response) => {
         if (!userId) {
             return res.status(401).json({ error: 'Unauthorized' })
         }
+
+        const data = updateRouteSchema.parse(req.body)
 
         const route = await db.query.routes.findFirst({
             where: eq(routes.id, routeId),

@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { db } from '../../db'
 import { messages, servers, organizationUsers, deliveries } from '../../db/schema'
-import { eq, and, desc, or, like, sql } from 'drizzle-orm'
+import { eq, and, desc, like, sql } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 
 const router = Router()
@@ -89,6 +89,10 @@ router.get('/', async (req: Request, res: Response) => {
 
         if (from) {
             conditions.push(like(messages.fromAddress, `%${from}%`))
+        }
+
+        if (to) {
+            conditions.push(sql`${messages.toAddresses}::text like ${'%' + to + '%'}`)
         }
 
         const messagesList = await db.query.messages.findMany({
