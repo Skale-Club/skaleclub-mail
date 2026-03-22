@@ -117,27 +117,20 @@ export default function OrganizationsPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                    <h2 className="text-2xl font-bold tracking-tight">Organizations</h2>
-                    <p className="text-muted-foreground">Manage your email organizations</p>
-                </div>
-                <Button onClick={() => setShowCreateModal(true)}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    New Organization
-                </Button>
-            </div>
-
-            <div className="flex items-center gap-4">
-                <div className="relative flex-1">
+            <div className="flex items-center gap-4 justify-between">
+                <div className="relative flex-1 max-w-md">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                         placeholder="Search organizations..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-10"
+                        className="pl-10 shadow-sm-soft"
                     />
                 </div>
+                <Button className="shadow-sm-soft" onClick={() => setShowCreateModal(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    New Organization
+                </Button>
             </div>
 
             {isLoading ? (

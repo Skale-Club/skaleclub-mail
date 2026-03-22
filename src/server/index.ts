@@ -149,7 +149,7 @@ app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`)
     console.log('SkaleClub Mail API ready')
 
-    import('./jobs').then(({ startJobs }) => startJobs())
+    import('./jobs').then(({ startSyncWorker }) => startSyncWorker())
 })
 
 export default app

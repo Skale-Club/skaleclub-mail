@@ -130,14 +130,7 @@ export default function DomainsPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                    <h2 className="text-2xl font-bold tracking-tight">Domains</h2>
-                    <p className="text-muted-foreground">Manage sending domains and DNS verification.</p>
-                </div>
-            </div>
-
-            <Card>
+            <Card className="shadow-sm-soft">
                 <CardContent className="grid gap-4 pt-6 lg:grid-cols-[260px_minmax(0,1fr)_360px]">
                     <Field label="Server">
                         <select
@@ -288,10 +281,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function StatusPill({ status }: { status: DomainRecord['verificationStatus'] }) {
     const className =
         status === 'verified'
-            ? 'bg-emerald-100 text-emerald-800'
+            ? 'bg-primary/10 text-primary'
             : status === 'failed'
-            ? 'bg-red-100 text-red-800'
-            : 'bg-amber-100 text-amber-800'
+            ? 'bg-destructive/10 text-destructive'
+            : 'bg-secondary text-secondary-foreground'
 
     return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${className}`}>{status}</span>
 }

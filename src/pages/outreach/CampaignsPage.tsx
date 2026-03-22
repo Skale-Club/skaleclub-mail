@@ -70,11 +70,11 @@ function CampaignCard({ campaign, onStatusChange, onDelete }: {
     const [showMenu, setShowMenu] = React.useState(false)
 
     const statusColors: Record<string, string> = {
-        active: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400',
-        paused: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400',
-        draft: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
-        completed: 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400',
-        archived: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+        active: 'bg-primary/10 text-primary',
+        paused: 'bg-secondary text-secondary-foreground',
+        draft: 'bg-muted text-muted-foreground',
+        completed: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300',
+        archived: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
     }
 
     return (

@@ -4,10 +4,9 @@ import { db } from '../../db'
 import { organizations, organizationUsers, users, servers } from '../../db/schema'
 import { eq, and } from 'drizzle-orm'
 import { deleteOrganizationCascade } from '../lib/cascade'
+import { isPlatformAdmin } from '../lib/admin'
 
 const router = Router()
-
-// Validation schemas
 const createOrganizationSchema = z.object({
     name: z.string().min(1, 'Name is required').max(100),
     slug: z.string().min(1).max(50).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with hyphens'),
@@ -33,13 +32,18 @@ router.get('/', async (req: Request, res: Response) => {
             return res.status(401).json({ error: 'Unauthorized' })
         }
 
+        if (await isPlatformAdmin(userId)) {
+            const allOrgs = await db.query.organizations.findMany({
+                with: { servers: true },
+            })
+            return res.json({ organizations: allOrgs })
+        }
+
         const memberships = await db.query.organizationUsers.findMany({
             where: eq(organizationUsers.userId, userId),
             with: {
                 organization: {
-                    with: {
-                        servers: true,
-                    },
+                    with: { servers: true },
                 },
             },
         })
@@ -66,16 +70,18 @@ router.get('/:id', async (req: Request, res: Response) => {
             return res.status(401).json({ error: 'Unauthorized' })
         }
 
-        // Check if user is a member
-        const membership = await db.query.organizationUsers.findFirst({
-            where: and(
-                eq(organizationUsers.organizationId, organizationId),
-                eq(organizationUsers.userId, userId)
-            ),
-        })
+        const isAdmin = await isPlatformAdmin(userId)
 
-        if (!membership) {
-            return res.status(404).json({ error: 'Organization not found' })
+        if (!isAdmin) {
+            const membership = await db.query.organizationUsers.findFirst({
+                where: and(
+                    eq(organizationUsers.organizationId, organizationId),
+                    eq(organizationUsers.userId, userId)
+                ),
+            })
+            if (!membership) {
+                return res.status(404).json({ error: 'Organization not found' })
+            }
         }
 
         const organization = await db.query.organizations.findFirst({
@@ -96,7 +102,16 @@ router.get('/:id', async (req: Request, res: Response) => {
             },
         })
 
-        res.json({ organization, role: membership.role })
+        const membership = isAdmin
+            ? null
+            : await db.query.organizationUsers.findFirst({
+                where: and(
+                    eq(organizationUsers.organizationId, organizationId),
+                    eq(organizationUsers.userId, userId)
+                ),
+            })
+
+        res.json({ organization, role: isAdmin ? 'admin' : membership?.role })
     } catch (error) {
         console.error('Error fetching organization:', error)
         res.status(500).json({ error: 'Internal server error' })
@@ -114,7 +129,6 @@ router.post('/', async (req: Request, res: Response) => {
 
         const { name, slug, timezone } = createOrganizationSchema.parse(req.body)
 
-        // Check if slug already exists
         const existingOrg = await db.query.organizations.findFirst({
             where: eq(organizations.slug, slug),
         })
@@ -123,7 +137,8 @@ router.post('/', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Organization slug already exists' })
         }
 
-        // Create organization
+        const isAdmin = await isPlatformAdmin(userId)
+
         const [organization] = await db.insert(organizations).values({
             name,
             slug,
@@ -131,14 +146,16 @@ router.post('/', async (req: Request, res: Response) => {
             owner_id: userId,
         }).returning()
 
-        // Add owner as admin member
-        await db.insert(organizationUsers).values({
-            organizationId: organization.id,
-            userId,
-            role: 'admin',
-        })
+        // Platform admins are not added as members — they manage orgs externally.
+        // Regular users become admin members of the orgs they create.
+        if (!isAdmin) {
+            await db.insert(organizationUsers).values({
+                organizationId: organization.id,
+                userId,
+                role: 'admin',
+            })
+        }
 
-        // Auto-create default server for the organization
         const [defaultServer] = await db.insert(servers).values({
             name: name,
             slug: slug,
@@ -167,26 +184,23 @@ router.patch('/:id', async (req: Request, res: Response) => {
             return res.status(401).json({ error: 'Unauthorized' })
         }
 
-        // Check if user is admin
-        const membership = await db.query.organizationUsers.findFirst({
-            where: and(
-                eq(organizationUsers.organizationId, organizationId),
-                eq(organizationUsers.userId, userId)
-            ),
-        })
-
-        if (!membership || membership.role !== 'admin') {
-            return res.status(403).json({ error: 'Forbidden' })
+        if (!await isPlatformAdmin(userId)) {
+            const membership = await db.query.organizationUsers.findFirst({
+                where: and(
+                    eq(organizationUsers.organizationId, organizationId),
+                    eq(organizationUsers.userId, userId)
+                ),
+            })
+            if (!membership || membership.role !== 'admin') {
+                return res.status(403).json({ error: 'Forbidden' })
+            }
         }
 
         const updates = updateOrganizationSchema.parse(req.body)
 
         const [updatedOrg] = await db
             .update(organizations)
-            .set({
-                ...updates,
-                updatedAt: new Date(),
-            })
+            .set({ ...updates, updatedAt: new Date() })
             .where(eq(organizations.id, organizationId))
             .returning()
 
@@ -210,7 +224,6 @@ router.delete('/:id', async (req: Request, res: Response) => {
             return res.status(401).json({ error: 'Unauthorized' })
         }
 
-        // Check if user is owner
         const organization = await db.query.organizations.findFirst({
             where: eq(organizations.id, organizationId),
         })
@@ -219,11 +232,11 @@ router.delete('/:id', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Organization not found' })
         }
 
-        if (organization.owner_id !== userId) {
+        const isAdmin = await isPlatformAdmin(userId)
+        if (!isAdmin && organization.owner_id !== userId) {
             return res.status(403).json({ error: 'Only the owner can delete the organization' })
         }
 
-        // Delete all related data (cascade)
         await deleteOrganizationCascade(organizationId)
 
         res.json({ message: 'Organization deleted successfully' })
@@ -243,21 +256,20 @@ router.post('/:id/members', async (req: Request, res: Response) => {
             return res.status(401).json({ error: 'Unauthorized' })
         }
 
-        // Check if user is admin
-        const membership = await db.query.organizationUsers.findFirst({
-            where: and(
-                eq(organizationUsers.organizationId, organizationId),
-                eq(organizationUsers.userId, userId)
-            ),
-        })
-
-        if (!membership || membership.role !== 'admin') {
-            return res.status(403).json({ error: 'Forbidden' })
+        if (!await isPlatformAdmin(userId)) {
+            const membership = await db.query.organizationUsers.findFirst({
+                where: and(
+                    eq(organizationUsers.organizationId, organizationId),
+                    eq(organizationUsers.userId, userId)
+                ),
+            })
+            if (!membership || membership.role !== 'admin') {
+                return res.status(403).json({ error: 'Forbidden' })
+            }
         }
 
         const { email, role } = addMemberSchema.parse(req.body)
 
-        // Find user by email
         const userToAdd = await db.query.users.findFirst({
             where: eq(users.email, email),
         })
@@ -266,7 +278,6 @@ router.post('/:id/members', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'User not found' })
         }
 
-        // Check if already a member
         const existingMembership = await db.query.organizationUsers.findFirst({
             where: and(
                 eq(organizationUsers.organizationId, organizationId),
@@ -278,7 +289,6 @@ router.post('/:id/members', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'User is already a member' })
         }
 
-        // Add member
         const [newMembership] = await db.insert(organizationUsers).values({
             organizationId,
             userId: userToAdd.id,
@@ -306,19 +316,18 @@ router.delete('/:id/members/:userId', async (req: Request, res: Response) => {
             return res.status(401).json({ error: 'Unauthorized' })
         }
 
-        // Check if user is admin
-        const membership = await db.query.organizationUsers.findFirst({
-            where: and(
-                eq(organizationUsers.organizationId, organizationId),
-                eq(organizationUsers.userId, userId)
-            ),
-        })
-
-        if (!membership || membership.role !== 'admin') {
-            return res.status(403).json({ error: 'Forbidden' })
+        if (!await isPlatformAdmin(userId)) {
+            const membership = await db.query.organizationUsers.findFirst({
+                where: and(
+                    eq(organizationUsers.organizationId, organizationId),
+                    eq(organizationUsers.userId, userId)
+                ),
+            })
+            if (!membership || membership.role !== 'admin') {
+                return res.status(403).json({ error: 'Forbidden' })
+            }
         }
 
-        // Cannot remove owner
         const organization = await db.query.organizations.findFirst({
             where: eq(organizations.id, organizationId),
         })
@@ -356,25 +365,24 @@ router.patch('/:id/members/:userId', async (req: Request, res: Response) => {
             role: z.enum(['admin', 'member', 'viewer']),
         }).parse(req.body)
 
-        // Check if user is admin
-        const membership = await db.query.organizationUsers.findFirst({
-            where: and(
-                eq(organizationUsers.organizationId, organizationId),
-                eq(organizationUsers.userId, userId)
-            ),
-        })
-
-        if (!membership || membership.role !== 'admin') {
-            return res.status(403).json({ error: 'Forbidden' })
+        if (!await isPlatformAdmin(userId)) {
+            const membership = await db.query.organizationUsers.findFirst({
+                where: and(
+                    eq(organizationUsers.organizationId, organizationId),
+                    eq(organizationUsers.userId, userId)
+                ),
+            })
+            if (!membership || membership.role !== 'admin') {
+                return res.status(403).json({ error: 'Forbidden' })
+            }
         }
 
-        // Cannot change owner's role
         const organization = await db.query.organizations.findFirst({
             where: eq(organizations.id, organizationId),
         })
 
         if (organization?.owner_id === targetUserId) {
-            return res.status(400).json({ error: 'Cannot change the owner\'s role' })
+            return res.status(400).json({ error: "Cannot change the owner's role" })
         }
 
         const [updatedMembership] = await db

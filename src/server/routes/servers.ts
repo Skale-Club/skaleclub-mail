@@ -4,6 +4,7 @@ import { db } from '../../db'
 import { servers, organizationUsers, messages, statistics } from '../../db/schema'
 import { eq, and, desc, gte, sql, isNotNull } from 'drizzle-orm'
 import { deleteServerCascade } from '../lib/cascade'
+import { isPlatformAdmin } from '../lib/admin'
 
 const router = Router()
 
@@ -42,6 +43,10 @@ async function checkServerAccess(userId: string, serverId: string) {
 
     if (!server) return { server: null, membership: null }
 
+    if (await isPlatformAdmin(userId)) {
+        return { server, membership: { role: 'admin' as const } }
+    }
+
     const membership = await db.query.organizationUsers.findFirst({
         where: and(
             eq(organizationUsers.organizationId, server.organizationId),
@@ -66,16 +71,16 @@ router.get('/', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Organization ID required' })
         }
 
-        // Check membership
-        const membership = await db.query.organizationUsers.findFirst({
-            where: and(
-                eq(organizationUsers.organizationId, organizationId),
-                eq(organizationUsers.userId, userId)
-            ),
-        })
-
-        if (!membership) {
-            return res.status(403).json({ error: 'Access denied' })
+        if (!await isPlatformAdmin(userId)) {
+            const membership = await db.query.organizationUsers.findFirst({
+                where: and(
+                    eq(organizationUsers.organizationId, organizationId),
+                    eq(organizationUsers.userId, userId)
+                ),
+            })
+            if (!membership) {
+                return res.status(403).json({ error: 'Access denied' })
+            }
         }
 
         const serversList = await db.query.servers.findMany({

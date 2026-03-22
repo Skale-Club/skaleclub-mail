@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { db } from '../../db'
 import { webhooks, webhookRequests, servers, organizationUsers } from '../../db/schema'
 import { eq, and, desc } from 'drizzle-orm'
+import { isPlatformAdmin } from '../lib/admin'
 
 const router = Router()
 
@@ -40,6 +41,10 @@ async function checkWebhookAccess(userId: string, serverId: string) {
     })
 
     if (!server) return { server: null, membership: null }
+
+    if (await isPlatformAdmin(userId)) {
+        return { server, membership: { role: 'admin' as const } }
+    }
 
     const membership = await db.query.organizationUsers.findFirst({
         where: and(

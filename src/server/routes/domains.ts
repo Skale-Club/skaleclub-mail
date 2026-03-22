@@ -5,6 +5,7 @@ import { db } from '../../db'
 import { domains, servers, organizationUsers } from '../../db/schema'
 import { eq, and } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
+import { isPlatformAdmin } from '../lib/admin'
 
 const resolver = new dnsPromises.Resolver()
 resolver.setServers((process.env.DNS_SERVERS || '8.8.8.8,1.1.1.1').split(','))
@@ -34,6 +35,10 @@ async function checkDomainAccess(userId: string, serverId: string) {
     })
 
     if (!server) return { server: null, membership: null }
+
+    if (await isPlatformAdmin(userId)) {
+        return { server, membership: { role: 'admin' as const } }
+    }
 
     const membership = await db.query.organizationUsers.findFirst({
         where: and(

@@ -4,6 +4,7 @@ import { eq, and, desc, like, sql } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 import { db } from '../../db'
 import { messages, servers, organizationUsers, deliveries, templates } from '../../db/schema'
+import { isPlatformAdmin } from '../lib/admin'
 import { injectTracking, incrementStat, fireWebhooks } from '../lib/tracking'
 import { resolveOutlookMailboxForServer, sendMessageWithOutlook } from '../lib/outlook'
 
@@ -54,6 +55,10 @@ async function checkMessageAccess(userId: string, serverId: string) {
     })
 
     if (!server) return { server: null, membership: null }
+
+    if (await isPlatformAdmin(userId)) {
+        return { server, membership: { role: 'admin' as const } }
+    }
 
     const membership = await db.query.organizationUsers.findFirst({
         where: and(

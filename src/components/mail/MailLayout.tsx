@@ -1,6 +1,7 @@
 import React from 'react'
 import { Link, useLocation } from 'wouter'
 import { useAuth } from '../../hooks/useAuth'
+import { ModeToggle } from '../mode-toggle'
 import { supabase } from '../../lib/supabase'
 import {
     Inbox,
@@ -65,7 +66,7 @@ export function MailLayout({ children }: MailLayoutProps) {
     }
 
     return (
-        <div className="min-h-screen bg-gray-100 dark:bg-gray-950">
+        <div className="min-h-screen bg-background">
             {sidebarOpen && (
                 <div
                     className="fixed inset-0 z-40 bg-black/50 lg:hidden"
@@ -75,23 +76,22 @@ export function MailLayout({ children }: MailLayoutProps) {
 
             <div className="flex h-screen">
                 <aside className={`
-                    fixed top-0 left-0 z-50 h-full w-72 bg-gradient-to-b from-slate-900 to-slate-800 dark:from-slate-950 dark:to-slate-900
-                    text-white shadow-2xl
+                    fixed top-0 left-0 z-50 h-full w-72 bg-card border-r border-border shadow-lg
                     transform transition-transform duration-300 ease-out
                     ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
                     lg:translate-x-0 lg:static lg:shadow-none
                 `}>
-                    <div className="flex items-center justify-between h-16 px-5 border-b border-slate-700/50">
+                    <div className="flex items-center justify-between h-16 px-5 border-b border-border">
                         <Link href="/mail/inbox" className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
-                                <Mail className="w-6 h-6 text-white" />
+                            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-sm">
+                                <Mail className="w-6 h-6 text-primary-foreground" />
                             </div>
                             <div>
-                                <span className="text-xl font-bold tracking-tight">SkaleMail</span>
+                                <span className="text-xl font-bold tracking-tight text-foreground">SkaleMail</span>
                             </div>
                         </Link>
                         <button
-                            className="lg:hidden p-2 rounded-lg hover:bg-slate-700/50 transition-colors"
+                            className="lg:hidden p-2 rounded-lg hover:bg-accent text-muted-foreground transition-colors"
                             onClick={() => setSidebarOpen(false)}
                         >
                             <X className="w-5 h-5" />
@@ -101,7 +101,7 @@ export function MailLayout({ children }: MailLayoutProps) {
                     <div className="p-4">
                         <Link
                             href="/mail/compose"
-                            className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-xl font-semibold text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all duration-200"
+                            className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-primary hover:bg-primary/90 rounded-xl font-medium text-primary-foreground shadow-sm-soft transition-all duration-200"
                         >
                             <Plus className="w-5 h-5" />
                             Compose
@@ -114,10 +114,10 @@ export function MailLayout({ children }: MailLayoutProps) {
                                 key={folder.id}
                                 href={folder.href}
                                 className={`
-                                    flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200
+                                    flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200
                                     ${isActiveRoute(folder.href)
-                                        ? 'bg-blue-600/20 text-blue-400 shadow-inner'
-                                        : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
+                                        ? 'bg-accent text-accent-foreground'
+                                        : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
                                     }
                                 `}
                                 onClick={() => setSidebarOpen(false)}
@@ -125,7 +125,7 @@ export function MailLayout({ children }: MailLayoutProps) {
                                 {folder.icon}
                                 <span className="flex-1">{folder.label}</span>
                                 {folder.badge && (
-                                    <span className="px-2 py-0.5 text-xs font-bold bg-blue-500 rounded-full">
+                                    <span className="px-2 py-0.5 text-xs font-bold bg-primary text-primary-foreground rounded-full">
                                         {folder.badge}
                                     </span>
                                 )}
@@ -133,14 +133,14 @@ export function MailLayout({ children }: MailLayoutProps) {
                         ))}
                     </nav>
 
-                    <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-700/50">
+                    <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-border">
                         <Link
                             href="/mail/settings"
                             className={`
-                                flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 mb-2
+                                flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 mb-2
                                 ${isActiveRoute('/mail/settings')
-                                    ? 'bg-blue-600/20 text-blue-400'
-                                    : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
+                                    ? 'bg-accent text-accent-foreground'
+                                    : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
                                 }
                             `}
                         >
@@ -151,48 +151,49 @@ export function MailLayout({ children }: MailLayoutProps) {
                 </aside>
 
                 <div className="flex-1 flex flex-col min-w-0">
-                    <header className="h-16 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-6 shadow-sm">
+                    <header className="h-16 bg-background/80 backdrop-blur-md border-b border-border flex items-center justify-between px-6 sticky top-0 z-30">
                         <div className="flex items-center gap-4">
                             <button
-                                className="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800"
+                                className="lg:hidden p-2 rounded-lg hover:bg-accent hover:text-accent-foreground text-muted-foreground"
                                 onClick={() => setSidebarOpen(true)}
                             >
                                 <Menu className="w-5 h-5" />
                             </button>
 
                             <form onSubmit={handleSearch} className="relative">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                                 <input
                                     type="text"
                                     placeholder="Search emails..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-96 pl-10 pr-4 py-2 bg-gray-100 dark:bg-slate-800 border-0 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-700 transition-all"
+                                    className="w-96 pl-10 pr-4 py-2 bg-muted/50 border border-transparent rounded-lg text-sm focus:bg-background focus:border-border focus:ring-4 focus:ring-primary/10 transition-all outline-none shadow-sm-soft"
                                 />
                             </form>
                         </div>
 
                         <div className="flex items-center gap-3">
-                            <button className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors relative">
-                                <RefreshCw className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                            <button className="p-2 rounded-xl hover:bg-accent hover:text-accent-foreground text-muted-foreground transition-colors relative">
+                                <RefreshCw className="w-5 h-5" />
                             </button>
-                            <button className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors relative">
-                                <Bell className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                            <button className="p-2 rounded-xl hover:bg-accent hover:text-accent-foreground text-muted-foreground transition-colors relative">
+                                <Bell className="w-5 h-5" />
+                                <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full"></span>
                             </button>
+                            <ModeToggle />
 
                             <div className="relative">
                                 <button
                                     onClick={() => setUserMenuOpen(!userMenuOpen)}
-                                    className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+                                    className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-accent transition-colors"
                                 >
-                                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
+                                    <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-semibold text-sm">
                                         {user?.user_metadata?.firstName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || 'U'}
                                     </div>
-                                    <span className="hidden sm:block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    <span className="hidden sm:block text-sm font-medium text-foreground">
                                         {user?.user_metadata?.firstName || user?.email?.split('@')[0] || 'User'}
                                     </span>
-                                    <ChevronDown className="w-4 h-4 text-gray-400" />
+                                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
                                 </button>
 
                                 {userMenuOpen && (
@@ -201,16 +202,16 @@ export function MailLayout({ children }: MailLayoutProps) {
                                             className="fixed inset-0 z-40"
                                             onClick={() => setUserMenuOpen(false)}
                                         />
-                                        <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-50">
-                                            <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
-                                                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                        <div className="absolute right-0 top-full mt-2 w-64 bg-popover text-popover-foreground rounded-xl shadow-md border border-border py-2 z-50">
+                                            <div className="px-4 py-3 border-b border-border">
+                                                <p className="text-sm font-medium">
                                                     {user?.user_metadata?.firstName} {user?.user_metadata?.lastName}
                                                 </p>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400">{user?.email}</p>
+                                                <p className="text-xs text-muted-foreground">{user?.email}</p>
                                             </div>
                                             <Link
                                                 href="/mail/settings"
-                                                className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                                                className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-accent hover:text-accent-foreground"
                                                 onClick={() => setUserMenuOpen(false)}
                                             >
                                                 <User className="w-4 h-4" />
@@ -218,16 +219,16 @@ export function MailLayout({ children }: MailLayoutProps) {
                                             </Link>
                                             <Link
                                                 href="/outreach"
-                                                className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                                                className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-accent hover:text-accent-foreground"
                                                 onClick={() => setUserMenuOpen(false)}
                                             >
                                                 <Settings className="w-4 h-4" />
                                                 Outreach Dashboard
                                             </Link>
-                                            <div className="border-t border-gray-100 dark:border-gray-700 mt-2 pt-2">
+                                            <div className="border-t border-border mt-2 pt-2">
                                                 <button
                                                     onClick={handleSignOut}
-                                                    className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                                    className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10"
                                                 >
                                                     <LogOut className="w-4 h-4" />
                                                     Sign Out
@@ -240,7 +241,7 @@ export function MailLayout({ children }: MailLayoutProps) {
                         </div>
                     </header>
 
-                    <main className="flex-1 overflow-hidden">
+                    <main className="flex-1 overflow-hidden bg-background">
                         {children}
                     </main>
                 </div>

@@ -125,237 +125,220 @@ export default function AdminDashboard() {
         : 1
 
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-                    <p className="text-muted-foreground">
-                        Welcome back, {user?.user_metadata?.firstName || user?.email}
-                    </p>
+        <div className="space-y-8 pb-8">
+            {isLoading ? (
+                <div className="grid gap-6 md:grid-cols-3">
+                    {[1, 2, 3].map((i) => (
+                        <Card key={i} className="animate-pulse">
+                            <CardHeader className="pb-2">
+                                <div className="h-4 w-24 rounded bg-muted"></div>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="h-8 w-16 rounded bg-muted"></div>
+                            </CardContent>
+                        </Card>
+                    ))}
                 </div>
-                <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => window.location.href = '/admin/organizations'}>
-                        <Building2 className="mr-2 h-4 w-4" />
-                        Organizations
-                    </Button>
-                    <Button onClick={() => window.location.href = '/admin/servers'}>
-                        <Server className="mr-2 h-4 w-4" />
-                        Servers
-                    </Button>
-                </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Organizations</CardTitle>
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.organizations}</div>
-                        <p className="text-xs text-muted-foreground">Active organizations</p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Servers</CardTitle>
-                        <Server className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.servers}</div>
-                        <p className="text-xs text-muted-foreground">Mail servers</p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Domains</CardTitle>
-                        <Globe className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.domains}</div>
-                        <p className="text-xs text-muted-foreground">Verified domains</p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Users</CardTitle>
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.users}</div>
-                        <p className="text-xs text-muted-foreground">Registered users</p>
-                    </CardContent>
-                </Card>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Sent</CardTitle>
-                        <Mail className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.messages.sent}</div>
-                        <p className="text-xs text-muted-foreground">Messages sent</p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Delivered</CardTitle>
-                        <CheckCircle className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.messages.delivered}</div>
-                        <p className="text-xs text-muted-foreground">Successfully delivered</p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Bounced</CardTitle>
-                        <AlertCircle className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.messages.bounced}</div>
-                        <p className="text-xs text-muted-foreground">Failed deliveries</p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Pending</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.messages.pending}</div>
-                        <p className="text-xs text-muted-foreground">In queue</p>
-                    </CardContent>
-                </Card>
-            </div>
-
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                    <div>
-                        <CardTitle className="flex items-center gap-2">
-                            <HardDrive className="h-5 w-5" />
-                            System Storage
-                        </CardTitle>
-                        <CardDescription>Supabase object storage usage</CardDescription>
-                    </div>
-                    {systemUsage && (
-                        <span className="text-sm text-muted-foreground">
-                            {formatBytes(systemUsage.storage.used)} / {formatBytes(systemUsage.storage.limit)}
-                        </span>
-                    )}
-                </CardHeader>
-                <CardContent>
-                    {usageLoading ? (
-                        <div className="h-4 animate-pulse rounded-full bg-muted" />
-                    ) : (
-                        <>
-                            <Progress
-                                value={storagePercent}
-                                indicatorClassName={
-                                    storagePercent > 90
-                                        ? 'bg-red-500'
-                                        : storagePercent > 70
-                                            ? 'bg-yellow-500'
-                                            : 'bg-primary'
-                                }
-                            />
-                            <p className="mt-1 text-xs text-muted-foreground">
-                                {storagePercent.toFixed(1)}% used
-                            </p>
-                        </>
-                    )}
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Users className="h-5 w-5" />
-                        Usage per User
-                    </CardTitle>
-                    <CardDescription>Message count and attachment storage per user</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {usageLoading ? (
-                        <div className="space-y-4">
-                            {[1, 2, 3].map((i) => (
-                                <div key={i} className="space-y-1">
-                                    <div className="h-4 w-48 animate-pulse rounded bg-muted" />
-                                    <div className="h-2 animate-pulse rounded-full bg-muted" />
+            ) : (
+                <>
+                    {/* Top Row: Primary Infrastructure Metrics */}
+                    <div className="grid gap-6 md:grid-cols-3">
+                        <Card className="bg-card">
+                            <CardContent className="p-6 flex items-center gap-4">
+                                <div className="p-3 rounded-xl bg-primary/10 text-primary shrink-0">
+                                    <Building2 className="h-6 w-6" />
                                 </div>
-                            ))}
-                        </div>
-                    ) : !systemUsage?.users.length ? (
-                        <p className="text-sm text-muted-foreground">No users found.</p>
-                    ) : (
-                        <div className="space-y-5">
-                            {systemUsage.users.map((u) => {
-                                const msgPercent = (u.messageCount / maxUserMessages) * 100
-                                const bytesPercent = (u.attachmentBytes / maxUserBytes) * 100
-                                const displayName = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email
-                                return (
-                                    <div key={u.id} className="space-y-2">
-                                        <div className="flex items-center justify-between text-sm">
-                                            <span className="max-w-[200px] truncate font-medium" title={u.email}>
-                                                {displayName}
-                                            </span>
-                                            <span className="ml-2 shrink-0 text-xs text-muted-foreground">
-                                                {u.messageCount} msg | {formatBytes(u.attachmentBytes)}
-                                            </span>
-                                        </div>
-                                        <div className="space-y-1">
-                                            <div className="flex items-center gap-2">
-                                                <span className="w-20 shrink-0 text-xs text-muted-foreground">Messages</span>
-                                                <Progress value={msgPercent} className="flex-1" />
+                                <div>
+                                    <p className="text-sm font-medium text-muted-foreground">Organizations</p>
+                                    <h3 className="text-2xl font-semibold tracking-tight text-foreground mt-1">{stats.organizations}</h3>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="bg-card">
+                            <CardContent className="p-6 flex items-center gap-4">
+                                <div className="p-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 shrink-0">
+                                    <Globe className="h-6 w-6" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-medium text-muted-foreground">Verified Domains</p>
+                                    <h3 className="text-2xl font-semibold tracking-tight text-foreground mt-1">{stats.domains}</h3>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="bg-card">
+                            <CardContent className="p-6 flex items-center gap-4">
+                                <div className="p-3 rounded-xl bg-secondary text-secondary-foreground shrink-0">
+                                    <Users className="h-6 w-6" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-medium text-muted-foreground">Total Users</p>
+                                    <h3 className="text-2xl font-semibold tracking-tight text-foreground mt-1">{stats.users}</h3>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Middle Section: Deliverability & Storage Bento */}
+                    <div className="grid gap-6 md:grid-cols-3">
+                        {/* Deliverability Card (Spans 2 columns) */}
+                        <Card className="md:col-span-2">
+                            <CardHeader className="pb-4">
+                                <CardTitle className="text-lg font-medium flex items-center gap-2">
+                                    <Mail className="h-5 w-5 text-muted-foreground" />
+                                    Email Deliverability
+                                </CardTitle>
+                                <CardDescription>System-wide message processing metrics</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <div className="space-y-2 p-4 rounded-xl bg-muted/50 border border-border/50">
+                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Sent</p>
+                                        <div className="text-2xl font-semibold text-foreground">{stats.messages.sent}</div>
+                                    </div>
+                                    <div className="space-y-2 p-4 rounded-xl bg-primary/5 border border-primary/10">
+                                        <p className="text-xs font-medium text-primary uppercase tracking-wider">Delivered</p>
+                                        <div className="text-2xl font-semibold text-foreground">{stats.messages.delivered}</div>
+                                    </div>
+                                    <div className="space-y-2 p-4 rounded-xl bg-destructive/5 border border-destructive/10">
+                                        <p className="text-xs font-medium text-destructive uppercase tracking-wider">Bounced</p>
+                                        <div className="text-2xl font-semibold text-foreground">{stats.messages.bounced}</div>
+                                    </div>
+                                    <div className="space-y-2 p-4 rounded-xl bg-muted/50 border border-border/50">
+                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Pending</p>
+                                        <div className="text-2xl font-semibold text-foreground">{stats.messages.pending}</div>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Storage Card */}
+                        <Card>
+                            <CardHeader className="pb-4">
+                                <CardTitle className="text-lg font-medium flex items-center gap-2">
+                                    <HardDrive className="h-5 w-5 text-muted-foreground" />
+                                    System Storage
+                                </CardTitle>
+                                <CardDescription>Global object usage</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {usageLoading ? (
+                                    <div className="space-y-4">
+                                        <div className="h-2 w-full rounded-full bg-muted animate-pulse"></div>
+                                        <div className="h-4 w-2/3 rounded bg-muted animate-pulse"></div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-6">
+                                        <div className="flex items-end justify-between">
+                                            <div>
+                                                <div className="text-3xl font-semibold tracking-tight">
+                                                    {systemUsage ? formatBytes(systemUsage.storage.used) : '0 B'}
+                                                </div>
+                                                <p className="text-sm text-muted-foreground mt-1">
+                                                    of {systemUsage ? formatBytes(systemUsage.storage.limit) : '0 B'} limit
+                                                </p>
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="w-20 shrink-0 text-xs text-muted-foreground">Attachments</span>
-                                                <Progress value={bytesPercent} className="flex-1" indicatorClassName="bg-blue-500" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Progress
+                                                value={storagePercent}
+                                                className="h-3"
+                                                indicatorClassName={
+                                                    storagePercent > 90
+                                                        ? 'bg-destructive'
+                                                        : storagePercent > 70
+                                                            ? 'bg-secondary-foreground'
+                                                            : 'bg-primary'
+                                                }
+                                            />
+                                            <div className="flex justify-between text-xs font-medium text-muted-foreground">
+                                                <span>0%</span>
+                                                <span>{storagePercent.toFixed(1)}% Used</span>
                                             </div>
                                         </div>
                                     </div>
-                                )
-                            })}
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>Quick Actions</CardTitle>
-                    <CardDescription>Common tasks to get started quickly</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                        <Button variant="outline" className="justify-start" onClick={() => window.location.href = '/admin/organizations'}>
-                            <Building2 className="mr-2 h-4 w-4" />
-                            View Organizations
-                        </Button>
-                        <Button variant="outline" className="justify-start" onClick={() => window.location.href = '/admin/users'}>
-                            <Users className="mr-2 h-4 w-4" />
-                            Manage Users
-                        </Button>
-                        <Button variant="outline" className="justify-start" onClick={() => window.location.href = '/admin/analytics'}>
-                            <TrendingUp className="mr-2 h-4 w-4" />
-                            Open Analytics
-                        </Button>
+                                )}
+                            </CardContent>
+                        </Card>
                     </div>
-                </CardContent>
-            </Card>
 
-            {isLoading && (
-                <div className="flex items-center justify-center p-8">
-                    <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
-                </div>
+                    {/* Bottom Section: User Usage List */}
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between border-b border-border/40 pb-4">
+                            <div>
+                                <CardTitle className="text-lg font-medium flex items-center gap-2">
+                                    <Users className="h-5 w-5 text-muted-foreground" />
+                                    Top Users Activity
+                                </CardTitle>
+                                <CardDescription className="mt-1">Messages sent and storage consumed</CardDescription>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => window.location.href = '/admin/users'}>
+                                View All
+                            </Button>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            {usageLoading ? (
+                                <div className="p-6 space-y-6">
+                                    {[1, 2, 3].map((i) => (
+                                        <div key={i} className="flex gap-4 animate-pulse">
+                                            <div className="h-10 w-10 rounded-full bg-muted shrink-0"></div>
+                                            <div className="flex-1 space-y-2">
+                                                <div className="h-4 w-48 rounded bg-muted"></div>
+                                                <div className="h-2 w-full rounded bg-muted"></div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : !systemUsage?.users.length ? (
+                                <div className="p-8 text-center text-sm text-muted-foreground">
+                                    No active users found in the system.
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-border/40">
+                                    {systemUsage.users.slice(0, 5).map((u) => {
+                                        const msgPercent = (u.messageCount / maxUserMessages) * 100
+                                        const bytesPercent = (u.attachmentBytes / maxUserBytes) * 100
+                                        const displayName = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email
+                                        const initial = displayName.charAt(0).toUpperCase()
+
+                                        return (
+                                            <div key={u.id} className="flex items-center gap-6 p-4 md:p-6 hover:bg-muted/20 transition-colors">
+                                                <div className="hidden sm:flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-secondary-foreground font-semibold shrink-0">
+                                                    {initial}
+                                                </div>
+                                                <div className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                                                    <div className="md:col-span-4">
+                                                        <p className="text-sm font-medium text-foreground truncate" title={u.email}>
+                                                            {displayName}
+                                                        </p>
+                                                        <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                                                    </div>
+                                                    
+                                                    <div className="md:col-span-4 space-y-1.5">
+                                                        <div className="flex justify-between text-xs text-muted-foreground">
+                                                            <span>Messages</span>
+                                                            <span className="font-medium text-foreground">{u.messageCount}</span>
+                                                        </div>
+                                                        <Progress value={msgPercent} className="h-1.5 bg-muted/50" />
+                                                    </div>
+
+                                                    <div className="md:col-span-4 space-y-1.5">
+                                                        <div className="flex justify-between text-xs text-muted-foreground">
+                                                            <span>Storage</span>
+                                                            <span className="font-medium text-foreground">{formatBytes(u.attachmentBytes)}</span>
+                                                        </div>
+                                                        <Progress value={bytesPercent} className="h-1.5 bg-muted/50" indicatorClassName="bg-secondary-foreground" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </>
             )}
         </div>
     )

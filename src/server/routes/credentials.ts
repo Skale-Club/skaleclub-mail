@@ -4,6 +4,7 @@ import { db } from '../../db';
 import { credentials, servers, organizationUsers } from '../../db/schema';
 import { eq, desc, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
+import { isPlatformAdmin } from '../lib/admin'
 
 const router = Router();
 
@@ -28,6 +29,10 @@ async function checkCredentialAccess(userId: string, serverId: string) {
     });
 
     if (!server) return { server: null, membership: null }
+
+    if (await isPlatformAdmin(userId)) {
+        return { server, membership: { role: 'admin' as const } }
+    }
 
     const membership = await db.query.organizationUsers.findFirst({
         where: and(

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { db } from '../../db'
 import { routes, servers, organizationUsers } from '../../db/schema'
 import { eq, and } from 'drizzle-orm'
+import { isPlatformAdmin } from '../lib/admin'
 
 import { v4 as uuidv4 } from 'uuid'
 
@@ -33,6 +34,10 @@ async function checkRouteAccess(userId: string, serverId: string) {
     })
 
     if (!server) return { server: null, membership: null }
+
+    if (await isPlatformAdmin(userId)) {
+        return { server, membership: { role: 'admin' as const } }
+    }
 
     const membership = await db.query.organizationUsers.findFirst({
         where: and(

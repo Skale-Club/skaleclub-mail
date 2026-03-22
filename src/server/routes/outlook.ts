@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '../../db'
 import { organizationUsers, outlookMailboxes, servers } from '../../db/schema'
+import { isPlatformAdmin } from '../lib/admin'
 import {
     buildOutlookOauthUrl,
     createOutlookOauthState,
@@ -34,6 +35,10 @@ async function checkOutlookAccess(userId: string, serverId: string) {
 
     if (!server) {
         return { server: null, membership: null }
+    }
+
+    if (await isPlatformAdmin(userId)) {
+        return { server, membership: { role: 'admin' as const } }
     }
 
     const membership = await db.query.organizationUsers.findFirst({

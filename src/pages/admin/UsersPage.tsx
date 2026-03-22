@@ -139,35 +139,26 @@ export default function UsersPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                    <h2 className="text-2xl font-bold tracking-tight">Users</h2>
-                    <p className="text-muted-foreground">Manage administrator access and invitations.</p>
+            <div className="flex items-center gap-4 justify-between">
+                <div className="relative flex-1 max-w-md">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                        placeholder="Search by email or name..."
+                        value={searchQuery}
+                        onChange={(event) => setSearchQuery(event.target.value)}
+                        className="pl-10 shadow-sm-soft"
+                    />
                 </div>
-                <Button onClick={() => setShowCreateModal(true)}>
+                <Button className="shadow-sm-soft" onClick={() => setShowCreateModal(true)}>
                     <Plus className="mr-2 h-4 w-4" />
                     New User
                 </Button>
             </div>
 
-            <Card>
-                <CardContent className="pt-6">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                            className="pl-10"
-                            placeholder="Search by email or name"
-                            value={searchQuery}
-                            onChange={(event) => setSearchQuery(event.target.value)}
-                        />
-                    </div>
-                </CardContent>
-            </Card>
-
-            <Card>
+            <Card className="shadow-sm-soft">
                 <CardHeader>
                     <CardTitle>User directory</CardTitle>
-                    <CardDescription>{filteredUsers.length} users</CardDescription>
+                    <CardDescription>{filteredUsers.length} users registered in the system</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                     {isLoading ? (

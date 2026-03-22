@@ -9,9 +9,9 @@ interface ProgressProps {
 function Progress({ value, className, indicatorClassName }: ProgressProps) {
     const clamped = Math.min(100, Math.max(0, value))
     return (
-        <div className={cn('h-2 w-full overflow-hidden rounded-full bg-secondary', className)}>
+        <div className={cn('h-2 w-full overflow-hidden rounded-full bg-secondary shadow-inner', className)}>
             <div
-                className={cn('h-full rounded-full bg-primary transition-all', indicatorClassName)}
+                className={cn('h-full rounded-full bg-primary transition-all shadow-sm', indicatorClassName)}
                 style={{ width: `${clamped}%` }}
             />
         </div>

@@ -3,6 +3,7 @@ import { useLocation } from 'wouter'
 import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../lib/supabase'
 import { Button } from '../ui/button'
+import { ModeToggle } from '../mode-toggle'
 import {
     Building2,
     Users,
@@ -11,6 +12,7 @@ import {
     Menu,
     X,
     Home,
+    Globe,
 } from 'lucide-react'
 
 interface NavItem {
@@ -22,6 +24,7 @@ interface NavItem {
 const navItems: NavItem[] = [
     { label: 'Dashboard', href: '/admin', icon: <Home className="w-5 h-5" /> },
     { label: 'Organizations', href: '/admin/organizations', icon: <Building2 className="w-5 h-5" /> },
+    { label: 'Domains', href: '/admin/domains', icon: <Globe className="w-5 h-5" /> },
     { label: 'Users', href: '/admin/users', icon: <Users className="w-5 h-5" /> },
 ]
 
@@ -88,9 +91,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                                             navigate(item.href)
                                             setSidebarOpen(false)
                                         }}
-                                        className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${isActive(item.href)
-                                                ? 'bg-primary text-primary-foreground'
-                                                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                                        className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${isActive(item.href)
+                                                ? 'bg-accent text-accent-foreground'
+                                                : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
                                             }`}
                                     >
                                         {item.icon}
@@ -127,7 +130,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             {/* Main content */}
             <div className="lg:pl-64">
                 {/* Top bar */}
-                <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background/80 backdrop-blur px-4 lg:px-6">
+                <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border bg-background/80 backdrop-blur-md px-4 lg:px-6">
                     <Button
                         variant="ghost"
                         size="icon"
@@ -140,6 +143,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                         <h1 className="text-lg font-semibold">
                             {navItems.find((item) => isActive(item.href))?.label || 'Admin Panel'}
                         </h1>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <ModeToggle />
                     </div>
                 </header>
 
