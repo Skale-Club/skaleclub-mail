@@ -11,7 +11,6 @@ import {
     Menu,
     X,
     Home,
-    BarChart2,
 } from 'lucide-react'
 
 interface NavItem {
@@ -24,7 +23,6 @@ const navItems: NavItem[] = [
     { label: 'Dashboard', href: '/admin', icon: <Home className="w-5 h-5" /> },
     { label: 'Organizations', href: '/admin/organizations', icon: <Building2 className="w-5 h-5" /> },
     { label: 'Users', href: '/admin/users', icon: <Users className="w-5 h-5" /> },
-    { label: 'Analytics', href: '/admin/analytics', icon: <BarChart2 className="w-5 h-5" /> },
 ]
 
 interface AdminLayoutProps {

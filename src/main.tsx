@@ -16,7 +16,6 @@ import OrganizationDetailPage from './pages/admin/OrganizationDetailPage'
 import ServersPage from './pages/admin/ServersPage'
 import DomainsPage from './pages/admin/DomainsPage'
 import UsersPage from './pages/admin/UsersPage'
-import AnalyticsPage from './pages/admin/AnalyticsPage'
 import CredentialsPage from './pages/admin/CredentialsPage'
 import RoutesPage from './pages/admin/RoutesPage'
 import WebhooksPage from './pages/admin/WebhooksPage'
@@ -137,13 +136,6 @@ function App() {
                             <AuthCheck>
                                 <AdminLayout>
                                     <MessagesPage />
-                                </AdminLayout>
-                            </AuthCheck>
-                        </Route>
-                        <Route path="/admin/analytics">
-                            <AuthCheck>
-                                <AdminLayout>
-                                    <AnalyticsPage />
                                 </AdminLayout>
                             </AuthCheck>
                         </Route>

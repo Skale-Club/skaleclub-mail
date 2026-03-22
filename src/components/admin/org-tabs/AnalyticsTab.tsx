@@ -1,17 +1,9 @@
-import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AlertCircle, BarChart2, CheckCircle, Eye, Mail, MousePointer, RefreshCw } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
-import { Progress } from '../../components/ui/progress'
-import { Button } from '../../components/ui/button'
-import { supabase } from '../../lib/supabase'
-
-interface OrganizationOption {
-    id: string
-    name: string
-    slug: string
-    role: string
-    serverId?: string
-}
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card'
+import { Progress } from '../../ui/progress'
+import { Button } from '../../ui/button'
+import { supabase } from '../../../lib/supabase'
 
 interface DailyStat {
     date: string
@@ -76,82 +68,45 @@ function formatShortDate(value: string) {
 function getStatusColor(status: string) {
     switch (status) {
         case 'delivered':
-            return 'bg-green-100 text-green-800'
+            return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
         case 'sent':
-            return 'bg-blue-100 text-blue-800'
+            return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
         case 'bounced':
         case 'failed':
-            return 'bg-red-100 text-red-800'
+            return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
         case 'held':
-            return 'bg-yellow-100 text-yellow-800'
+            return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
         default:
-            return 'bg-gray-100 text-gray-800'
+            return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
     }
 }
 
-export default function AnalyticsPage() {
-    const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
-    const [selectedOrganizationId, setSelectedOrganizationId] = useState('')
+interface AnalyticsTabProps {
+    serverId: string
+    orgId: string
+}
+
+export default function AnalyticsTab({ serverId }: AnalyticsTabProps) {
     const [days, setDays] = useState(30)
     const [analytics, setAnalytics] = useState<Analytics | null>(null)
     const [isLoading, setIsLoading] = useState(false)
 
     useEffect(() => {
-        void fetchOrganizations()
-    }, [])
-
-    const selectedOrganization = useMemo(
-        () => organizations.find((organization) => organization.id === selectedOrganizationId) || null,
-        [organizations, selectedOrganizationId]
-    )
-    const selectedServerId = selectedOrganization?.serverId || ''
-
-    useEffect(() => {
-        if (selectedServerId) {
-            void fetchAnalytics()
-        } else {
-            setAnalytics(null)
-        }
-    }, [selectedServerId, days])
+        void fetchAnalytics()
+    }, [serverId, days])
 
     async function getToken() {
         const { data: { session } } = await supabase.auth.getSession()
         return session?.access_token
     }
 
-    async function fetchOrganizations() {
-        try {
-            const token = await getToken()
-            const response = await fetch('/api/organizations', {
-                headers: { Authorization: `Bearer ${token}` },
-            })
-            if (!response.ok) return
-
-            const { organizations } = await response.json()
-            const options: OrganizationOption[] = (organizations || []).map((organization: any) => ({
-                id: organization.id,
-                name: organization.name,
-                slug: organization.slug,
-                role: organization.role,
-                serverId: organization.servers?.[0]?.id,
-            }))
-
-            setOrganizations(options)
-            if (options.length > 0) {
-                setSelectedOrganizationId(options[0].id)
-            }
-        } catch (error) {
-            console.error('Error fetching organizations:', error)
-        }
-    }
-
     async function fetchAnalytics() {
-        if (!selectedServerId) return
+        if (!serverId) return
 
         setIsLoading(true)
         try {
             const token = await getToken()
-            const response = await fetch(`/api/servers/${selectedServerId}/statistics?days=${days}`, {
+            const response = await fetch(`/api/servers/${serverId}/statistics?days=${days}`, {
                 headers: { Authorization: `Bearer ${token}` },
             })
             if (response.ok) {
@@ -171,60 +126,21 @@ export default function AnalyticsPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                    <h2 className="text-2xl font-bold tracking-tight">Analytics</h2>
-                    <p className="text-muted-foreground">Open rates, click rates and delivery stats</p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <select
-                        className="flex h-9 rounded-md border border-input bg-background px-3 text-sm"
-                        value={days}
-                        onChange={(event) => setDays(Number(event.target.value))}
-                    >
-                        <option value={7}>Last 7 days</option>
-                        <option value={30}>Last 30 days</option>
-                        <option value={90}>Last 90 days</option>
-                    </select>
-                    <Button variant="outline" size="sm" onClick={() => void fetchAnalytics()} disabled={isLoading || !selectedServerId}>
-                        <RefreshCw className={`mr-1 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                        Refresh
-                    </Button>
-                </div>
+            <div className="flex items-center justify-end gap-2">
+                <select
+                    className="flex h-9 rounded-md border border-input bg-background px-3 text-sm"
+                    value={days}
+                    onChange={(event) => setDays(Number(event.target.value))}
+                >
+                    <option value={7}>Last 7 days</option>
+                    <option value={30}>Last 30 days</option>
+                    <option value={90}>Last 90 days</option>
+                </select>
+                <Button variant="outline" size="sm" onClick={() => void fetchAnalytics()} disabled={isLoading}>
+                    <RefreshCw className={`mr-1 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                    Refresh
+                </Button>
             </div>
-
-            <Card>
-                <CardContent className="pt-4">
-                    <select
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        value={selectedOrganizationId}
-                        onChange={(event) => setSelectedOrganizationId(event.target.value)}
-                    >
-                        <option value="">Select an organization...</option>
-                        {organizations.map((organization) => (
-                            <option key={organization.id} value={organization.id}>
-                                {organization.name}
-                            </option>
-                        ))}
-                    </select>
-                </CardContent>
-            </Card>
-
-            {selectedOrganization && !selectedServerId && (
-                <Card>
-                    <CardContent className="flex flex-col gap-4 py-6 md:flex-row md:items-center md:justify-between">
-                        <div>
-                            <p className="font-medium">{selectedOrganization.name} is not configured yet.</p>
-                            <p className="text-sm text-muted-foreground">
-                                Finish setup inside the organization detail page to unlock analytics.
-                            </p>
-                        </div>
-                        <Button onClick={() => { window.location.href = `/admin/organizations/${selectedOrganization.id}` }}>
-                            Open Organization
-                        </Button>
-                    </CardContent>
-                </Card>
-            )}
 
             {isLoading && (
                 <div className="flex justify-center p-12">
@@ -401,10 +317,10 @@ export default function AnalyticsPage() {
                 </>
             )}
 
-            {!isLoading && !analytics && selectedServerId && (
+            {!isLoading && !analytics && (
                 <Card>
                     <CardContent className="py-12 text-center text-muted-foreground">
-                        No data found for this organization yet.
+                        No data found yet.
                     </CardContent>
                 </Card>
             )}
@@ -420,7 +336,7 @@ function MetricCard({
     progress,
     progressColor,
 }: {
-    icon: ReactNode
+    icon: React.ReactNode
     label: string
     value: string | number
     sub: string
@@ -440,8 +356,15 @@ function MetricCard({
                     <Progress
                         value={progress}
                         className="mt-2 h-1.5"
-                        indicatorClassName={progressColor}
                     />
+                )}
+                {progress !== undefined && progressColor && (
+                    <div className={`mt-2 h-1.5 rounded-full bg-secondary overflow-hidden`}>
+                        <div
+                            className={`h-full rounded-full transition-all ${progressColor}`}
+                            style={{ width: `${progress}%` }}
+                        />
+                    </div>
                 )}
             </CardContent>
         </Card>

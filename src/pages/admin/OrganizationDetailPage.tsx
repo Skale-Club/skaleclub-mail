@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { useRoute } from 'wouter'
 import {
     ArrowLeft,
+    BarChart2,
     Building2,
     FileText,
     Globe,
@@ -15,6 +16,7 @@ import { getAccessToken } from '../../components/admin/org-tabs/shared'
 import DomainsTab from '../../components/admin/org-tabs/DomainsTab'
 import TemplatesTab from '../../components/admin/org-tabs/TemplatesTab'
 import MessagesTab from '../../components/admin/org-tabs/MessagesTab'
+import AnalyticsTab from '../../components/admin/org-tabs/AnalyticsTab'
 import MembersTab from '../../components/admin/org-tabs/MembersTab'
 import SettingsTab from '../../components/admin/org-tabs/SettingsTab'
 
@@ -51,17 +53,18 @@ interface Organization {
     members: Member[]
 }
 
-type TabKey = 'domains' | 'templates' | 'messages' | 'members' | 'settings'
+type TabKey = 'domains' | 'templates' | 'messages' | 'analytics' | 'members' | 'settings'
 
 const tabs: Array<{ key: TabKey, label: string, icon: ReactNode }> = [
     { key: 'domains', label: 'Domains', icon: <Globe className="h-4 w-4" /> },
     { key: 'templates', label: 'Templates', icon: <FileText className="h-4 w-4" /> },
     { key: 'messages', label: 'Messages', icon: <Mail className="h-4 w-4" /> },
+    { key: 'analytics', label: 'Analytics', icon: <BarChart2 className="h-4 w-4" /> },
     { key: 'members', label: 'Members', icon: <Users className="h-4 w-4" /> },
     { key: 'settings', label: 'Settings', icon: <Settings className="h-4 w-4" /> },
 ]
 
-const serverScopedTabs: TabKey[] = ['domains', 'templates', 'messages']
+const serverScopedTabs: TabKey[] = ['domains', 'templates', 'messages', 'analytics']
 
 export default function OrganizationDetailPage() {
     const [, params] = useRoute('/admin/organizations/:id')
@@ -176,6 +179,10 @@ export default function OrganizationDetailPage() {
 
         if (defaultServerId && activeTab === 'messages') {
             return <MessagesTab serverId={defaultServerId} orgId={org.id} />
+        }
+
+        if (defaultServerId && activeTab === 'analytics') {
+            return <AnalyticsTab serverId={defaultServerId} orgId={org.id} />
         }
 
         if (activeTab === 'members') {

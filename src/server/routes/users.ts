@@ -13,6 +13,70 @@ const supabaseAdmin = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+function mapAdminUser(user: {
+    id: string
+    email: string
+    firstName: string | null
+    lastName: string | null
+    isAdmin: boolean
+    emailVerified: boolean
+    createdAt: Date
+    lastLoginAt: Date | null
+    organizations?: Array<{
+        role: 'admin' | 'member' | 'viewer'
+        organization: {
+            id: string
+            name: string
+            slug: string
+        }
+    }>
+}) {
+    return {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        isAdmin: user.isAdmin,
+        emailVerified: user.emailVerified,
+        createdAt: user.createdAt,
+        lastLoginAt: user.lastLoginAt,
+        organizations: (user.organizations || []).map((membership) => ({
+            id: membership.organization.id,
+            name: membership.organization.name,
+            slug: membership.organization.slug,
+            role: membership.role,
+        })),
+    }
+}
+
+async function getAdminUserRecord(userId: string) {
+    const user = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+        columns: {
+            passwordHash: false,
+            twoFactorSecret: false,
+        },
+        with: {
+            organizations: {
+                columns: {
+                    role: true,
+                },
+                with: {
+                    organization: {
+                        columns: {
+                            id: true,
+                            name: true,
+                            slug: true,
+                        },
+                    },
+                },
+            },
+        },
+    })
+
+    return user ? mapAdminUser(user) : null
+}
+
 // Get current user profile
 router.get('/profile', async (req: Request, res: Response) => {
     try {
@@ -128,16 +192,41 @@ router.post('/', async (req: Request, res: Response) => {
         }
 
         // Validation schema
-        const createUserSchema = z.object({
-            email: z.string().email('Invalid email address'),
-            password: z.string().min(8, 'Password must be at least 8 characters'),
-            firstName: z.string().optional(),
-            lastName: z.string().optional(),
-            isAdmin: z.boolean().default(false),
-            sendInvite: z.boolean().default(true), // If true, send password reset email instead of setting password
-        })
+        const createUserSchema = z
+            .object({
+                email: z.string().email('Invalid email address'),
+                password: z.string().min(8, 'Password must be at least 8 characters').optional(),
+                firstName: z.string().optional(),
+                lastName: z.string().optional(),
+                isAdmin: z.boolean().default(false),
+                sendInvite: z.boolean().default(true), // If true, send password reset email instead of setting password
+                organizationId: z.string().uuid().optional(),
+                organizationRole: z.enum(['admin', 'member', 'viewer']).default('member'),
+            })
+            .superRefine((value, ctx) => {
+                if (!value.sendInvite && !value.password) {
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        path: ['password'],
+                        message: 'Password is required when invite sending is disabled',
+                    })
+                }
+            })
 
         const userData = createUserSchema.parse(req.body)
+
+        if (userData.organizationId) {
+            const targetOrganization = await db.query.organizations.findFirst({
+                where: eq(organizations.id, userData.organizationId),
+                columns: {
+                    id: true,
+                },
+            })
+
+            if (!targetOrganization) {
+                return res.status(404).json({ error: 'Organization not found' })
+            }
+        }
 
         // Check if user already exists
         const existingUser = await db.query.users.findFirst({
@@ -178,6 +267,14 @@ router.post('/', async (req: Request, res: Response) => {
             emailVerified: true,
         }).returning()
 
+        if (userData.organizationId) {
+            await db.insert(organizationUsers).values({
+                organizationId: userData.organizationId,
+                userId: newUser.id,
+                role: userData.organizationRole,
+            })
+        }
+
         // If sendInvite is true, send password reset email
         if (userData.sendInvite) {
             await supabaseAdmin.auth.admin.generateLink({
@@ -189,18 +286,13 @@ router.post('/', async (req: Request, res: Response) => {
             })
         }
 
+        const createdUser = await getAdminUserRecord(newUser.id)
+
         res.status(201).json({
             message: userData.sendInvite
                 ? 'User created successfully. Invitation email sent.'
                 : 'User created successfully',
-            user: {
-                id: newUser.id,
-                email: newUser.email,
-                firstName: newUser.firstName,
-                lastName: newUser.lastName,
-                isAdmin: newUser.isAdmin,
-                createdAt: newUser.createdAt,
-            },
+            user: createdUser,
         })
     } catch (error) {
         if (error instanceof z.ZodError) {
@@ -234,9 +326,26 @@ router.get('/', async (req: Request, res: Response) => {
                 passwordHash: false,
                 twoFactorSecret: false,
             },
+            with: {
+                organizations: {
+                    columns: {
+                        role: true,
+                    },
+                    with: {
+                        organization: {
+                            columns: {
+                                id: true,
+                                name: true,
+                                slug: true,
+                            },
+                        },
+                    },
+                },
+            },
+            orderBy: (usersTable, { desc }) => [desc(usersTable.createdAt)],
         })
 
-        res.json({ users: allUsers })
+        res.json({ users: allUsers.map(mapAdminUser) })
     } catch (error) {
         console.error('Error fetching users:', error)
         res.status(500).json({ error: 'Internal server error' })
@@ -285,17 +394,9 @@ router.patch('/:id', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'User not found' })
         }
 
-        res.json({
-            user: {
-                id: updatedUser.id,
-                email: updatedUser.email,
-                firstName: updatedUser.firstName,
-                lastName: updatedUser.lastName,
-                isAdmin: updatedUser.isAdmin,
-                emailVerified: updatedUser.emailVerified,
-                createdAt: updatedUser.createdAt,
-            },
-        })
+        const fullUser = await getAdminUserRecord(updatedUser.id)
+
+        res.json({ user: fullUser })
     } catch (error) {
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: error.errors })
