@@ -1,4 +1,4 @@
-import crypto from 'crypto'
+import { createHmac } from 'crypto'
 import { db } from '../../db'
 import { webhooks, webhookRequests, statistics } from '../../db/schema'
 import { eq, and, sql } from 'drizzle-orm'
@@ -139,8 +139,7 @@ export async function fireWebhooks(
                 }
 
                 if (wh.secret) {
-                    const sig = crypto
-                        .createHmac('sha256', wh.secret)
+                    const sig = createHmac('sha256', wh.secret)
                         .update(JSON.stringify(payload))
                         .digest('hex')
                     headers['X-Webhook-Signature'] = `sha256=${sig}`

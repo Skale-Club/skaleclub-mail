@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { db } from '../../db'
 import { servers, organizationUsers, messages, statistics } from '../../db/schema'
 import { eq, and, desc, gte, sql, isNotNull } from 'drizzle-orm'
+import { deleteServerCascade } from '../lib/cascade'
 
 const router = Router()
 
@@ -215,7 +216,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
             return res.status(403).json({ error: 'Only admins can delete servers' })
         }
 
-        await db.delete(servers).where(eq(servers.id, serverId))
+        await deleteServerCascade(serverId)
 
         res.json({ message: 'Server deleted successfully' })
     } catch (error) {

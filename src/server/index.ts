@@ -5,7 +5,7 @@ import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 
 const app = express()
-const PORT = process.env.PORT || 9001
+const PORT = process.env.PORT || 3001
 
 // Security middleware
 app.use(helmet())
@@ -21,6 +21,14 @@ const limiter = rateLimit({
     message: { error: 'Too many requests, please try again later.' },
 })
 app.use('/api/', limiter)
+
+// Tracking rate limiting (more permissive)
+const trackingLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 100, // limit each IP to 100 requests per minute
+    message: { error: 'Too many requests, please try again later.' },
+})
+app.use('/t/', trackingLimiter)
 
 // Body parsing
 app.use(express.json({ limit: '10mb' }))
@@ -50,7 +58,7 @@ app.use('/api', async (req, res, next) => {
 
     const authHeader = req.headers.authorization
     if (!authHeader?.startsWith('Bearer ')) {
-        return next()
+        return res.status(401).json({ error: 'Unauthorized' })
     }
 
     try {
@@ -70,7 +78,7 @@ app.use('/api', async (req, res, next) => {
                     email: user.email!,
                     firstName: user.user_metadata?.firstName || null,
                     lastName: user.user_metadata?.lastName || null,
-                    isAdmin: true,
+                    isAdmin: process.env.AUTO_ADMIN_FIRST_USER === 'true',
                     emailVerified: true,
                 }).onConflictDoNothing()
             }
@@ -95,6 +103,7 @@ import routeRoutes from './routes/routes'
 import systemRoutes from './routes/system'
 import trackRoutes from './routes/track'
 import templateRoutes from './routes/templates'
+import outreachRoutes from './routes/outreach'
 
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
@@ -107,8 +116,9 @@ app.use('/api/credentials', credentialRoutes)
 app.use('/api/routes', routeRoutes)
 app.use('/api/system', systemRoutes)
 app.use('/api/templates', templateRoutes)
+app.use('/api/outreach', outreachRoutes)
 
-// Public tracking endpoints — no auth, no rate-limit (high-volume pixel requests)
+// Public tracking endpoints — no auth, rate-limited separately
 app.use('/t', trackRoutes)
 
 // Error handling middleware
@@ -131,6 +141,9 @@ app.use((req: express.Request, res: express.Response) => {
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`)
     console.log(`📧 SkaleClub Mail API ready`)
+
+    // Start background jobs
+    import('./jobs').then(({ startJobs }) => startJobs())
 })
 
 export default app

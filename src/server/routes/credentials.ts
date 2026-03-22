@@ -197,10 +197,27 @@ router.delete('/:id', async (req: Request, res: Response) => {
     }
 });
 
-// Helper function to hash secret
+// Helper function to hash secret using scrypt
 async function hashSecret(secret: string): Promise<string> {
-    const { createHash } = await import('crypto')
-    return createHash('sha256').update(secret).digest('hex')
+    const { scrypt, randomBytes } = await import('crypto')
+    return new Promise((resolve, reject) => {
+        const salt = randomBytes(16).toString('hex')
+        scrypt(secret, salt, 64, (err, derived) => {
+            if (err) return reject(err)
+            resolve(`${salt}:${derived.toString('hex')}`)
+        })
+    })
+}
+
+export async function verifySecret(secret: string, stored: string): Promise<boolean> {
+    const { scrypt, timingSafeEqual } = await import('crypto')
+    const [salt, hash] = stored.split(':')
+    return new Promise((resolve, reject) => {
+        scrypt(secret, salt, 64, (err, derived) => {
+            if (err) return reject(err)
+            resolve(timingSafeEqual(Buffer.from(hash, 'hex'), derived))
+        })
+    })
 }
 
 export default router

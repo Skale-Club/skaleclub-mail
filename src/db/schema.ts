@@ -116,9 +116,14 @@ export const domains = pgTable('domains', {
     dkimPrivateKey: text('dkim_private_key'),
     dkimPublicKey: text('dkim_public_key'),
     dkimSelector: text('dkim_selector').default('postal'),
+    dkimStatus: text('dkim_status').default('pending'),
+    dkimError: text('dkim_error'),
     // SPF
     spfStatus: text('spf_status').default('pending'),
     spfError: text('spf_error'),
+    // DMARC
+    dmarcStatus: text('dmarc_status').default('pending'),
+    dmarcError: text('dmarc_error'),
     // MX
     mxStatus: text('mx_status').default('pending'),
     mxError: text('mx_error'),
@@ -529,3 +534,445 @@ export type NewStatistic = typeof statistics.$inferInsert
 
 export type Template = typeof templates.$inferSelect
 export type NewTemplate = typeof templates.$inferInsert
+
+// ============================================
+// OUTREACH MODULE SCHEMA (Instantly/SmartLead-like)
+// ============================================
+
+// Campaign status enum
+export const campaignStatusEnum = pgEnum('campaign_status', ['draft', 'active', 'paused', 'completed', 'archived'])
+
+// Lead status enum
+export const leadStatusEnum = pgEnum('lead_status', ['new', 'contacted', 'replied', 'interested', 'not_interested', 'bounced', 'unsubscribed'])
+
+// Email account status enum
+export const emailAccountStatusEnum = pgEnum('email_account_status', ['pending', 'verified', 'failed', 'paused'])
+
+// Sequence step type enum
+export const sequenceStepTypeEnum = pgEnum('sequence_step_type', ['email', 'delay', 'condition'])
+
+// Email Accounts (Inboxes for sending outreach emails)
+export const emailAccounts = pgTable('email_accounts', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
+    // Account details
+    email: text('email').notNull(),
+    displayName: text('display_name'),
+    // SMTP settings
+    smtpHost: text('smtp_host').notNull(),
+    smtpPort: integer('smtp_port').default(587).notNull(),
+    smtpUsername: text('smtp_username').notNull(),
+    smtpPassword: text('smtp_password').notNull(), // encrypted
+    smtpSecure: boolean('smtp_secure').default(true).notNull(),
+    // IMAP settings (for reply tracking)
+    imapHost: text('imap_host'),
+    imapPort: integer('imap_port').default(993),
+    imapUsername: text('imap_username'),
+    imapPassword: text('imap_password'), // encrypted
+    imapSecure: boolean('imap_secure').default(true),
+    // Sending limits (warm-up and daily limits)
+    dailySendLimit: integer('daily_send_limit').default(50).notNull(),
+    currentDailySent: integer('current_daily_sent').default(0).notNull(),
+    minMinutesBetweenEmails: integer('min_minutes_between_emails').default(5).notNull(),
+    maxMinutesBetweenEmails: integer('max_minutes_between_emails').default(30).notNull(),
+    // Warm-up settings
+    warmupEnabled: boolean('warmup_enabled').default(true).notNull(),
+    warmupDays: integer('warmup_days').default(14).notNull(),
+    warmupCurrentDay: integer('warmup_current_day').default(0).notNull(),
+    // Status
+    status: emailAccountStatusEnum('status').default('pending').notNull(),
+    lastError: text('last_error'),
+    lastSyncAt: timestamp('last_sync_at'),
+    verifiedAt: timestamp('verified_at'),
+    // Tracking
+    totalSent: integer('total_sent').default(0).notNull(),
+    totalOpens: integer('total_opens').default(0).notNull(),
+    totalClicks: integer('total_clicks').default(0).notNull(),
+    totalReplies: integer('total_replies').default(0).notNull(),
+    totalBounces: integer('total_bounces').default(0).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    orgEmailUnique: uniqueIndex('email_account_org_email_unique').on(table.organizationId, table.email),
+}))
+
+// Lead Lists (groups of leads)
+export const leadLists = pgTable('lead_lists', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
+    name: text('name').notNull(),
+    description: text('description'),
+    color: text('color').default('#3B82F6'),
+    leadCount: integer('lead_count').default(0).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
+// Leads (Prospects)
+export const leads = pgTable('leads', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
+    // Contact info
+    email: text('email').notNull(),
+    firstName: text('first_name'),
+    lastName: text('last_name'),
+    companyName: text('company_name'),
+    companySize: text('company_size'),
+    industry: text('industry'),
+    title: text('title'),
+    website: text('website'),
+    linkedinUrl: text('linkedin_url'),
+    phone: text('phone'),
+    location: text('location'),
+    // Custom fields (JSON)
+    customFields: jsonb('custom_fields').default({}),
+    // Status
+    status: leadStatusEnum('status').default('new').notNull(),
+    // Source tracking
+    source: text('source'),
+    leadListId: uuid('lead_list_id').references(() => leadLists.id),
+    // Engagement tracking
+    totalEmailsSent: integer('total_emails_sent').default(0).notNull(),
+    totalOpens: integer('total_opens').default(0).notNull(),
+    totalClicks: integer('total_clicks').default(0).notNull(),
+    totalReplies: integer('total_replies').default(0).notNull(),
+    lastContactedAt: timestamp('last_contacted_at'),
+    lastRepliedAt: timestamp('last_replied_at'),
+    // Opt-out
+    unsubscribedAt: timestamp('unsubscribed_at'),
+    unsubscribedReason: text('unsubscribed_reason'),
+    // Timestamps
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    orgEmailUnique: uniqueIndex('lead_org_email_unique').on(table.organizationId, table.email),
+}))
+
+// Campaigns
+export const campaigns = pgTable('campaigns', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
+    // Basic info
+    name: text('name').notNull(),
+    description: text('description'),
+    // Settings
+    status: campaignStatusEnum('status').default('draft').notNull(),
+    // Sender settings
+    fromName: text('from_name'),
+    replyToEmail: text('reply_to_email'),
+    // Schedule settings
+    timezone: text('timezone').default('UTC').notNull(),
+    sendOnWeekends: boolean('send_on_weekends').default(false).notNull(),
+    sendStartTime: text('send_start_time').default('09:00').notNull(), // HH:mm
+    sendEndTime: text('send_end_time').default('17:00').notNull(), // HH:mm
+    // Tracking settings
+    trackOpens: boolean('track_opens').default(true).notNull(),
+    trackClicks: boolean('track_clicks').default(true).notNull(),
+    // Statistics (cached)
+    totalLeads: integer('total_leads').default(0).notNull(),
+    leadsContacted: integer('leads_contacted').default(0).notNull(),
+    totalOpens: integer('total_opens').default(0).notNull(),
+    totalClicks: integer('total_clicks').default(0).notNull(),
+    totalReplies: integer('total_replies').default(0).notNull(),
+    totalBounces: integer('total_bounces').default(0).notNull(),
+    totalUnsubscribes: integer('total_unsubscribes').default(0).notNull(),
+    // Timestamps
+    startedAt: timestamp('started_at'),
+    completedAt: timestamp('completed_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
+// Sequences (email sequences for campaigns)
+export const sequences = pgTable('sequences', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    campaignId: uuid('campaign_id').references(() => campaigns.id).notNull(),
+    name: text('name').notNull(),
+    description: text('description'),
+    isActive: boolean('is_active').default(true).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
+// Sequence Steps (individual emails in a sequence)
+export const sequenceSteps = pgTable('sequence_steps', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sequenceId: uuid('sequence_id').references(() => sequences.id).notNull(),
+    // Step order
+    stepOrder: integer('step_order').notNull(),
+    // Type
+    type: sequenceStepTypeEnum('type').default('email').notNull(),
+    // Delay before this step (in hours)
+    delayHours: integer('delay_hours').default(0).notNull(),
+    // Email content
+    subject: text('subject'),
+    plainBody: text('plain_body'),
+    htmlBody: text('html_body'),
+    // A/B testing
+    subjectB: text('subject_b'),
+    plainBodyB: text('plain_body_b'),
+    htmlBodyB: text('html_body_b'),
+    abTestEnabled: boolean('ab_test_enabled').default(false).notNull(),
+    abTestPercentage: integer('ab_test_percentage').default(50), // percentage for variant A
+    // Statistics
+    totalSent: integer('total_sent').default(0).notNull(),
+    totalOpens: integer('total_opens').default(0).notNull(),
+    totalClicks: integer('total_clicks').default(0).notNull(),
+    totalReplies: integer('total_replies').default(0).notNull(),
+    // Timestamps
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    sequenceOrderUnique: uniqueIndex('sequence_step_order_unique').on(table.sequenceId, table.stepOrder),
+}))
+
+// Campaign Leads (junction table - leads assigned to campaigns)
+export const campaignLeads = pgTable('campaign_leads', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    campaignId: uuid('campaign_id').references(() => campaigns.id).notNull(),
+    leadId: uuid('lead_id').references(() => leads.id).notNull(),
+    // Assignment
+    assignedEmailAccountId: uuid('assigned_email_account_id').references(() => emailAccounts.id),
+    // Progress
+    currentStepId: uuid('current_step_id').references(() => sequenceSteps.id),
+    currentStepOrder: integer('current_step_order').default(0).notNull(),
+    // Status
+    status: leadStatusEnum('status').default('new').notNull(),
+    // Next scheduled action
+    nextScheduledAt: timestamp('next_scheduled_at'),
+    // Tracking for this specific campaign/lead combination
+    totalOpens: integer('total_opens').default(0).notNull(),
+    totalClicks: integer('total_clicks').default(0).notNull(),
+    totalReplies: integer('total_replies').default(0).notNull(),
+    // Timestamps
+    firstContactedAt: timestamp('first_contacted_at'),
+    lastContactedAt: timestamp('last_contacted_at'),
+    lastRepliedAt: timestamp('last_replied_at'),
+    completedAt: timestamp('completed_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    campaignLeadUnique: uniqueIndex('campaign_lead_unique').on(table.campaignId, table.leadId),
+}))
+
+// Outreach Emails (sent emails from campaigns)
+export const outreachEmails = pgTable('outreach_emails', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
+    campaignId: uuid('campaign_id').references(() => campaigns.id).notNull(),
+    campaignLeadId: uuid('campaign_lead_id').references(() => campaignLeads.id).notNull(),
+    sequenceStepId: uuid('sequence_step_id').references(() => sequenceSteps.id).notNull(),
+    emailAccountId: uuid('email_account_id').references(() => emailAccounts.id).notNull(),
+    // Message details
+    messageId: text('message_id'), // RFC 2822 Message-ID
+    // Content sent
+    subject: text('subject').notNull(),
+    plainBody: text('plain_body'),
+    htmlBody: text('html_body'),
+    // A/B variant
+    abVariant: text('ab_variant'), // 'a' or 'b'
+    // Tracking
+    sentAt: timestamp('sent_at'),
+    deliveredAt: timestamp('delivered_at'),
+    openedAt: timestamp('opened_at'),
+    openedCount: integer('opened_count').default(0).notNull(),
+    clickedAt: timestamp('clicked_at'),
+    clickedCount: integer('clicked_count').default(0).notNull(),
+    repliedAt: timestamp('replied_at'),
+    bouncedAt: timestamp('bounced_at'),
+    bounceReason: text('bounce_reason'),
+    unsubscribedAt: timestamp('unsubscribed_at'),
+    // Status
+    status: messageStatusEnum('status').default('pending').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
+// Outreach Analytics (daily aggregated stats)
+export const outreachAnalytics = pgTable('outreach_analytics', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
+    campaignId: uuid('campaign_id').references(() => campaigns.id),
+    emailAccountId: uuid('email_account_id').references(() => emailAccounts.id),
+    date: timestamp('date').notNull(),
+    // Stats
+    emailsSent: integer('emails_sent').default(0).notNull(),
+    emailsDelivered: integer('emails_delivered').default(0).notNull(),
+    emailsBounced: integer('emails_bounced').default(0).notNull(),
+    opens: integer('opens').default(0).notNull(),
+    clicks: integer('clicks').default(0).notNull(),
+    replies: integer('replies').default(0).notNull(),
+    unsubscribes: integer('unsubscribes').default(0).notNull(),
+    leadsAdded: integer('leads_added').default(0).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+    orgDateUnique: uniqueIndex('outreach_analytics_org_date_unique').on(table.organizationId, table.date, table.campaignId, table.emailAccountId),
+}))
+
+// Outreach Relations
+export const emailAccountsRelations = relations(emailAccounts, ({ one, many }) => ({
+    organization: one(organizations, {
+        fields: [emailAccounts.organizationId],
+        references: [organizations.id],
+    }),
+    campaignLeads: many(campaignLeads),
+    outreachEmails: many(outreachEmails),
+}))
+
+export const leadListsRelations = relations(leadLists, ({ one, many }) => ({
+    organization: one(organizations, {
+        fields: [leadLists.organizationId],
+        references: [organizations.id],
+    }),
+    leads: many(leads),
+}))
+
+export const leadsRelations = relations(leads, ({ one, many }) => ({
+    organization: one(organizations, {
+        fields: [leads.organizationId],
+        references: [organizations.id],
+    }),
+    leadList: one(leadLists, {
+        fields: [leads.leadListId],
+        references: [leadLists.id],
+    }),
+    campaignLeads: many(campaignLeads),
+}))
+
+export const campaignsRelations = relations(campaigns, ({ one, many }) => ({
+    organization: one(organizations, {
+        fields: [campaigns.organizationId],
+        references: [organizations.id],
+    }),
+    sequences: many(sequences),
+    campaignLeads: many(campaignLeads),
+    outreachEmails: many(outreachEmails),
+}))
+
+export const sequencesRelations = relations(sequences, ({ one, many }) => ({
+    campaign: one(campaigns, {
+        fields: [sequences.campaignId],
+        references: [campaigns.id],
+    }),
+    steps: many(sequenceSteps),
+}))
+
+export const sequenceStepsRelations = relations(sequenceSteps, ({ one, many }) => ({
+    sequence: one(sequences, {
+        fields: [sequenceSteps.sequenceId],
+        references: [sequences.id],
+    }),
+    campaignLeads: many(campaignLeads),
+    outreachEmails: many(outreachEmails),
+}))
+
+export const campaignLeadsRelations = relations(campaignLeads, ({ one, many }) => ({
+    campaign: one(campaigns, {
+        fields: [campaignLeads.campaignId],
+        references: [campaigns.id],
+    }),
+    lead: one(leads, {
+        fields: [campaignLeads.leadId],
+        references: [leads.id],
+    }),
+    assignedEmailAccount: one(emailAccounts, {
+        fields: [campaignLeads.assignedEmailAccountId],
+        references: [emailAccounts.id],
+    }),
+    currentStep: one(sequenceSteps, {
+        fields: [campaignLeads.currentStepId],
+        references: [sequenceSteps.id],
+    }),
+    outreachEmails: many(outreachEmails),
+}))
+
+export const outreachEmailsRelations = relations(outreachEmails, ({ one }) => ({
+    organization: one(organizations, {
+        fields: [outreachEmails.organizationId],
+        references: [organizations.id],
+    }),
+    campaign: one(campaigns, {
+        fields: [outreachEmails.campaignId],
+        references: [campaigns.id],
+    }),
+    campaignLead: one(campaignLeads, {
+        fields: [outreachEmails.campaignLeadId],
+        references: [campaignLeads.id],
+    }),
+    sequenceStep: one(sequenceSteps, {
+        fields: [outreachEmails.sequenceStepId],
+        references: [sequenceSteps.id],
+    }),
+    emailAccount: one(emailAccounts, {
+        fields: [outreachEmails.emailAccountId],
+        references: [emailAccounts.id],
+    }),
+}))
+
+export const outreachAnalyticsRelations = relations(outreachAnalytics, ({ one }) => ({
+    organization: one(organizations, {
+        fields: [outreachAnalytics.organizationId],
+        references: [organizations.id],
+    }),
+    campaign: one(campaigns, {
+        fields: [outreachAnalytics.campaignId],
+        references: [campaigns.id],
+    }),
+    emailAccount: one(emailAccounts, {
+        fields: [outreachAnalytics.emailAccountId],
+        references: [emailAccounts.id],
+    }),
+}))
+
+// Zod schemas for outreach module
+export const insertEmailAccountSchema = createInsertSchema(emailAccounts)
+export const selectEmailAccountSchema = createSelectSchema(emailAccounts)
+
+export const insertLeadListSchema = createInsertSchema(leadLists)
+export const selectLeadListSchema = createSelectSchema(leadLists)
+
+export const insertLeadSchema = createInsertSchema(leads)
+export const selectLeadSchema = createSelectSchema(leads)
+
+export const insertCampaignSchema = createInsertSchema(campaigns)
+export const selectCampaignSchema = createSelectSchema(campaigns)
+
+export const insertSequenceSchema = createInsertSchema(sequences)
+export const selectSequenceSchema = createSelectSchema(sequences)
+
+export const insertSequenceStepSchema = createInsertSchema(sequenceSteps)
+export const selectSequenceStepSchema = createSelectSchema(sequenceSteps)
+
+export const insertCampaignLeadSchema = createInsertSchema(campaignLeads)
+export const selectCampaignLeadSchema = createSelectSchema(campaignLeads)
+
+export const insertOutreachEmailSchema = createInsertSchema(outreachEmails)
+export const selectOutreachEmailSchema = createSelectSchema(outreachEmails)
+
+// Outreach Types
+export type EmailAccount = typeof emailAccounts.$inferSelect
+export type NewEmailAccount = typeof emailAccounts.$inferInsert
+
+export type LeadList = typeof leadLists.$inferSelect
+export type NewLeadList = typeof leadLists.$inferInsert
+
+export type Lead = typeof leads.$inferSelect
+export type NewLead = typeof leads.$inferInsert
+
+export type Campaign = typeof campaigns.$inferSelect
+export type NewCampaign = typeof campaigns.$inferInsert
+
+export type Sequence = typeof sequences.$inferSelect
+export type NewSequence = typeof sequences.$inferInsert
+
+export type SequenceStep = typeof sequenceSteps.$inferSelect
+export type NewSequenceStep = typeof sequenceSteps.$inferInsert
+
+export type CampaignLead = typeof campaignLeads.$inferSelect
+export type NewCampaignLead = typeof campaignLeads.$inferInsert
+
+export type OutreachEmail = typeof outreachEmails.$inferSelect
+export type NewOutreachEmail = typeof outreachEmails.$inferInsert
+
+export type OutreachAnalytic = typeof outreachAnalytics.$inferSelect
+export type NewOutreachAnalytic = typeof outreachAnalytics.$inferInsert

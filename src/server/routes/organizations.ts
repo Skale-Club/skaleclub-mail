@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { db } from '../../db'
 import { organizations, organizationUsers, users, servers } from '../../db/schema'
 import { eq, and } from 'drizzle-orm'
+import { deleteOrganizationCascade } from '../lib/cascade'
 
 const router = Router()
 
@@ -222,9 +223,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
             return res.status(403).json({ error: 'Only the owner can delete the organization' })
         }
 
-        // Delete all related data
-        await db.delete(organizationUsers).where(eq(organizationUsers.organizationId, organizationId))
-        await db.delete(organizations).where(eq(organizations.id, organizationId))
+        // Delete all related data (cascade)
+        await deleteOrganizationCascade(organizationId)
 
         res.json({ message: 'Organization deleted successfully' })
     } catch (error) {

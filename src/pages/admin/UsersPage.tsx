@@ -176,7 +176,6 @@ export default function UsersPage() {
                         <thead className="bg-gray-50">
                             <tr>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">User</th>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Email</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Name</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Admin</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Verified</th>
@@ -187,7 +186,7 @@ export default function UsersPage() {
                         <tbody className="divide-y divide-gray-200 bg-white">
                             {filteredUsers.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
                                         No users found. Create a user to get started.
                                     </td>
                                 </tr>

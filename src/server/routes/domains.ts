@@ -1,13 +1,13 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
-import dns from 'node:dns'
+import { promises as dnsPromises } from 'node:dns'
 import { db } from '../../db'
 import { domains, servers, organizationUsers } from '../../db/schema'
 import { eq, and } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 
-const resolver = new dns.promises.Resolver()
-resolver.setServers(['8.8.8.8', '1.1.1.1'])
+const resolver = new dnsPromises.Resolver()
+resolver.setServers((process.env.DNS_SERVERS || '8.8.8.8,1.1.1.1').split(','))
 
 async function resolveTxt(hostname: string): Promise<string[]> {
     try {
@@ -199,10 +199,12 @@ router.post('/:id/verify', async (req: Request, res: Response) => {
 
         // 3) DKIM
         const dkimFound = dkimTxt.length > 0 && dkimTxt.some((r) => r.startsWith('v=DKIM1'))
+        const dkimStatus = dkimFound ? 'verified' : 'failed'
         const dkimError = dkimFound ? null : 'DKIM record not found'
 
         // 4) DMARC
         const dmarcFound = dmarcTxt.some((r) => r.startsWith('v=DMARC1'))
+        const dmarcStatus = dmarcFound ? 'verified' : 'failed'
         const dmarcError = dmarcFound ? null : 'DMARC record not found'
 
         const allVerified = verificationFound && spfFound && dkimFound && dmarcFound
@@ -214,6 +216,10 @@ router.post('/:id/verify', async (req: Request, res: Response) => {
                 verifiedAt: allVerified ? new Date() : null,
                 spfStatus,
                 spfError,
+                dkimStatus,
+                dkimError,
+                dmarcStatus,
+                dmarcError,
                 updatedAt: new Date(),
             })
             .where(eq(domains.id, domainId))

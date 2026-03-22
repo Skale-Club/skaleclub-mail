@@ -8,6 +8,15 @@ import { injectTracking, incrementStat, fireWebhooks } from '../lib/tracking'
 
 const router = Router()
 
+function escapeHtml(str: string): string {
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+}
+
 // Validation schemas
 const sendMessageSchema = z.object({
     serverId: z.string().uuid(),
@@ -15,9 +24,9 @@ const sendMessageSchema = z.object({
     to: z.array(z.string().email()).min(1),
     cc: z.array(z.string().email()).optional(),
     bcc: z.array(z.string().email()).optional(),
-    subject: z.string().min(1),
-    plainBody: z.string().optional(),
-    htmlBody: z.string().optional(),
+    subject: z.string().min(1).max(998),
+    plainBody: z.string().max(5_000_000).optional(),
+    htmlBody: z.string().max(5_000_000).optional(),
     headers: z.record(z.string()).optional(),
     attachments: z.array(z.object({
         filename: z.string(),
@@ -204,16 +213,17 @@ router.post('/', async (req: Request, res: Response) => {
 
             const variables = data.templateVariables || {}
 
-            const render = (text: string | null): string | null => {
+            const render = (text: string | null, isHtml: boolean): string | null => {
                 if (!text) return text
                 return text.replace(/\{\{(\w+)\}\}/g, (_, key) => {
-                    return variables[key] ?? `{{${key}}}`
+                    const value = variables[key] ?? `{{${key}}}`
+                    return isHtml ? escapeHtml(value) : value
                 })
             }
 
-            subject = render(template.subject) || subject
-            plainBody = render(template.plainBody) || plainBody
-            htmlBody = render(template.htmlBody) || htmlBody
+            subject = render(template.subject, false) || subject
+            plainBody = render(template.plainBody, false) || plainBody
+            htmlBody = render(template.htmlBody, true) || htmlBody
         }
 
         // Inject open/click tracking into HTML before storing

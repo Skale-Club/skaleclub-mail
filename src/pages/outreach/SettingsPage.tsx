@@ -1,0 +1,354 @@
+import React from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+    Settings,
+    Mail,
+    Clock,
+    Globe,
+    Shield,
+    Bell,
+    Key,
+    Save,
+    RefreshCw
+} from 'lucide-react'
+import { OutreachLayout } from '../../components/outreach/OutreachLayout'
+import { Button } from '../../components/ui/button'
+import { Input } from '../../components/ui/input'
+import { Label } from '../../components/ui/label'
+
+interface OutreachSettings {
+    general: {
+        defaultTimezone: string
+        defaultSendStartTime: string
+        defaultSendEndTime: string
+        sendOnWeekends: boolean
+        trackOpens: boolean
+        trackClicks: boolean
+    }
+    sending: {
+        defaultDailyLimit: number
+        defaultMinMinutesBetweenEmails: number
+        warmupEnabled: boolean
+        warmupDays: number
+    }
+    notifications: {
+        emailOnReply: boolean
+        emailOnBounce: boolean
+        emailOnUnsubscribe: boolean
+        weeklyReport: boolean
+    }
+}
+
+async function fetchSettings(): Promise<OutreachSettings> {
+    const response = await fetch('/api/outreach/settings')
+    if (!response.ok) throw new Error('Failed to fetch settings')
+    return response.json()
+}
+
+async function updateSettings(settings: Partial<OutreachSettings>): Promise<void> {
+    const response = await fetch('/api/outreach/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
+    })
+    if (!response.ok) throw new Error('Failed to update settings')
+}
+
+export function SettingsPage() {
+    const queryClient = useQueryClient()
+    const { data: settings, isLoading } = useQuery({
+        queryKey: ['outreach-settings'],
+        queryFn: fetchSettings,
+    })
+
+    const updateMutation = useMutation({
+        mutationFn: updateSettings,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['outreach-settings'] })
+        }
+    })
+
+    const [formData, setFormData] = React.useState<Partial<OutreachSettings>>({})
+
+    React.useEffect(() => {
+        if (settings) {
+            setFormData(settings)
+        }
+    }, [settings])
+
+    const handleSave = () => {
+        updateMutation.mutate(formData)
+    }
+
+    const updateGeneral = (key: keyof OutreachSettings['general'], value: string | boolean) => {
+        setFormData(prev => ({
+            ...prev,
+            general: { ...prev.general!, [key]: value }
+        }))
+    }
+
+    const updateSending = (key: keyof OutreachSettings['sending'], value: number | boolean) => {
+        setFormData(prev => ({
+            ...prev,
+            sending: { ...prev.sending!, [key]: value }
+        }))
+    }
+
+    const updateNotifications = (key: keyof OutreachSettings['notifications'], value: boolean) => {
+        setFormData(prev => ({
+            ...prev,
+            notifications: { ...prev.notifications!, [key]: value }
+        }))
+    }
+
+    if (isLoading) {
+        return (
+            <OutreachLayout>
+                <div className="flex items-center justify-center min-h-[60vh]">
+                    <RefreshCw className="w-8 h-8 animate-spin text-gray-400" />
+                </div>
+            </OutreachLayout>
+        )
+    }
+
+    return (
+        <OutreachLayout>
+            <div className="space-y-6 max-w-4xl">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
+                        <p className="text-gray-500 dark:text-gray-400 mt-1">
+                            Configure your cold email outreach preferences
+                        </p>
+                    </div>
+                    <Button onClick={handleSave} disabled={updateMutation.isPending}>
+                        <Save className="w-4 h-4 mr-2" />
+                        {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+                    </Button>
+                </div>
+
+                {/* General Settings */}
+                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                        <div className="flex items-center gap-2">
+                            <Globe className="w-5 h-5 text-gray-500" />
+                            <h3 className="font-semibold text-gray-900 dark:text-white">General Settings</h3>
+                        </div>
+                    </div>
+                    <div className="p-4 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <Label htmlFor="timezone">Default Timezone</Label>
+                                <select
+                                    id="timezone"
+                                    className="w-full mt-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                                    value={formData.general?.defaultTimezone || 'UTC'}
+                                    onChange={(e) => updateGeneral('defaultTimezone', e.target.value)}
+                                >
+                                    <option value="UTC">UTC</option>
+                                    <option value="America/New_York">Eastern Time (ET)</option>
+                                    <option value="America/Chicago">Central Time (CT)</option>
+                                    <option value="America/Denver">Mountain Time (MT)</option>
+                                    <option value="America/Los_Angeles">Pacific Time (PT)</option>
+                                    <option value="Europe/London">London (GMT)</option>
+                                    <option value="Europe/Paris">Paris (CET)</option>
+                                </select>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <div className="flex-1">
+                                    <Label htmlFor="startTime">Send Start Time</Label>
+                                    <Input
+                                        id="startTime"
+                                        type="time"
+                                        className="mt-1"
+                                        value={formData.general?.defaultSendStartTime || '09:00'}
+                                        onChange={(e) => updateGeneral('defaultSendStartTime', e.target.value)}
+                                    />
+                                </div>
+                                <div className="flex-1">
+                                    <Label htmlFor="endTime">Send End Time</Label>
+                                    <Input
+                                        id="endTime"
+                                        type="time"
+                                        className="mt-1"
+                                        value={formData.general?.defaultSendEndTime || '17:00'}
+                                        onChange={(e) => updateGeneral('defaultSendEndTime', e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex flex-wrap gap-4">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    className="rounded border-gray-300"
+                                    checked={formData.general?.sendOnWeekends || false}
+                                    onChange={(e) => updateGeneral('sendOnWeekends', e.target.checked)}
+                                />
+                                <span className="text-sm text-gray-700 dark:text-gray-300">Send on weekends</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    className="rounded border-gray-300"
+                                    checked={formData.general?.trackOpens || true}
+                                    onChange={(e) => updateGeneral('trackOpens', e.target.checked)}
+                                />
+                                <span className="text-sm text-gray-700 dark:text-gray-300">Track opens</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    className="rounded border-gray-300"
+                                    checked={formData.general?.trackClicks || true}
+                                    onChange={(e) => updateGeneral('trackClicks', e.target.checked)}
+                                />
+                                <span className="text-sm text-gray-700 dark:text-gray-300">Track clicks</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Sending Settings */}
+                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                        <div className="flex items-center gap-2">
+                            <Mail className="w-5 h-5 text-gray-500" />
+                            <h3 className="font-semibold text-gray-900 dark:text-white">Sending Settings</h3>
+                        </div>
+                    </div>
+                    <div className="p-4 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <Label htmlFor="dailyLimit">Default Daily Send Limit</Label>
+                                <Input
+                                    id="dailyLimit"
+                                    type="number"
+                                    className="mt-1"
+                                    min={1}
+                                    max={1000}
+                                    value={formData.sending?.defaultDailyLimit || 50}
+                                    onChange={(e) => updateSending('defaultDailyLimit', parseInt(e.target.value))}
+                                />
+                                <p className="text-xs text-gray-500 mt-1">Maximum emails per inbox per day</p>
+                            </div>
+                            <div>
+                                <Label htmlFor="minMinutes">Min Minutes Between Emails</Label>
+                                <Input
+                                    id="minMinutes"
+                                    type="number"
+                                    className="mt-1"
+                                    min={1}
+                                    max={60}
+                                    value={formData.sending?.defaultMinMinutesBetweenEmails || 5}
+                                    onChange={(e) => updateSending('defaultMinMinutesBetweenEmails', parseInt(e.target.value))}
+                                />
+                                <p className="text-xs text-gray-500 mt-1">Minimum wait time between sends</p>
+                            </div>
+                        </div>
+                        <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                            <h4 className="font-medium text-gray-900 dark:text-white mb-3">Warmup Settings</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        className="rounded border-gray-300"
+                                        checked={formData.sending?.warmupEnabled || true}
+                                        onChange={(e) => updateSending('warmupEnabled', e.target.checked)}
+                                    />
+                                    <span className="text-sm text-gray-700 dark:text-gray-300">Enable automatic warmup</span>
+                                </label>
+                                <div>
+                                    <Label htmlFor="warmupDays">Warmup Period (Days)</Label>
+                                    <Input
+                                        id="warmupDays"
+                                        type="number"
+                                        className="mt-1"
+                                        min={7}
+                                        max={60}
+                                        value={formData.sending?.warmupDays || 21}
+                                        onChange={(e) => updateSending('warmupDays', parseInt(e.target.value))}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Notification Settings */}
+                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                        <div className="flex items-center gap-2">
+                            <Bell className="w-5 h-5 text-gray-500" />
+                            <h3 className="font-semibold text-gray-900 dark:text-white">Notifications</h3>
+                        </div>
+                    </div>
+                    <div className="p-4 space-y-3">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                className="rounded border-gray-300"
+                                checked={formData.notifications?.emailOnReply || true}
+                                onChange={(e) => updateNotifications('emailOnReply', e.target.checked)}
+                            />
+                            <span className="text-sm text-gray-700 dark:text-gray-300">Email me when someone replies</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                className="rounded border-gray-300"
+                                checked={formData.notifications?.emailOnBounce || true}
+                                onChange={(e) => updateNotifications('emailOnBounce', e.target.checked)}
+                            />
+                            <span className="text-sm text-gray-700 dark:text-gray-300">Email me on bounces</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                className="rounded border-gray-300"
+                                checked={formData.notifications?.emailOnUnsubscribe || false}
+                                onChange={(e) => updateNotifications('emailOnUnsubscribe', e.target.checked)}
+                            />
+                            <span className="text-sm text-gray-700 dark:text-gray-300">Email me on unsubscribes</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                className="rounded border-gray-300"
+                                checked={formData.notifications?.weeklyReport || true}
+                                onChange={(e) => updateNotifications('weeklyReport', e.target.checked)}
+                            />
+                            <span className="text-sm text-gray-700 dark:text-gray-300">Send weekly performance report</span>
+                        </label>
+                    </div>
+                </div>
+
+                {/* API Keys Section */}
+                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                        <div className="flex items-center gap-2">
+                            <Key className="w-5 h-5 text-gray-500" />
+                            <h3 className="font-semibold text-gray-900 dark:text-white">API Access</h3>
+                        </div>
+                    </div>
+                    <div className="p-4">
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                            Use our API to integrate cold email outreach into your own applications.
+                        </p>
+                        <div className="bg-gray-100 dark:bg-gray-900 rounded-lg p-3 font-mono text-sm">
+                            <p className="text-gray-500 dark:text-gray-400">API Key:</p>
+                            <p className="text-gray-900 dark:text-white">sk_test_****************************</p>
+                        </div>
+                        <div className="mt-4 flex gap-2">
+                            <Button variant="outline" size="sm">Regenerate Key</Button>
+                            <Button variant="outline" size="sm">View Docs</Button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </OutreachLayout>
+    )
+}
+
+export default SettingsPage

@@ -6,6 +6,15 @@ import { eq, and, desc, like } from 'drizzle-orm'
 
 const router = Router()
 
+function escapeHtml(str: string): string {
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+}
+
 // Validation schemas
 const createTemplateSchema = z.object({
     serverId: z.string().uuid(),
@@ -283,17 +292,18 @@ router.post('/:id/render', async (req: Request, res: Response) => {
         const variables = z.record(z.string()).default({}).parse(req.body.variables || {})
 
         // Replace {{variable}} placeholders
-        const render = (text: string | null): string | null => {
+        const render = (text: string | null, isHtml: boolean): string | null => {
             if (!text) return text
             return text.replace(/\{\{(\w+)\}\}/g, (_, key) => {
-                return variables[key] ?? `{{${key}}}`
+                const value = variables[key] ?? `{{${key}}}`
+                return isHtml ? escapeHtml(value) : value
             })
         }
 
         res.json({
-            subject: render(template.subject),
-            plainBody: render(template.plainBody),
-            htmlBody: render(template.htmlBody),
+            subject: render(template.subject, false),
+            plainBody: render(template.plainBody, false),
+            htmlBody: render(template.htmlBody, true),
         })
     } catch (error) {
         if (error instanceof z.ZodError) {
