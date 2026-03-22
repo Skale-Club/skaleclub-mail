@@ -97,19 +97,22 @@ router.get('/', async (req: Request, res: Response) => {
         }
 
         if (from) {
-            conditions.push(like(messages.fromAddress, `%${from}%`))
+            const fromPattern = `%${from}%`
+            conditions.push(like(messages.fromAddress, fromPattern))
         }
 
         if (to) {
-            conditions.push(sql`${messages.toAddresses}::text like ${'%' + to + '%'}`)
+            const toPattern = `%${to}%`
+            conditions.push(sql`${messages.toAddresses}::text ilike ${toPattern}`)
         }
 
         if (query) {
+            const queryPattern = `%${query}%`
             conditions.push(
                 sql`(
-                    ${messages.subject} ilike ${'%' + query + '%'}
-                    or ${messages.fromAddress} ilike ${'%' + query + '%'}
-                    or ${messages.toAddresses}::text ilike ${'%' + query + '%'}
+                    ${messages.subject} ilike ${queryPattern}
+                    OR ${messages.fromAddress} ilike ${queryPattern}
+                    OR ${messages.toAddresses}::text ilike ${queryPattern}
                 )`
             )
         }

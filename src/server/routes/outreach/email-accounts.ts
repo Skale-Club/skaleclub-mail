@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { db } from '../../../db'
 import { emailAccounts, organizationUsers } from '../../../db/schema'
 import { eq, and } from 'drizzle-orm'
+import { encrypt, decrypt } from '../../../lib/crypto'
 
 const router = Router()
 
@@ -56,6 +57,14 @@ async function checkOrgMembership(userId: string, organizationId: string) {
         ),
     })
     return membership
+}
+
+// Helper to get decrypted SMTP credentials
+function getDecryptedCredentials(account: typeof emailAccounts.$inferSelect) {
+    return {
+        smtpPassword: decrypt(account.smtpPassword),
+        imapPassword: account.imapPassword ? decrypt(account.imapPassword) : null,
+    }
 }
 
 // List email accounts for organization
@@ -167,7 +176,23 @@ router.post('/', async (req: Request, res: Response) => {
 
         const [newAccount] = await db.insert(emailAccounts).values({
             organizationId,
-            ...validatedData,
+            email: validatedData.email,
+            displayName: validatedData.displayName,
+            smtpHost: validatedData.smtpHost,
+            smtpPort: validatedData.smtpPort,
+            smtpUsername: validatedData.smtpUsername,
+            smtpPassword: encrypt(validatedData.smtpPassword),
+            smtpSecure: validatedData.smtpSecure,
+            imapHost: validatedData.imapHost,
+            imapPort: validatedData.imapPort,
+            imapUsername: validatedData.imapUsername,
+            imapPassword: validatedData.imapPassword ? encrypt(validatedData.imapPassword) : null,
+            imapSecure: validatedData.imapSecure,
+            dailySendLimit: validatedData.dailySendLimit,
+            minMinutesBetweenEmails: validatedData.minMinutesBetweenEmails,
+            maxMinutesBetweenEmails: validatedData.maxMinutesBetweenEmails,
+            warmupEnabled: validatedData.warmupEnabled,
+            warmupDays: validatedData.warmupDays,
             status: 'pending',
         }).returning()
 
@@ -212,11 +237,30 @@ router.put('/:id', async (req: Request, res: Response) => {
 
         const validatedData = updateEmailAccountSchema.parse(req.body)
 
+        const updateValues: Record<string, unknown> = {
+            updatedAt: new Date(),
+        }
+
+        if (validatedData.displayName !== undefined) updateValues.displayName = validatedData.displayName
+        if (validatedData.smtpHost !== undefined) updateValues.smtpHost = validatedData.smtpHost
+        if (validatedData.smtpPort !== undefined) updateValues.smtpPort = validatedData.smtpPort
+        if (validatedData.smtpUsername !== undefined) updateValues.smtpUsername = validatedData.smtpUsername
+        if (validatedData.smtpPassword !== undefined) updateValues.smtpPassword = encrypt(validatedData.smtpPassword)
+        if (validatedData.smtpSecure !== undefined) updateValues.smtpSecure = validatedData.smtpSecure
+        if (validatedData.imapHost !== undefined) updateValues.imapHost = validatedData.imapHost
+        if (validatedData.imapPort !== undefined) updateValues.imapPort = validatedData.imapPort
+        if (validatedData.imapUsername !== undefined) updateValues.imapUsername = validatedData.imapUsername
+        if (validatedData.imapPassword !== undefined) updateValues.imapPassword = validatedData.imapPassword ? encrypt(validatedData.imapPassword) : null
+        if (validatedData.imapSecure !== undefined) updateValues.imapSecure = validatedData.imapSecure
+        if (validatedData.dailySendLimit !== undefined) updateValues.dailySendLimit = validatedData.dailySendLimit
+        if (validatedData.minMinutesBetweenEmails !== undefined) updateValues.minMinutesBetweenEmails = validatedData.minMinutesBetweenEmails
+        if (validatedData.maxMinutesBetweenEmails !== undefined) updateValues.maxMinutesBetweenEmails = validatedData.maxMinutesBetweenEmails
+        if (validatedData.warmupEnabled !== undefined) updateValues.warmupEnabled = validatedData.warmupEnabled
+        if (validatedData.warmupDays !== undefined) updateValues.warmupDays = validatedData.warmupDays
+        if (validatedData.status !== undefined) updateValues.status = validatedData.status
+
         const [updatedAccount] = await db.update(emailAccounts)
-            .set({
-                ...validatedData,
-                updatedAt: new Date(),
-            })
+            .set(updateValues)
             .where(eq(emailAccounts.id, accountId))
             .returning()
 

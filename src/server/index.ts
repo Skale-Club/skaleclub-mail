@@ -38,6 +38,16 @@ const limiter = rateLimit({
 })
 app.use('/api/', limiter)
 
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message: { error: 'Too many authentication attempts, please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+})
+app.use('/api/auth/login', authLimiter)
+app.use('/api/auth/reset-password', authLimiter)
+
 const trackingLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 100,
@@ -57,8 +67,17 @@ const supabase = createClient(
     process.env.SUPABASE_ANON_KEY!
 )
 
+const PUBLIC_PATHS = [
+    '/api/auth/login',
+    '/api/auth/register',
+    '/api/auth/reset-password',
+    '/api/auth/refresh',
+]
+
 app.use('/api', async (req, res, next) => {
-    if (req.path.startsWith('/auth')) {
+    const path = req.path
+
+    if (PUBLIC_PATHS.some(p => path === p)) {
         return next()
     }
 
@@ -67,30 +86,28 @@ app.use('/api', async (req, res, next) => {
         return res.status(401).json({ error: 'Unauthorized' })
     }
 
-    try {
-        const token = authHeader.replace('Bearer ', '')
-        const { data: { user }, error } = await supabase.auth.getUser(token)
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error } = await supabase.auth.getUser(token)
 
-        if (!error && user) {
-            req.headers['x-user-id'] = user.id
+    if (error || !user) {
+        return res.status(401).json({ error: 'Invalid or expired token' })
+    }
 
-            const existing = await db.query.users.findFirst({
-                where: eq(users.id, user.id),
-            })
+    req.headers['x-user-id'] = user.id
 
-            if (!existing) {
-                await db.insert(users).values({
-                    id: user.id,
-                    email: user.email!,
-                    firstName: user.user_metadata?.firstName || null,
-                    lastName: user.user_metadata?.lastName || null,
-                    isAdmin: process.env.AUTO_ADMIN_FIRST_USER === 'true',
-                    emailVerified: true,
-                }).onConflictDoNothing()
-            }
-        }
-    } catch {
-        // Continue without user context.
+    const existing = await db.query.users.findFirst({
+        where: eq(users.id, user.id),
+    })
+
+    if (!existing) {
+        await db.insert(users).values({
+            id: user.id,
+            email: user.email!,
+            firstName: user.user_metadata?.firstName || null,
+            lastName: user.user_metadata?.lastName || null,
+            isAdmin: false,
+            emailVerified: true,
+        })
     }
 
     next()
