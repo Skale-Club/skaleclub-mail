@@ -270,65 +270,61 @@ export default function UsersPage() {
                         </tbody>
                     </table>
                 </div>
-        </div>
-    )
-}
+            )}
 
-{/* Edit User Modal */ }
-{
-    showEditModal && selectedUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Edit User</CardTitle>
-                        <CardDescription>
-                            Update user information
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div>
-                            <Label htmlFor="firstName">First Name</Label>
-                            <Input
-                                id="firstName"
-                                value={editData.firstName}
-                                onChange={(e) => setEditData({ ...editData, firstName: e.target.value })}
-                            />
-                        </div>
-                        <div>
-                            <Label htmlFor="lastName">Last Name</Label>
-                            <Input
-                                id="lastName"
-                                value={editData.lastName}
-                                onChange={(e) => setEditData({ ...editData, lastName: e.target.value })}
-                            />
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <input
-                                type="checkbox"
-                                id="isAdmin"
-                                checked={editData.isAdmin}
-                                onChange={(e) => setEditData({ ...editData, isAdmin: e.target.checked })}
-                            />
-                            <Label htmlFor="isAdmin">Administrator</Label>
-                        </div>
-                        <div className="flex justify-end gap-2 pt-4">
-                            <Button variant="outline" onClick={() => {
-                                setShowEditModal(false)
-                                setSelectedUser(null)
-                            }}>
-                                Cancel
-                            </Button>
-                            <Button onClick={() => handleUpdateUser(selectedUser.id, editData)}>
-                                Save Changes
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
+            {/* Edit User Modal */}
+            {showEditModal && selectedUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+                    <div className="bg-white rounded-lg p-6 max-w-md w-full">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Edit User</CardTitle>
+                                <CardDescription>
+                                    Update user information
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div>
+                                    <Label htmlFor="firstName">First Name</Label>
+                                    <Input
+                                        id="firstName"
+                                        value={editData.firstName}
+                                        onChange={(e) => setEditData({ ...editData, firstName: e.target.value })}
+                                    />
+                                </div>
+                                <div>
+                                    <Label htmlFor="lastName">Last Name</Label>
+                                    <Input
+                                        id="lastName"
+                                        value={editData.lastName}
+                                        onChange={(e) => setEditData({ ...editData, lastName: e.target.value })}
+                                    />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        id="isAdmin"
+                                        checked={editData.isAdmin}
+                                        onChange={(e) => setEditData({ ...editData, isAdmin: e.target.checked })}
+                                    />
+                                    <Label htmlFor="isAdmin">Administrator</Label>
+                                </div>
+                                <div className="flex justify-end gap-2 pt-4">
+                                    <Button variant="outline" onClick={() => {
+                                        setShowEditModal(false)
+                                        setSelectedUser(null)
+                                    }}>
+                                        Cancel
+                                    </Button>
+                                    <Button onClick={() => handleUpdateUser(selectedUser.id, editData)}>
+                                        Save Changes
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </div>
+            )}
         </div>
     )
-}
-    </div >
-  )
 }

@@ -32,6 +32,7 @@ router.get('/usage', async (req: Request, res: Response) => {
         const storageLimitBytes = Number(process.env.STORAGE_LIMIT_BYTES) || 10 * 1024 * 1024 * 1024
 
         // Per-user usage: message count + estimated attachment size from base64 content in DB
+        // Exclude admin users (they manage the system, not part of organizations/plans)
         const userUsageResult = await db.execute(sql`
             SELECT
                 u.id,
@@ -57,6 +58,7 @@ router.get('/usage', async (req: Request, res: Response) => {
             LEFT JOIN organizations org ON org.id = ou.organization_id
             LEFT JOIN servers s ON s.organization_id = org.id
             LEFT JOIN messages m ON m.server_id = s.id
+            WHERE u.is_admin = false
             GROUP BY u.id, u.email, u.first_name, u.last_name
             ORDER BY message_count DESC
         `)

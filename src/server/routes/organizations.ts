@@ -137,7 +137,16 @@ router.post('/', async (req: Request, res: Response) => {
             role: 'admin',
         })
 
-        res.status(201).json({ organization })
+        // Auto-create default server for the organization
+        const [defaultServer] = await db.insert(servers).values({
+            name: name,
+            slug: slug,
+            organizationId: organization.id,
+            mode: 'live',
+            sendMode: 'smtp',
+        }).returning()
+
+        res.status(201).json({ organization, defaultServer })
     } catch (error) {
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: error.errors })

@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
-import { Building2, Plus, Search, MoreHorizontal, Trash2, Edit } from 'lucide-react'
+import { Building2, Plus, Search, Trash2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
 interface Organization {
@@ -169,7 +169,11 @@ export default function OrganizationsPage() {
             ) : (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {filteredOrganizations.map((org) => (
-                        <Card key={org.id} className="hover:shadow-md transition-shadow">
+                        <Card
+                            key={org.id}
+                            className="hover:shadow-md transition-shadow cursor-pointer"
+                            onClick={() => window.location.href = `/admin/organizations/${org.id}`}
+                        >
                             <CardHeader>
                                 <div className="flex items-start justify-between">
                                     <div className="flex items-center gap-3">
@@ -181,14 +185,16 @@ export default function OrganizationsPage() {
                                             <CardDescription className="text-sm">{org.slug}</CardDescription>
                                         </div>
                                     </div>
-                                    <div className="flex gap-1">
-                                        <Button variant="ghost" size="icon" onClick={() => window.location.href = `/admin/organizations/${org.id}`}>
-                                            <Edit className="w-4 h-4" />
-                                        </Button>
-                                        <Button variant="ghost" size="icon" onClick={() => handleDeleteOrg(org.id)}>
-                                            <Trash2 className="w-4 h-4 text-destructive" />
-                                        </Button>
-                                    </div>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            handleDeleteOrg(org.id)
+                                        }}
+                                    >
+                                        <Trash2 className="w-4 h-4 text-destructive" />
+                                    </Button>
                                 </div>
                             </CardHeader>
                             <CardContent>

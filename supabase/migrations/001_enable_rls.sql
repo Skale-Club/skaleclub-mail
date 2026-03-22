@@ -1,754 +1,637 @@
--- Enable Row Level Security on all tables
--- This migration should be run in Supabase SQL Editor
+-- Enable Row Level Security for all public tables except templates.
+-- Templates are handled in 002_add_templates.sql so that the table can be
+-- created and secured independently.
 
 -- ============================================================================
--- USERS TABLE
+-- HELPER FUNCTIONS
 -- ============================================================================
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+CREATE OR REPLACE FUNCTION public.is_platform_admin()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT EXISTS (
+        SELECT 1
+        FROM public.users
+        WHERE id = auth.uid()
+          AND is_admin = true
+    );
+$$;
 
--- Users can view their own profile
-CREATE POLICY "Users can view own profile"
-  ON public.users FOR SELECT
-  USING (auth.uid()::text = id);
+CREATE OR REPLACE FUNCTION public.is_org_member(target_organization_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT EXISTS (
+        SELECT 1
+        FROM public.organization_users
+        WHERE organization_id = target_organization_id
+          AND user_id = auth.uid()
+    );
+$$;
 
--- Users can update their own profile
-CREATE POLICY "Users can update own profile"
-  ON public.users FOR UPDATE
-  USING (auth.uid()::text = id);
+CREATE OR REPLACE FUNCTION public.is_org_admin(target_organization_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT EXISTS (
+        SELECT 1
+        FROM public.organization_users
+        WHERE organization_id = target_organization_id
+          AND user_id = auth.uid()
+          AND role = 'admin'
+    );
+$$;
 
--- Users can insert their own profile
-CREATE POLICY "Users can insert own profile"
-  ON public.users FOR INSERT
-  WITH CHECK (auth.uid()::text = id);
+CREATE OR REPLACE FUNCTION public.can_manage_org_member(
+    target_organization_id uuid,
+    target_user_id uuid
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT EXISTS (
+        SELECT 1
+        FROM public.organization_users ou
+        JOIN public.organizations o ON o.id = ou.organization_id
+        WHERE ou.organization_id = target_organization_id
+          AND ou.user_id = auth.uid()
+          AND ou.role = 'admin'
+          AND o.owner_id <> target_user_id
+    );
+$$;
 
--- ============================================================================
--- ORGANIZATIONS TABLE
--- ============================================================================
-ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
+CREATE OR REPLACE FUNCTION public.is_server_member(target_server_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT EXISTS (
+        SELECT 1
+        FROM public.servers s
+        JOIN public.organization_users ou ON ou.organization_id = s.organization_id
+        WHERE s.id = target_server_id
+          AND ou.user_id = auth.uid()
+    );
+$$;
 
--- Users can view organizations they belong to
-CREATE POLICY "Users can view their organizations"
-  ON public.organizations FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = organizations.id
-      AND organization_users.user_id = auth.uid()::text
-    )
-  );
+CREATE OR REPLACE FUNCTION public.is_server_admin(target_server_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT EXISTS (
+        SELECT 1
+        FROM public.servers s
+        JOIN public.organization_users ou ON ou.organization_id = s.organization_id
+        WHERE s.id = target_server_id
+          AND ou.user_id = auth.uid()
+          AND ou.role = 'admin'
+    );
+$$;
 
--- Users can create organizations (they become owner)
-CREATE POLICY "Users can create organizations"
-  ON public.organizations FOR INSERT
-  WITH CHECK (true);
+CREATE OR REPLACE FUNCTION public.is_server_editor(target_server_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT EXISTS (
+        SELECT 1
+        FROM public.servers s
+        JOIN public.organization_users ou ON ou.organization_id = s.organization_id
+        WHERE s.id = target_server_id
+          AND ou.user_id = auth.uid()
+          AND ou.role IN ('admin', 'member')
+    );
+$$;
 
--- Only organization owners can update
-CREATE POLICY "Only owners can update organizations"
-  ON public.organizations FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = organizations.id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role = 'owner'
-    )
-  );
-
--- Only organization owners can delete
-CREATE POLICY "Only owners can delete organizations"
-  ON public.organizations FOR DELETE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = organizations.id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role = 'owner'
-    )
-  );
-
--- ============================================================================
--- ORGANIZATION_USERS TABLE
--- ============================================================================
-ALTER TABLE public.organization_users ENABLE ROW LEVEL SECURITY;
-
--- Users can view members of their organizations
-CREATE POLICY "Users can view organization members"
-  ON public.organization_users FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users ou
-      WHERE ou.organization_id = organization_users.organization_id
-      AND ou.user_id = auth.uid()::text
-    )
-  );
-
--- Only owners/admins can add members
-CREATE POLICY "Owners and admins can add members"
-  ON public.organization_users FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.organization_users ou
-      WHERE ou.organization_id = organization_users.organization_id
-      AND ou.user_id = auth.uid()::text
-      AND ou.role IN ('owner', 'admin')
-    )
-  );
-
--- Only owners can remove members (except themselves)
-CREATE POLICY "Owners can remove members"
-  ON public.organization_users FOR DELETE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users ou
-      WHERE ou.organization_id = organization_users.organization_id
-      AND ou.user_id = auth.uid()::text
-      AND ou.role = 'owner'
-    )
-  );
-
--- ============================================================================
--- SERVERS TABLE
--- ============================================================================
-ALTER TABLE public.servers ENABLE ROW LEVEL SECURITY;
-
--- Users can view servers in their organizations
-CREATE POLICY "Users can view organization servers"
-  ON public.servers FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = servers.organization_id
-      AND organization_users.user_id = auth.uid()::text
-    )
-  );
-
--- Only owners/admins can create servers
-CREATE POLICY "Owners and admins can create servers"
-  ON public.servers FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = servers.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role IN ('owner', 'admin')
-    )
-  );
-
--- Only owners/admins can update servers
-CREATE POLICY "Owners and admins can update servers"
-  ON public.servers FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = servers.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role IN ('owner', 'admin')
-    )
-  );
-
--- Only owners can delete servers
-CREATE POLICY "Only owners can delete servers"
-  ON public.servers FOR DELETE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = servers.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role = 'owner'
-    )
-  );
+CREATE OR REPLACE FUNCTION public.is_webhook_member(target_webhook_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT EXISTS (
+        SELECT 1
+        FROM public.webhooks w
+        JOIN public.servers s ON s.id = w.server_id
+        JOIN public.organization_users ou ON ou.organization_id = s.organization_id
+        WHERE w.id = target_webhook_id
+          AND ou.user_id = auth.uid()
+    );
+$$;
 
 -- ============================================================================
--- DOMAINS TABLE
+-- USERS
 -- ============================================================================
-ALTER TABLE public.domains ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.users ENABLE ROW LEVEL SECURITY;
 
--- Users can view domains in their organizations
-CREATE POLICY "Users can view organization domains"
-  ON public.domains FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = domains.organization_id
-      AND organization_users.user_id = auth.uid()::text
-    )
-  );
+DROP POLICY IF EXISTS users_select_self_or_admin ON public.users;
+DROP POLICY IF EXISTS users_insert_self_or_admin ON public.users;
+DROP POLICY IF EXISTS users_update_self_or_admin ON public.users;
+DROP POLICY IF EXISTS users_delete_admin_only ON public.users;
+DROP POLICY IF EXISTS "Users can view own profile" ON public.users;
+DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
+DROP POLICY IF EXISTS "Users can insert own profile" ON public.users;
 
--- Only owners/admins can create domains
-CREATE POLICY "Owners and admins can create domains"
-  ON public.domains FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = domains.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role IN ('owner', 'admin')
-    )
-  );
+CREATE POLICY users_select_self_or_admin
+    ON public.users FOR SELECT
+    TO authenticated
+    USING (auth.uid() = id OR public.is_platform_admin());
 
--- Only owners/admins can update domains
-CREATE POLICY "Owners and admins can update domains"
-  ON public.domains FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = domains.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role IN ('owner', 'admin')
-    )
-  );
+CREATE POLICY users_insert_self_or_admin
+    ON public.users FOR INSERT
+    TO authenticated
+    WITH CHECK (auth.uid() = id OR public.is_platform_admin());
 
--- Only owners can delete domains
-CREATE POLICY "Only owners can delete domains"
-  ON public.domains FOR DELETE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = domains.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role = 'owner'
-    )
-  );
+CREATE POLICY users_update_self_or_admin
+    ON public.users FOR UPDATE
+    TO authenticated
+    USING (auth.uid() = id OR public.is_platform_admin())
+    WITH CHECK (auth.uid() = id OR public.is_platform_admin());
+
+CREATE POLICY users_delete_admin_only
+    ON public.users FOR DELETE
+    TO authenticated
+    USING (public.is_platform_admin() AND auth.uid() <> id);
 
 -- ============================================================================
--- CREDENTIALS TABLE
+-- ORGANIZATIONS
 -- ============================================================================
-ALTER TABLE public.credentials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.organizations ENABLE ROW LEVEL SECURITY;
 
--- Users can view credentials in their organizations
-CREATE POLICY "Users can view organization credentials"
-  ON public.credentials FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = credentials.organization_id
-      AND organization_users.user_id = auth.uid()::text
-    )
-  );
+DROP POLICY IF EXISTS organizations_select_member ON public.organizations;
+DROP POLICY IF EXISTS organizations_insert_owner ON public.organizations;
+DROP POLICY IF EXISTS organizations_update_admin ON public.organizations;
+DROP POLICY IF EXISTS organizations_delete_owner ON public.organizations;
+DROP POLICY IF EXISTS "Users can view their organizations" ON public.organizations;
+DROP POLICY IF EXISTS "Users can create organizations" ON public.organizations;
+DROP POLICY IF EXISTS "Only owners can update organizations" ON public.organizations;
+DROP POLICY IF EXISTS "Only owners can delete organizations" ON public.organizations;
 
--- Only owners/admins can create credentials
-CREATE POLICY "Owners and admins can create credentials"
-  ON public.credentials FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = credentials.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role IN ('owner', 'admin')
-    )
-  );
+CREATE POLICY organizations_select_member
+    ON public.organizations FOR SELECT
+    TO authenticated
+    USING (public.is_org_member(id) OR owner_id = auth.uid() OR public.is_platform_admin());
 
--- Only owners/admins can update credentials
-CREATE POLICY "Owners and admins can update credentials"
-  ON public.credentials FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = credentials.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role IN ('owner', 'admin')
-    )
-  );
+CREATE POLICY organizations_insert_owner
+    ON public.organizations FOR INSERT
+    TO authenticated
+    WITH CHECK (owner_id = auth.uid() OR public.is_platform_admin());
 
--- Only owners can delete credentials
-CREATE POLICY "Only owners can delete credentials"
-  ON public.credentials FOR DELETE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = credentials.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role = 'owner'
-    )
-  );
+CREATE POLICY organizations_update_admin
+    ON public.organizations FOR UPDATE
+    TO authenticated
+    USING (public.is_org_admin(id) OR owner_id = auth.uid() OR public.is_platform_admin())
+    WITH CHECK (public.is_org_admin(id) OR owner_id = auth.uid() OR public.is_platform_admin());
+
+CREATE POLICY organizations_delete_owner
+    ON public.organizations FOR DELETE
+    TO authenticated
+    USING (owner_id = auth.uid() OR public.is_platform_admin());
 
 -- ============================================================================
--- ROUTES TABLE
+-- ORGANIZATION USERS
 -- ============================================================================
-ALTER TABLE public.routes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.organization_users ENABLE ROW LEVEL SECURITY;
 
--- Users can view routes in their organizations
-CREATE POLICY "Users can view organization routes"
-  ON public.routes FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = routes.organization_id
-      AND organization_users.user_id = auth.uid()::text
-    )
-  );
+DROP POLICY IF EXISTS organization_users_select_member ON public.organization_users;
+DROP POLICY IF EXISTS organization_users_insert_admin ON public.organization_users;
+DROP POLICY IF EXISTS organization_users_update_admin ON public.organization_users;
+DROP POLICY IF EXISTS organization_users_delete_admin ON public.organization_users;
+DROP POLICY IF EXISTS "Users can view organization members" ON public.organization_users;
+DROP POLICY IF EXISTS "Owners and admins can add members" ON public.organization_users;
+DROP POLICY IF EXISTS "Owners can remove members" ON public.organization_users;
 
--- Only owners/admins can create routes
-CREATE POLICY "Owners and admins can create routes"
-  ON public.routes FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = routes.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role IN ('owner', 'admin')
-    )
-  );
+CREATE POLICY organization_users_select_member
+    ON public.organization_users FOR SELECT
+    TO authenticated
+    USING (public.is_org_member(organization_id) OR public.is_platform_admin());
 
--- Only owners/admins can update routes
-CREATE POLICY "Owners and admins can update routes"
-  ON public.routes FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = routes.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role IN ('owner', 'admin')
-    )
-  );
+CREATE POLICY organization_users_insert_admin
+    ON public.organization_users FOR INSERT
+    TO authenticated
+    WITH CHECK (
+        public.is_platform_admin()
+        OR public.is_org_admin(organization_id)
+        OR (
+            user_id = auth.uid()
+            AND role = 'admin'
+            AND EXISTS (
+                SELECT 1
+                FROM public.organizations o
+                WHERE o.id = organization_id
+                  AND o.owner_id = auth.uid()
+            )
+        )
+    );
 
--- Only owners can delete routes
-CREATE POLICY "Only owners can delete routes"
-  ON public.routes FOR DELETE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = routes.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role = 'owner'
-    )
-  );
+CREATE POLICY organization_users_update_admin
+    ON public.organization_users FOR UPDATE
+    TO authenticated
+    USING (public.can_manage_org_member(organization_id, user_id) OR public.is_platform_admin())
+    WITH CHECK (public.can_manage_org_member(organization_id, user_id) OR public.is_platform_admin());
+
+CREATE POLICY organization_users_delete_admin
+    ON public.organization_users FOR DELETE
+    TO authenticated
+    USING (public.can_manage_org_member(organization_id, user_id) OR public.is_platform_admin());
 
 -- ============================================================================
--- MESSAGES TABLE
+-- SERVERS
 -- ============================================================================
-ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.servers ENABLE ROW LEVEL SECURITY;
 
--- Users can view messages in their organizations
-CREATE POLICY "Users can view organization messages"
-  ON public.messages FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = messages.organization_id
-      AND organization_users.user_id = auth.uid()::text
-    )
-  );
+DROP POLICY IF EXISTS servers_select_member ON public.servers;
+DROP POLICY IF EXISTS servers_insert_admin ON public.servers;
+DROP POLICY IF EXISTS servers_update_admin ON public.servers;
+DROP POLICY IF EXISTS servers_delete_admin ON public.servers;
+DROP POLICY IF EXISTS "Users can view organization servers" ON public.servers;
+DROP POLICY IF EXISTS "Owners and admins can create servers" ON public.servers;
+DROP POLICY IF EXISTS "Owners and admins can update servers" ON public.servers;
+DROP POLICY IF EXISTS "Only owners can delete servers" ON public.servers;
 
--- Server can insert messages (using service role)
--- For user-level inserts, check organization membership
-CREATE POLICY "Users can create messages"
-  ON public.messages FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = messages.organization_id
-      AND organization_users.user_id = auth.uid()::text
-    )
-  );
+CREATE POLICY servers_select_member
+    ON public.servers FOR SELECT
+    TO authenticated
+    USING (public.is_org_member(organization_id) OR public.is_platform_admin());
 
--- Only owners/admins can update messages
-CREATE POLICY "Owners and admins can update messages"
-  ON public.messages FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = messages.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role IN ('owner', 'admin')
-    )
-  );
+CREATE POLICY servers_insert_admin
+    ON public.servers FOR INSERT
+    TO authenticated
+    WITH CHECK (public.is_org_admin(organization_id) OR public.is_platform_admin());
 
--- Only owners can delete messages
-CREATE POLICY "Only owners can delete messages"
-  ON public.messages FOR DELETE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = messages.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role = 'owner'
-    )
-  );
+CREATE POLICY servers_update_admin
+    ON public.servers FOR UPDATE
+    TO authenticated
+    USING (public.is_org_admin(organization_id) OR public.is_platform_admin())
+    WITH CHECK (public.is_org_admin(organization_id) OR public.is_platform_admin());
+
+CREATE POLICY servers_delete_admin
+    ON public.servers FOR DELETE
+    TO authenticated
+    USING (public.is_org_admin(organization_id) OR public.is_platform_admin());
 
 -- ============================================================================
--- DELIVERIES TABLE
+-- SERVER-SCOPED TABLES
 -- ============================================================================
-ALTER TABLE public.deliveries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.domains ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.credentials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.routes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.smtp_endpoints ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.http_endpoints ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.address_endpoints ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.deliveries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.webhooks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.webhook_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.track_domains ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.suppressions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.statistics ENABLE ROW LEVEL SECURITY;
 
--- Users can view deliveries in their organizations
-CREATE POLICY "Users can view organization deliveries"
-  ON public.deliveries FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users ou
-      JOIN public.messages m ON m.id = deliveries.message_id
-      WHERE m.organization_id = ou.organization_id
-      AND ou.user_id = auth.uid()::text
-    )
-  );
+DROP POLICY IF EXISTS domains_select_member ON public.domains;
+DROP POLICY IF EXISTS domains_insert_admin ON public.domains;
+DROP POLICY IF EXISTS domains_update_admin ON public.domains;
+DROP POLICY IF EXISTS domains_delete_admin ON public.domains;
+DROP POLICY IF EXISTS "Users can view organization domains" ON public.domains;
+DROP POLICY IF EXISTS "Owners and admins can create domains" ON public.domains;
+DROP POLICY IF EXISTS "Owners and admins can update domains" ON public.domains;
+DROP POLICY IF EXISTS "Only owners can delete domains" ON public.domains;
 
--- System can insert deliveries (service role bypasses RLS)
-CREATE POLICY "System can insert deliveries"
-  ON public.deliveries FOR INSERT
-  WITH CHECK (true);
+CREATE POLICY domains_select_member
+    ON public.domains FOR SELECT
+    TO authenticated
+    USING (public.is_server_member(server_id) OR public.is_platform_admin());
 
--- System can update deliveries (service role bypasses RLS)
-CREATE POLICY "System can update deliveries"
-  ON public.deliveries FOR UPDATE
-  USING (true);
+CREATE POLICY domains_insert_admin
+    ON public.domains FOR INSERT
+    TO authenticated
+    WITH CHECK (public.is_server_admin(server_id) OR public.is_platform_admin());
 
--- ============================================================================
--- WEBHOOKS TABLE
--- ============================================================================
-ALTER TABLE public.webhooks ENABLE ROW LEVEL SECURITY;
+CREATE POLICY domains_update_admin
+    ON public.domains FOR UPDATE
+    TO authenticated
+    USING (public.is_server_admin(server_id) OR public.is_platform_admin())
+    WITH CHECK (public.is_server_admin(server_id) OR public.is_platform_admin());
 
--- Users can view webhooks in their organizations
-CREATE POLICY "Users can view organization webhooks"
-  ON public.webhooks FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = webhooks.organization_id
-      AND organization_users.user_id = auth.uid()::text
-    )
-  );
+CREATE POLICY domains_delete_admin
+    ON public.domains FOR DELETE
+    TO authenticated
+    USING (public.is_server_admin(server_id) OR public.is_platform_admin());
 
--- Only owners/admins can create webhooks
-CREATE POLICY "Owners and admins can create webhooks"
-  ON public.webhooks FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = webhooks.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role IN ('owner', 'admin')
-    )
-  );
+DROP POLICY IF EXISTS credentials_select_member ON public.credentials;
+DROP POLICY IF EXISTS credentials_insert_admin ON public.credentials;
+DROP POLICY IF EXISTS credentials_update_admin ON public.credentials;
+DROP POLICY IF EXISTS credentials_delete_admin ON public.credentials;
+DROP POLICY IF EXISTS "Users can view organization credentials" ON public.credentials;
+DROP POLICY IF EXISTS "Owners and admins can create credentials" ON public.credentials;
+DROP POLICY IF EXISTS "Owners and admins can update credentials" ON public.credentials;
+DROP POLICY IF EXISTS "Only owners can delete credentials" ON public.credentials;
 
--- Only owners/admins can update webhooks
-CREATE POLICY "Owners and admins can update webhooks"
-  ON public.webhooks FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = webhooks.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role IN ('owner', 'admin')
-    )
-  );
+CREATE POLICY credentials_select_member
+    ON public.credentials FOR SELECT
+    TO authenticated
+    USING (public.is_server_member(server_id) OR public.is_platform_admin());
 
--- Only owners can delete webhooks
-CREATE POLICY "Only owners can delete webhooks"
-  ON public.webhooks FOR DELETE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = webhooks.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role = 'owner'
-    )
-  );
+CREATE POLICY credentials_insert_admin
+    ON public.credentials FOR INSERT
+    TO authenticated
+    WITH CHECK (public.is_server_admin(server_id) OR public.is_platform_admin());
 
--- ============================================================================
--- WEBHOOK_REQUESTS TABLE
--- ============================================================================
-ALTER TABLE public.webhook_requests ENABLE ROW LEVEL SECURITY;
+CREATE POLICY credentials_update_admin
+    ON public.credentials FOR UPDATE
+    TO authenticated
+    USING (public.is_server_admin(server_id) OR public.is_platform_admin())
+    WITH CHECK (public.is_server_admin(server_id) OR public.is_platform_admin());
 
--- Users can view webhook requests in their organizations
-CREATE POLICY "Users can view organization webhook requests"
-  ON public.webhook_requests FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users ou
-      JOIN public.webhooks w ON w.id = webhook_requests.webhook_id
-      WHERE w.organization_id = ou.organization_id
-      AND ou.user_id = auth.uid()::text
-    )
-  );
+CREATE POLICY credentials_delete_admin
+    ON public.credentials FOR DELETE
+    TO authenticated
+    USING (public.is_server_admin(server_id) OR public.is_platform_admin());
 
--- System can insert webhook requests (service role bypasses RLS)
-CREATE POLICY "System can insert webhook requests"
-  ON public.webhook_requests FOR INSERT
-  WITH CHECK (true);
+DROP POLICY IF EXISTS routes_select_member ON public.routes;
+DROP POLICY IF EXISTS routes_insert_admin ON public.routes;
+DROP POLICY IF EXISTS routes_update_admin ON public.routes;
+DROP POLICY IF EXISTS routes_delete_admin ON public.routes;
+DROP POLICY IF EXISTS "Users can view organization routes" ON public.routes;
+DROP POLICY IF EXISTS "Owners and admins can create routes" ON public.routes;
+DROP POLICY IF EXISTS "Owners and admins can update routes" ON public.routes;
+DROP POLICY IF EXISTS "Only owners can delete routes" ON public.routes;
 
--- ============================================================================
--- TRACK_DOMAINS TABLE
--- ============================================================================
-ALTER TABLE public.track_domains ENABLE ROW LEVEL SECURITY;
+CREATE POLICY routes_select_member
+    ON public.routes FOR SELECT
+    TO authenticated
+    USING (public.is_server_member(server_id) OR public.is_platform_admin());
 
--- Users can view track domains in their organizations
-CREATE POLICY "Users can view organization track domains"
-  ON public.track_domains FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = track_domains.organization_id
-      AND organization_users.user_id = auth.uid()::text
-    )
-  );
+CREATE POLICY routes_insert_admin
+    ON public.routes FOR INSERT
+    TO authenticated
+    WITH CHECK (public.is_server_admin(server_id) OR public.is_platform_admin());
 
--- Only owners/admins can create track domains
-CREATE POLICY "Owners and admins can create track domains"
-  ON public.track_domains FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = track_domains.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role IN ('owner', 'admin')
-    )
-  );
+CREATE POLICY routes_update_admin
+    ON public.routes FOR UPDATE
+    TO authenticated
+    USING (public.is_server_admin(server_id) OR public.is_platform_admin())
+    WITH CHECK (public.is_server_admin(server_id) OR public.is_platform_admin());
 
--- Only owners/admins can update track domains
-CREATE POLICY "Owners and admins can update track domains"
-  ON public.track_domains FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = track_domains.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role IN ('owner', 'admin')
-    )
-  );
+CREATE POLICY routes_delete_admin
+    ON public.routes FOR DELETE
+    TO authenticated
+    USING (public.is_server_admin(server_id) OR public.is_platform_admin());
 
--- Only owners can delete track domains
-CREATE POLICY "Only owners can delete track domains"
-  ON public.track_domains FOR DELETE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = track_domains.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role = 'owner'
-    )
-  );
+DROP POLICY IF EXISTS smtp_endpoints_select_member ON public.smtp_endpoints;
+DROP POLICY IF EXISTS smtp_endpoints_insert_admin ON public.smtp_endpoints;
+DROP POLICY IF EXISTS smtp_endpoints_update_admin ON public.smtp_endpoints;
+DROP POLICY IF EXISTS smtp_endpoints_delete_admin ON public.smtp_endpoints;
+DROP POLICY IF EXISTS "Users can view organization smtp endpoints" ON public.smtp_endpoints;
+DROP POLICY IF EXISTS "Owners and admins can create smtp endpoints" ON public.smtp_endpoints;
+DROP POLICY IF EXISTS "Owners and admins can update smtp endpoints" ON public.smtp_endpoints;
+DROP POLICY IF EXISTS "Only owners can delete smtp endpoints" ON public.smtp_endpoints;
 
--- ============================================================================
--- SUPPRESSIONS TABLE
--- ============================================================================
-ALTER TABLE public.suppressions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY smtp_endpoints_select_member
+    ON public.smtp_endpoints FOR SELECT
+    TO authenticated
+    USING (public.is_server_member(server_id) OR public.is_platform_admin());
 
--- Users can view suppressions in their organizations
-CREATE POLICY "Users can view organization suppressions"
-  ON public.suppressions FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = suppressions.organization_id
-      AND organization_users.user_id = auth.uid()::text
-    )
-  );
+CREATE POLICY smtp_endpoints_insert_admin
+    ON public.smtp_endpoints FOR INSERT
+    TO authenticated
+    WITH CHECK (public.is_server_admin(server_id) OR public.is_platform_admin());
 
--- Only owners/admins can create suppressions
-CREATE POLICY "Owners and admins can create suppressions"
-  ON public.suppressions FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = suppressions.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role IN ('owner', 'admin')
-    )
-  );
+CREATE POLICY smtp_endpoints_update_admin
+    ON public.smtp_endpoints FOR UPDATE
+    TO authenticated
+    USING (public.is_server_admin(server_id) OR public.is_platform_admin())
+    WITH CHECK (public.is_server_admin(server_id) OR public.is_platform_admin());
 
--- Only owners/admins can update suppressions
-CREATE POLICY "Owners and admins can update suppressions"
-  ON public.suppressions FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = suppressions.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role IN ('owner', 'admin')
-    )
-  );
+CREATE POLICY smtp_endpoints_delete_admin
+    ON public.smtp_endpoints FOR DELETE
+    TO authenticated
+    USING (public.is_server_admin(server_id) OR public.is_platform_admin());
 
--- Only owners can delete suppressions
-CREATE POLICY "Only owners can delete suppressions"
-  ON public.suppressions FOR DELETE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = suppressions.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role = 'owner'
-    )
-  );
+DROP POLICY IF EXISTS http_endpoints_select_member ON public.http_endpoints;
+DROP POLICY IF EXISTS http_endpoints_insert_admin ON public.http_endpoints;
+DROP POLICY IF EXISTS http_endpoints_update_admin ON public.http_endpoints;
+DROP POLICY IF EXISTS http_endpoints_delete_admin ON public.http_endpoints;
+DROP POLICY IF EXISTS "Users can view organization http endpoints" ON public.http_endpoints;
+DROP POLICY IF EXISTS "Owners and admins can create http endpoints" ON public.http_endpoints;
+DROP POLICY IF EXISTS "Owners and admins can update http endpoints" ON public.http_endpoints;
+DROP POLICY IF EXISTS "Only owners can delete http endpoints" ON public.http_endpoints;
 
--- ============================================================================
--- STATISTICS TABLE
--- ============================================================================
-ALTER TABLE public.statistics ENABLE ROW LEVEL SECURITY;
+CREATE POLICY http_endpoints_select_member
+    ON public.http_endpoints FOR SELECT
+    TO authenticated
+    USING (public.is_server_member(server_id) OR public.is_platform_admin());
 
--- Users can view statistics in their organizations
-CREATE POLICY "Users can view organization statistics"
-  ON public.statistics FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = statistics.organization_id
-      AND organization_users.user_id = auth.uid()::text
-    )
-  );
+CREATE POLICY http_endpoints_insert_admin
+    ON public.http_endpoints FOR INSERT
+    TO authenticated
+    WITH CHECK (public.is_server_admin(server_id) OR public.is_platform_admin());
 
--- System can insert statistics (service role bypasses RLS)
-CREATE POLICY "System can insert statistics"
-  ON public.statistics FOR INSERT
-  WITH CHECK (true);
+CREATE POLICY http_endpoints_update_admin
+    ON public.http_endpoints FOR UPDATE
+    TO authenticated
+    USING (public.is_server_admin(server_id) OR public.is_platform_admin())
+    WITH CHECK (public.is_server_admin(server_id) OR public.is_platform_admin());
 
--- System can update statistics (service role bypasses RLS)
-CREATE POLICY "System can update statistics"
-  ON public.statistics FOR UPDATE
-  USING (true);
+CREATE POLICY http_endpoints_delete_admin
+    ON public.http_endpoints FOR DELETE
+    TO authenticated
+    USING (public.is_server_admin(server_id) OR public.is_platform_admin());
 
--- ============================================================================
--- ADDRESS_ENDPOINTS TABLE
--- ============================================================================
-ALTER TABLE public.address_endpoints ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS address_endpoints_select_member ON public.address_endpoints;
+DROP POLICY IF EXISTS address_endpoints_insert_admin ON public.address_endpoints;
+DROP POLICY IF EXISTS address_endpoints_update_admin ON public.address_endpoints;
+DROP POLICY IF EXISTS address_endpoints_delete_admin ON public.address_endpoints;
+DROP POLICY IF EXISTS "Users can view organization address endpoints" ON public.address_endpoints;
+DROP POLICY IF EXISTS "Owners and admins can create address endpoints" ON public.address_endpoints;
+DROP POLICY IF EXISTS "Owners and admins can update address endpoints" ON public.address_endpoints;
+DROP POLICY IF EXISTS "Only owners can delete address endpoints" ON public.address_endpoints;
 
--- Users can view address endpoints in their organizations
-CREATE POLICY "Users can view organization address endpoints"
-  ON public.address_endpoints FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = address_endpoints.organization_id
-      AND organization_users.user_id = auth.uid()::text
-    )
-  );
+CREATE POLICY address_endpoints_select_member
+    ON public.address_endpoints FOR SELECT
+    TO authenticated
+    USING (public.is_server_member(server_id) OR public.is_platform_admin());
 
--- Only owners/admins can create address endpoints
-CREATE POLICY "Owners and admins can create address endpoints"
-  ON public.address_endpoints FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = address_endpoints.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role IN ('owner', 'admin')
-    )
-  );
+CREATE POLICY address_endpoints_insert_admin
+    ON public.address_endpoints FOR INSERT
+    TO authenticated
+    WITH CHECK (public.is_server_admin(server_id) OR public.is_platform_admin());
 
--- Only owners/admins can update address endpoints
-CREATE POLICY "Owners and admins can update address endpoints"
-  ON public.address_endpoints FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = address_endpoints.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role IN ('owner', 'admin')
-    )
-  );
+CREATE POLICY address_endpoints_update_admin
+    ON public.address_endpoints FOR UPDATE
+    TO authenticated
+    USING (public.is_server_admin(server_id) OR public.is_platform_admin())
+    WITH CHECK (public.is_server_admin(server_id) OR public.is_platform_admin());
 
--- Only owners can delete address endpoints
-CREATE POLICY "Only owners can delete address endpoints"
-  ON public.address_endpoints FOR DELETE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = address_endpoints.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role = 'owner'
-    )
-  );
+CREATE POLICY address_endpoints_delete_admin
+    ON public.address_endpoints FOR DELETE
+    TO authenticated
+    USING (public.is_server_admin(server_id) OR public.is_platform_admin());
 
--- ============================================================================
--- HTTP_ENDPOINTS TABLE
--- ============================================================================
-ALTER TABLE public.http_endpoints ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS messages_select_member ON public.messages;
+DROP POLICY IF EXISTS messages_insert_member ON public.messages;
+DROP POLICY IF EXISTS messages_update_admin ON public.messages;
+DROP POLICY IF EXISTS messages_delete_admin ON public.messages;
+DROP POLICY IF EXISTS "Users can view organization messages" ON public.messages;
+DROP POLICY IF EXISTS "Users can create messages" ON public.messages;
+DROP POLICY IF EXISTS "Owners and admins can update messages" ON public.messages;
+DROP POLICY IF EXISTS "Only owners can delete messages" ON public.messages;
 
--- Users can view http endpoints in their organizations
-CREATE POLICY "Users can view organization http endpoints"
-  ON public.http_endpoints FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = http_endpoints.organization_id
-      AND organization_users.user_id = auth.uid()::text
-    )
-  );
+CREATE POLICY messages_select_member
+    ON public.messages FOR SELECT
+    TO authenticated
+    USING (public.is_server_member(server_id) OR public.is_platform_admin());
 
--- Only owners/admins can create http endpoints
-CREATE POLICY "Owners and admins can create http endpoints"
-  ON public.http_endpoints FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = http_endpoints.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role IN ('owner', 'admin')
-    )
-  );
+CREATE POLICY messages_insert_member
+    ON public.messages FOR INSERT
+    TO authenticated
+    WITH CHECK (public.is_server_member(server_id) OR public.is_platform_admin());
 
--- Only owners/admins can update http endpoints
-CREATE POLICY "Owners and admins can update http endpoints"
-  ON public.http_endpoints FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = http_endpoints.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role IN ('owner', 'admin')
-    )
-  );
+CREATE POLICY messages_update_admin
+    ON public.messages FOR UPDATE
+    TO authenticated
+    USING (public.is_server_admin(server_id) OR public.is_platform_admin())
+    WITH CHECK (public.is_server_admin(server_id) OR public.is_platform_admin());
 
--- Only owners can delete http endpoints
-CREATE POLICY "Only owners can delete http endpoints"
-  ON public.http_endpoints FOR DELETE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = http_endpoints.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role = 'owner'
-    )
-  );
+CREATE POLICY messages_delete_admin
+    ON public.messages FOR DELETE
+    TO authenticated
+    USING (public.is_server_admin(server_id) OR public.is_platform_admin());
 
--- ============================================================================
--- SMTP_ENDPOINTS TABLE
--- ============================================================================
-ALTER TABLE public.smtp_endpoints ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS deliveries_select_member ON public.deliveries;
+DROP POLICY IF EXISTS "Users can view organization deliveries" ON public.deliveries;
+DROP POLICY IF EXISTS "System can insert deliveries" ON public.deliveries;
+DROP POLICY IF EXISTS "System can update deliveries" ON public.deliveries;
 
--- Users can view smtp endpoints in their organizations
-CREATE POLICY "Users can view organization smtp endpoints"
-  ON public.smtp_endpoints FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = smtp_endpoints.organization_id
-      AND organization_users.user_id = auth.uid()::text
-    )
-  );
+CREATE POLICY deliveries_select_member
+    ON public.deliveries FOR SELECT
+    TO authenticated
+    USING (public.is_server_member(server_id) OR public.is_platform_admin());
 
--- Only owners/admins can create smtp endpoints
-CREATE POLICY "Owners and admins can create smtp endpoints"
-  ON public.smtp_endpoints FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = smtp_endpoints.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role IN ('owner', 'admin')
-    )
-  );
+DROP POLICY IF EXISTS webhooks_select_member ON public.webhooks;
+DROP POLICY IF EXISTS webhooks_insert_admin ON public.webhooks;
+DROP POLICY IF EXISTS webhooks_update_admin ON public.webhooks;
+DROP POLICY IF EXISTS webhooks_delete_admin ON public.webhooks;
+DROP POLICY IF EXISTS "Users can view organization webhooks" ON public.webhooks;
+DROP POLICY IF EXISTS "Owners and admins can create webhooks" ON public.webhooks;
+DROP POLICY IF EXISTS "Owners and admins can update webhooks" ON public.webhooks;
+DROP POLICY IF EXISTS "Only owners can delete webhooks" ON public.webhooks;
 
--- Only owners/admins can update smtp endpoints
-CREATE POLICY "Owners and admins can update smtp endpoints"
-  ON public.smtp_endpoints FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = smtp_endpoints.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role IN ('owner', 'admin')
-    )
-  );
+CREATE POLICY webhooks_select_member
+    ON public.webhooks FOR SELECT
+    TO authenticated
+    USING (public.is_server_member(server_id) OR public.is_platform_admin());
 
--- Only owners can delete smtp endpoints
-CREATE POLICY "Only owners can delete smtp endpoints"
-  ON public.smtp_endpoints FOR DELETE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_users
-      WHERE organization_users.organization_id = smtp_endpoints.organization_id
-      AND organization_users.user_id = auth.uid()::text
-      AND organization_users.role = 'owner'
-    )
-  );
+CREATE POLICY webhooks_insert_admin
+    ON public.webhooks FOR INSERT
+    TO authenticated
+    WITH CHECK (public.is_server_admin(server_id) OR public.is_platform_admin());
+
+CREATE POLICY webhooks_update_admin
+    ON public.webhooks FOR UPDATE
+    TO authenticated
+    USING (public.is_server_admin(server_id) OR public.is_platform_admin())
+    WITH CHECK (public.is_server_admin(server_id) OR public.is_platform_admin());
+
+CREATE POLICY webhooks_delete_admin
+    ON public.webhooks FOR DELETE
+    TO authenticated
+    USING (public.is_server_admin(server_id) OR public.is_platform_admin());
+
+DROP POLICY IF EXISTS webhook_requests_select_member ON public.webhook_requests;
+DROP POLICY IF EXISTS "Users can view organization webhook requests" ON public.webhook_requests;
+DROP POLICY IF EXISTS "System can insert webhook requests" ON public.webhook_requests;
+
+CREATE POLICY webhook_requests_select_member
+    ON public.webhook_requests FOR SELECT
+    TO authenticated
+    USING (public.is_webhook_member(webhook_id) OR public.is_platform_admin());
+
+DROP POLICY IF EXISTS track_domains_select_member ON public.track_domains;
+DROP POLICY IF EXISTS track_domains_insert_admin ON public.track_domains;
+DROP POLICY IF EXISTS track_domains_update_admin ON public.track_domains;
+DROP POLICY IF EXISTS track_domains_delete_admin ON public.track_domains;
+DROP POLICY IF EXISTS "Users can view organization track domains" ON public.track_domains;
+DROP POLICY IF EXISTS "Owners and admins can create track domains" ON public.track_domains;
+DROP POLICY IF EXISTS "Owners and admins can update track domains" ON public.track_domains;
+DROP POLICY IF EXISTS "Only owners can delete track domains" ON public.track_domains;
+
+CREATE POLICY track_domains_select_member
+    ON public.track_domains FOR SELECT
+    TO authenticated
+    USING (public.is_server_member(server_id) OR public.is_platform_admin());
+
+CREATE POLICY track_domains_insert_admin
+    ON public.track_domains FOR INSERT
+    TO authenticated
+    WITH CHECK (public.is_server_admin(server_id) OR public.is_platform_admin());
+
+CREATE POLICY track_domains_update_admin
+    ON public.track_domains FOR UPDATE
+    TO authenticated
+    USING (public.is_server_admin(server_id) OR public.is_platform_admin())
+    WITH CHECK (public.is_server_admin(server_id) OR public.is_platform_admin());
+
+CREATE POLICY track_domains_delete_admin
+    ON public.track_domains FOR DELETE
+    TO authenticated
+    USING (public.is_server_admin(server_id) OR public.is_platform_admin());
+
+DROP POLICY IF EXISTS suppressions_select_member ON public.suppressions;
+DROP POLICY IF EXISTS suppressions_insert_admin ON public.suppressions;
+DROP POLICY IF EXISTS suppressions_update_admin ON public.suppressions;
+DROP POLICY IF EXISTS suppressions_delete_admin ON public.suppressions;
+DROP POLICY IF EXISTS "Users can view organization suppressions" ON public.suppressions;
+DROP POLICY IF EXISTS "Owners and admins can create suppressions" ON public.suppressions;
+DROP POLICY IF EXISTS "Owners and admins can update suppressions" ON public.suppressions;
+DROP POLICY IF EXISTS "Only owners can delete suppressions" ON public.suppressions;
+
+CREATE POLICY suppressions_select_member
+    ON public.suppressions FOR SELECT
+    TO authenticated
+    USING (public.is_server_member(server_id) OR public.is_platform_admin());
+
+CREATE POLICY suppressions_insert_admin
+    ON public.suppressions FOR INSERT
+    TO authenticated
+    WITH CHECK (public.is_server_admin(server_id) OR public.is_platform_admin());
+
+CREATE POLICY suppressions_update_admin
+    ON public.suppressions FOR UPDATE
+    TO authenticated
+    USING (public.is_server_admin(server_id) OR public.is_platform_admin())
+    WITH CHECK (public.is_server_admin(server_id) OR public.is_platform_admin());
+
+CREATE POLICY suppressions_delete_admin
+    ON public.suppressions FOR DELETE
+    TO authenticated
+    USING (public.is_server_admin(server_id) OR public.is_platform_admin());
+
+DROP POLICY IF EXISTS statistics_select_member ON public.statistics;
+DROP POLICY IF EXISTS "Users can view organization statistics" ON public.statistics;
+DROP POLICY IF EXISTS "System can insert statistics" ON public.statistics;
+DROP POLICY IF EXISTS "System can update statistics" ON public.statistics;
+
+CREATE POLICY statistics_select_member
+    ON public.statistics FOR SELECT
+    TO authenticated
+    USING (public.is_server_member(server_id) OR public.is_platform_admin());

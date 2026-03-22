@@ -1,84 +1,102 @@
 import * as React from 'react'
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableRow,
-} from './table'
-import { Button } from './button'
-import { Badge } from './badge'
-import { Checkbox } from './checkbox'
 import { cn } from '../../lib/utils'
 
-interface TableProps<T> {
-    headers: {
-        id: string
-        label: string
-        sortable?: boolean
-    }[]
-    data: T[]
-    rows: Row[]
-    selectedRow?: Row
-    onRowClick?: (row: Row) => void
-    onAllRowsClick?: () => onAllRows()
-    setSelectedRow(null)
-}
-onRowSelect ?: (row: Row) => {
-    const isSelected = selectedRow === row.id
-    setSelectedRow(row)
-    onAllRowsClick?.() => onAllRows())
-}
-  }
-
-return (
-    <div className="rounded-md border">
-        <Table>
-            <TableHeader>
-                <TableRow>
-                    {headers.map((header) => (
-                        <TableHead key={header.id}>
-                            <TableCell key={header.label}>
-                                <div className="flex items-center gap-2">
-                                    <Checkbox
-                                        checked={rows.includes(header.id)}
-                                        onChange={(checked) => =>
-                                            handleRowSelect(header.id, checked)
-                                        }
-                    : onCheckedChange(rows.includes(header.id))
-                  }
-                            </TableCell>
-                            <TableCell key={header.id}>
-                                <div className="text-sm font-medium">{header.label}</div>
-                            </TableCell>
-                            <TableCell key={header.id}
-                  <div className="text-right">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => onSort(header.id)}
-                                >
-                                    <ArrowUpDown className="w-4 h-4" />
-                                </Button>
-                            </div>
-                        </TableRow>
-                    ))}
-            </TableHeader>
-            <TableRow>
-                {data.map((row) => (
-                    <TableRow key={row.id}>
-                        <TableCell key={row.id}>
-                            {row.cells.map((cell) => (
-                                <TableCell key={cell.id}>
-                                    <div className="text-sm">{cell.value}</div>
-                                </TableCell>
-                            ))}
-                            <TableRow>
-              ))}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-      </Card>
-    </div>
+const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
+    ({ className, ...props }, ref) => (
+        <div className="relative w-full overflow-auto">
+            <table
+                ref={ref}
+                className={cn('w-full caption-bottom text-sm', className)}
+                {...props}
+            />
+        </div>
+    )
 )
+Table.displayName = 'Table'
+
+const TableHeader = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(
+    ({ className, ...props }, ref) => (
+        <thead ref={ref} className={cn('[&_tr]:border-b', className)} {...props} />
+    )
+)
+TableHeader.displayName = 'TableHeader'
+
+const TableBody = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(
+    ({ className, ...props }, ref) => (
+        <tbody
+            ref={ref}
+            className={cn('[&_tr:last-child]:border-0', className)}
+            {...props}
+        />
+    )
+)
+TableBody.displayName = 'TableBody'
+
+const TableFooter = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(
+    ({ className, ...props }, ref) => (
+        <tfoot
+            ref={ref}
+            className={cn('border-t bg-muted/50 font-medium [&>tr]:last:border-b-0', className)}
+            {...props}
+        />
+    )
+)
+TableFooter.displayName = 'TableFooter'
+
+const TableRow = React.forwardRef<HTMLTableRowElement, React.HTMLAttributes<HTMLTableRowElement>>(
+    ({ className, ...props }, ref) => (
+        <tr
+            ref={ref}
+            className={cn('border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted', className)}
+            {...props}
+        />
+    )
+)
+TableRow.displayName = 'TableRow'
+
+const TableHead = React.forwardRef<HTMLTableCellElement, React.ThHTMLAttributes<HTMLTableCellElement>>(
+    ({ className, ...props }, ref) => (
+        <th
+            ref={ref}
+            className={cn(
+                'h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0',
+                className,
+            )}
+            {...props}
+        />
+    )
+)
+TableHead.displayName = 'TableHead'
+
+const TableCell = React.forwardRef<HTMLTableCellElement, React.TdHTMLAttributes<HTMLTableCellElement>>(
+    ({ className, ...props }, ref) => (
+        <td
+            ref={ref}
+            className={cn('p-4 align-middle [&:has([role=checkbox])]:pr-0', className)}
+            {...props}
+        />
+    )
+)
+TableCell.displayName = 'TableCell'
+
+const TableCaption = React.forwardRef<HTMLTableCaptionElement, React.HTMLAttributes<HTMLTableCaptionElement>>(
+    ({ className, ...props }, ref) => (
+        <caption
+            ref={ref}
+            className={cn('mt-4 text-sm text-muted-foreground', className)}
+            {...props}
+        />
+    )
+)
+TableCaption.displayName = 'TableCaption'
+
+export {
+    Table,
+    TableBody,
+    TableCaption,
+    TableCell,
+    TableFooter,
+    TableHead,
+    TableHeader,
+    TableRow,
 }

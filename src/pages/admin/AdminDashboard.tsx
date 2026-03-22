@@ -63,9 +63,21 @@ export default function AdminDashboard() {
 
     async function fetchStats() {
         try {
+            const { data: { session } } = await supabase.auth.getSession()
+            const token = session?.access_token
+
+            // Fetch organizations (includes servers)
+            const orgsRes = await fetch('/api/organizations', {
+                headers: { 'Authorization': `Bearer ${token}` },
+            })
+            const orgsData = orgsRes.ok ? await orgsRes.json() : { organizations: [] }
+            const orgs = orgsData.organizations || []
+
+            const serverCount = orgs.reduce((acc: number, org: any) => acc + (org.servers?.length || 0), 0)
+
             setStats({
-                organizations: 0,
-                servers: 0,
+                organizations: orgs.length,
+                servers: serverCount,
                 domains: 0,
                 users: 0,
                 messages: { sent: 0, delivered: 0, bounced: 0, pending: 0 },
@@ -117,16 +129,10 @@ export default function AdminDashboard() {
                         Welcome back, {user?.user_metadata?.firstName || user?.email}
                     </p>
                 </div>
-                <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => window.location.href = '/admin/organizations/new'}>
-                        <Building2 className="w-4 h-4 mr-2" />
-                        New Organization
-                    </Button>
-                    <Button onClick={() => window.location.href = '/admin/servers/new'}>
-                        <Server className="w-4 h-4 mr-2" />
-                        New Server
-                    </Button>
-                </div>
+                <Button onClick={() => window.location.href = '/admin/organizations'}>
+                    <Building2 className="w-4 h-4 mr-2" />
+                    New Organization
+                </Button>
             </div>
 
             {/* Stats Cards */}
@@ -324,26 +330,18 @@ export default function AdminDashboard() {
                     <CardDescription>Common tasks to get started quickly</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                         <Button variant="outline" className="justify-start" onClick={() => window.location.href = '/admin/organizations'}>
                             <Building2 className="w-4 h-4 mr-2" />
                             View Organizations
-                        </Button>
-                        <Button variant="outline" className="justify-start" onClick={() => window.location.href = '/admin/servers'}>
-                            <Server className="w-4 h-4 mr-2" />
-                            Manage Servers
-                        </Button>
-                        <Button variant="outline" className="justify-start" onClick={() => window.location.href = '/admin/domains'}>
-                            <Globe className="w-4 h-4 mr-2" />
-                            Verify Domains
                         </Button>
                         <Button variant="outline" className="justify-start" onClick={() => window.location.href = '/admin/users'}>
                             <Users className="w-4 h-4 mr-2" />
                             Manage Users
                         </Button>
-                        <Button variant="outline" className="justify-start" onClick={() => window.location.href = '/admin/messages'}>
-                            <Mail className="w-4 h-4 mr-2" />
-                            View Messages
+                        <Button variant="outline" className="justify-start" onClick={() => window.location.href = '/admin/analytics'}>
+                            <TrendingUp className="w-4 h-4 mr-2" />
+                            Open Analytics
                         </Button>
                     </div>
                 </CardContent>

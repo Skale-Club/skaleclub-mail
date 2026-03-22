@@ -1,0 +1,122 @@
+import { useEffect, useState } from 'react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card'
+import { Button } from '../../ui/button'
+import { Input } from '../../ui/input'
+import { Label } from '../../ui/label'
+import { getAccessToken, timezoneOptions } from './shared'
+
+interface Organization {
+    id: string
+    name: string
+    slug: string
+    timezone: string
+}
+
+interface SettingsTabProps {
+    org: Organization
+    isAdmin: boolean
+    onRefresh: () => Promise<void>
+}
+
+export default function SettingsTab({ org, isAdmin, onRefresh }: SettingsTabProps) {
+    const [form, setForm] = useState({
+        name: org.name,
+        timezone: org.timezone,
+    })
+    const [isSaving, setIsSaving] = useState(false)
+
+    useEffect(() => {
+        setForm({
+            name: org.name,
+            timezone: org.timezone,
+        })
+    }, [org.id, org.name, org.timezone])
+
+    async function handleUpdateOrg() {
+        setIsSaving(true)
+        try {
+            const token = await getAccessToken()
+            const response = await fetch(`/api/organizations/${org.id}`, {
+                method: 'PATCH',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(form),
+            })
+
+            if (response.ok) {
+                await onRefresh()
+            } else {
+                const error = await response.json()
+                alert(error.error || 'Failed to update organization')
+            }
+        } catch (error) {
+            console.error('Error updating organization:', error)
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
+    if (!isAdmin) {
+        return (
+            <Card>
+                <CardHeader>
+                    <CardTitle>Settings</CardTitle>
+                    <CardDescription>Only organization admins can edit these settings.</CardDescription>
+                </CardHeader>
+            </Card>
+        )
+    }
+
+    return (
+        <div className="space-y-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                    <h3 className="text-lg font-semibold">Settings</h3>
+                    <p className="text-sm text-muted-foreground">Update the organization name and timezone.</p>
+                </div>
+            </div>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>Organization Settings</CardTitle>
+                    <CardDescription>Update the organization name and timezone.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <div className="grid gap-6 md:grid-cols-2">
+                        <div className="space-y-2">
+                            <Label htmlFor="orgName">Name</Label>
+                            <Input
+                                id="orgName"
+                                value={form.name}
+                                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="orgTimezone">Timezone</Label>
+                            <select
+                                id="orgTimezone"
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                value={form.timezone}
+                                onChange={(event) => setForm((current) => ({ ...current, timezone: event.target.value }))}
+                            >
+                                {timezoneOptions.map((timezone) => (
+                                    <option key={timezone} value={timezone}>
+                                        {timezone}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end pt-4">
+                        <Button onClick={() => void handleUpdateOrg()} disabled={!form.name || isSaving}>
+                            {isSaving ? 'Saving...' : 'Save Changes'}
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+    )
+}

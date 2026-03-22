@@ -1,25 +1,14 @@
-import {
-    pgTable,
-    uuid,
-    text,
-    timestamp,
-    boolean,
-    integer,
-    jsonb,
-    pgEnum,
-    uniqueIndex,
-} from 'drizzle-orm/pg-core'
-import { relations } from 'drizzle-orm'
-import { createInsertSchema, createSelectSchema } from 'drizzle-zod'
-
+import { pgTable, uuid, text, timestamp, boolean, integer, jsonb, pgEnum, uniqueIndex, } from 'drizzle-orm/pg-core';
+import { relations } from 'drizzle-orm';
+import { createInsertSchema, createSelectSchema } from 'drizzle-zod';
 // Enums
-export const userRoleEnum = pgEnum('user_role', ['admin', 'member', 'viewer'])
-export const serverModeEnum = pgEnum('server_mode', ['live', 'development'])
-export const serverSendModeEnum = pgEnum('server_send_mode', ['smtp', 'api'])
-export const domainVerificationEnum = pgEnum('domain_verification', ['pending', 'verified', 'failed'])
-export const messageStatusEnum = pgEnum('message_status', ['pending', 'queued', 'sent', 'delivered', 'bounced', 'held', 'failed'])
-export const credentialTypeEnum = pgEnum('credential_type', ['smtp', 'api'])
-export const routeModeEnum = pgEnum('route_mode', ['endpoint', 'hold', 'reject'])
+export const userRoleEnum = pgEnum('user_role', ['admin', 'member', 'viewer']);
+export const serverModeEnum = pgEnum('server_mode', ['live', 'development']);
+export const serverSendModeEnum = pgEnum('server_send_mode', ['smtp', 'api']);
+export const domainVerificationEnum = pgEnum('domain_verification', ['pending', 'verified', 'failed']);
+export const messageStatusEnum = pgEnum('message_status', ['pending', 'queued', 'sent', 'delivered', 'bounced', 'held', 'failed']);
+export const credentialTypeEnum = pgEnum('credential_type', ['smtp', 'api']);
+export const routeModeEnum = pgEnum('route_mode', ['endpoint', 'hold', 'reject']);
 export const webhookEventEnum = pgEnum('webhook_event', [
     'message_sent',
     'message_delivered',
@@ -29,8 +18,7 @@ export const webhookEventEnum = pgEnum('webhook_event', [
     'link_clicked',
     'domain_verified',
     'spam_alert'
-])
-
+]);
 // Users table
 export const users = pgTable('users', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -46,8 +34,7 @@ export const users = pgTable('users', {
     lastLoginAt: timestamp('last_login_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
-
+});
 // Organizations table
 export const organizations = pgTable('organizations', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -57,8 +44,7 @@ export const organizations = pgTable('organizations', {
     owner_id: uuid('owner_id').references(() => users.id).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
-
+});
 // Organization users (membership)
 export const organizationUsers = pgTable('organization_users', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -68,8 +54,7 @@ export const organizationUsers = pgTable('organization_users', {
     createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
     orgUserUnique: uniqueIndex('org_user_unique').on(table.organizationId, table.userId),
-}))
-
+}));
 // Servers table
 export const servers = pgTable('servers', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -101,8 +86,7 @@ export const servers = pgTable('servers', {
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
     orgSlugUnique: uniqueIndex('server_org_slug_unique').on(table.organizationId, table.slug),
-}))
-
+}));
 // Domains table
 export const domains = pgTable('domains', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -127,8 +111,7 @@ export const domains = pgTable('domains', {
     returnPathError: text('return_path_error'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
-
+});
 // Credentials table
 export const credentials = pgTable('credentials', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -141,8 +124,7 @@ export const credentials = pgTable('credentials', {
     expiresAt: timestamp('expires_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
-
+});
 // Routes table
 export const routes = pgTable('routes', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -159,8 +141,7 @@ export const routes = pgTable('routes', {
     spamThreshold: integer('spam_threshold').default(5),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
-
+});
 // SMTP Endpoints
 export const smtpEndpoints = pgTable('smtp_endpoints', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -173,8 +154,7 @@ export const smtpEndpoints = pgTable('smtp_endpoints', {
     password: text('password'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
-
+});
 // HTTP Endpoints
 export const httpEndpoints = pgTable('http_endpoints', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -186,8 +166,7 @@ export const httpEndpoints = pgTable('http_endpoints', {
     includeOriginal: boolean('include_original').default(true).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
-
+});
 // Address Endpoints
 export const addressEndpoints = pgTable('address_endpoints', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -196,8 +175,7 @@ export const addressEndpoints = pgTable('address_endpoints', {
     emailAddress: text('email_address').notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
-
+});
 // Messages table
 export const messages = pgTable('messages', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -234,8 +212,7 @@ export const messages = pgTable('messages', {
     openedAt: timestamp('opened_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
-
+});
 // Message deliveries
 export const deliveries = pgTable('deliveries', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -254,8 +231,7 @@ export const deliveries = pgTable('deliveries', {
     deliveredAt: timestamp('delivered_at'),
     bouncedAt: timestamp('bounced_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
-})
-
+});
 // Webhooks table
 export const webhooks = pgTable('webhooks', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -267,8 +243,7 @@ export const webhooks = pgTable('webhooks', {
     events: jsonb('events').notNull().default([]),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
-
+});
 // Webhook requests log
 export const webhookRequests = pgTable('webhook_requests', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -281,8 +256,7 @@ export const webhookRequests = pgTable('webhook_requests', {
     attempts: integer('attempts').default(1).notNull(),
     error: text('error'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
-})
-
+});
 // Email templates
 export const templates = pgTable('templates', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -297,8 +271,7 @@ export const templates = pgTable('templates', {
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
     serverSlugUnique: uniqueIndex('template_server_slug_unique').on(table.serverId, table.slug),
-}))
-
+}));
 // Track domains (for open/click tracking)
 export const trackDomains = pgTable('track_domains', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -309,8 +282,7 @@ export const trackDomains = pgTable('track_domains', {
     verifiedAt: timestamp('verified_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
-
+});
 // Suppression list
 export const suppressions = pgTable('suppressions', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -320,8 +292,7 @@ export const suppressions = pgTable('suppressions', {
     createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
     serverEmailUnique: uniqueIndex('suppression_server_email_unique').on(table.serverId, table.emailAddress),
-}))
-
+}));
 // Statistics (aggregated)
 export const statistics = pgTable('statistics', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -339,13 +310,11 @@ export const statistics = pgTable('statistics', {
     createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
     serverDateUnique: uniqueIndex('stats_server_date_unique').on(table.serverId, table.date),
-}))
-
+}));
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
     organizations: many(organizationUsers),
-}))
-
+}));
 export const organizationsRelations = relations(organizations, ({ one, many }) => ({
     owner: one(users, {
         fields: [organizations.owner_id],
@@ -353,8 +322,7 @@ export const organizationsRelations = relations(organizations, ({ one, many }) =
     }),
     members: many(organizationUsers),
     servers: many(servers),
-}))
-
+}));
 export const organizationUsersRelations = relations(organizationUsers, ({ one }) => ({
     organization: one(organizations, {
         fields: [organizationUsers.organizationId],
@@ -364,8 +332,7 @@ export const organizationUsersRelations = relations(organizationUsers, ({ one })
         fields: [organizationUsers.userId],
         references: [users.id],
     }),
-}))
-
+}));
 export const serversRelations = relations(servers, ({ one, many }) => ({
     organization: one(organizations, {
         fields: [servers.organizationId],
@@ -383,22 +350,19 @@ export const serversRelations = relations(servers, ({ one, many }) => ({
     suppressions: many(suppressions),
     statistics: many(statistics),
     templates: many(templates),
-}))
-
+}));
 export const domainsRelations = relations(domains, ({ one }) => ({
     server: one(servers, {
         fields: [domains.serverId],
         references: [servers.id],
     }),
-}))
-
+}));
 export const credentialsRelations = relations(credentials, ({ one }) => ({
     server: one(servers, {
         fields: [credentials.serverId],
         references: [servers.id],
     }),
-}))
-
+}));
 export const routesRelations = relations(routes, ({ one }) => ({
     server: one(servers, {
         fields: [routes.serverId],
@@ -416,16 +380,14 @@ export const routesRelations = relations(routes, ({ one }) => ({
         fields: [routes.addressEndpointId],
         references: [addressEndpoints.id],
     }),
-}))
-
+}));
 export const messagesRelations = relations(messages, ({ one, many }) => ({
     server: one(servers, {
         fields: [messages.serverId],
         references: [servers.id],
     }),
     deliveries: many(deliveries),
-}))
-
+}));
 export const deliveriesRelations = relations(deliveries, ({ one }) => ({
     message: one(messages, {
         fields: [deliveries.messageId],
@@ -435,97 +397,42 @@ export const deliveriesRelations = relations(deliveries, ({ one }) => ({
         fields: [deliveries.serverId],
         references: [servers.id],
     }),
-}))
-
+}));
 export const webhooksRelations = relations(webhooks, ({ one, many }) => ({
     server: one(servers, {
         fields: [webhooks.serverId],
         references: [servers.id],
     }),
     requests: many(webhookRequests),
-}))
-
+}));
 export const webhookRequestsRelations = relations(webhookRequests, ({ one }) => ({
     webhook: one(webhooks, {
         fields: [webhookRequests.webhookId],
         references: [webhooks.id],
     }),
-}))
-
+}));
 export const templatesRelations = relations(templates, ({ one }) => ({
     server: one(servers, {
         fields: [templates.serverId],
         references: [servers.id],
     }),
-}))
-
+}));
 // Zod schemas for validation
-export const insertUserSchema = createInsertSchema(users)
-export const selectUserSchema = createSelectSchema(users)
-
-export const insertOrganizationSchema = createInsertSchema(organizations)
-export const selectOrganizationSchema = createSelectSchema(organizations)
-
-export const insertServerSchema = createInsertSchema(servers)
-export const selectServerSchema = createSelectSchema(servers)
-
-export const insertDomainSchema = createInsertSchema(domains)
-export const selectDomainSchema = createSelectSchema(domains)
-
-export const insertCredentialSchema = createInsertSchema(credentials)
-export const selectCredentialSchema = createSelectSchema(credentials)
-
-export const insertRouteSchema = createInsertSchema(routes)
-export const selectRouteSchema = createSelectSchema(routes)
-
-export const insertMessageSchema = createInsertSchema(messages)
-export const selectMessageSchema = createSelectSchema(messages)
-
-export const insertWebhookSchema = createInsertSchema(webhooks)
-export const selectWebhookSchema = createSelectSchema(webhooks)
-
-export const insertTemplateSchema = createInsertSchema(templates)
-export const selectTemplateSchema = createSelectSchema(templates)
-
-// Types
-export type User = typeof users.$inferSelect
-export type NewUser = typeof users.$inferInsert
-
-export type Organization = typeof organizations.$inferSelect
-export type NewOrganization = typeof organizations.$inferInsert
-
-export type OrganizationUser = typeof organizationUsers.$inferSelect
-export type NewOrganizationUser = typeof organizationUsers.$inferInsert
-
-export type Server = typeof servers.$inferSelect
-export type NewServer = typeof servers.$inferInsert
-
-export type Domain = typeof domains.$inferSelect
-export type NewDomain = typeof domains.$inferInsert
-
-export type Credential = typeof credentials.$inferSelect
-export type NewCredential = typeof credentials.$inferInsert
-
-export type Route = typeof routes.$inferSelect
-export type NewRoute = typeof routes.$inferInsert
-
-export type Message = typeof messages.$inferSelect
-export type NewMessage = typeof messages.$inferInsert
-
-export type Delivery = typeof deliveries.$inferSelect
-export type NewDelivery = typeof deliveries.$inferInsert
-
-export type Webhook = typeof webhooks.$inferSelect
-export type NewWebhook = typeof webhooks.$inferInsert
-
-export type WebhookRequest = typeof webhookRequests.$inferSelect
-export type NewWebhookRequest = typeof webhookRequests.$inferInsert
-
-export type Suppression = typeof suppressions.$inferSelect
-export type NewSuppression = typeof suppressions.$inferInsert
-
-export type Statistic = typeof statistics.$inferSelect
-export type NewStatistic = typeof statistics.$inferInsert
-
-export type Template = typeof templates.$inferSelect
-export type NewTemplate = typeof templates.$inferInsert
+export const insertUserSchema = createInsertSchema(users);
+export const selectUserSchema = createSelectSchema(users);
+export const insertOrganizationSchema = createInsertSchema(organizations);
+export const selectOrganizationSchema = createSelectSchema(organizations);
+export const insertServerSchema = createInsertSchema(servers);
+export const selectServerSchema = createSelectSchema(servers);
+export const insertDomainSchema = createInsertSchema(domains);
+export const selectDomainSchema = createSelectSchema(domains);
+export const insertCredentialSchema = createInsertSchema(credentials);
+export const selectCredentialSchema = createSelectSchema(credentials);
+export const insertRouteSchema = createInsertSchema(routes);
+export const selectRouteSchema = createSelectSchema(routes);
+export const insertMessageSchema = createInsertSchema(messages);
+export const selectMessageSchema = createSelectSchema(messages);
+export const insertWebhookSchema = createInsertSchema(webhooks);
+export const selectWebhookSchema = createSelectSchema(webhooks);
+export const insertTemplateSchema = createInsertSchema(templates);
+export const selectTemplateSchema = createSelectSchema(templates);

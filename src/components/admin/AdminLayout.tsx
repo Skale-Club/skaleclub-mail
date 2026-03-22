@@ -4,12 +4,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { Button } from '../ui/button'
 import {
     Building2,
-    Server,
-    Globe,
     Users,
-    Key,
-    Route,
-    Webhook,
     Mail,
     LogOut,
     Menu,
@@ -27,13 +22,7 @@ interface NavItem {
 const navItems: NavItem[] = [
     { label: 'Dashboard', href: '/admin', icon: <Home className="w-5 h-5" /> },
     { label: 'Organizations', href: '/admin/organizations', icon: <Building2 className="w-5 h-5" /> },
-    { label: 'Servers', href: '/admin/servers', icon: <Server className="w-5 h-5" /> },
-    { label: 'Domains', href: '/admin/domains', icon: <Globe className="w-5 h-5" /> },
     { label: 'Users', href: '/admin/users', icon: <Users className="w-5 h-5" /> },
-    { label: 'Credentials', href: '/admin/credentials', icon: <Key className="w-5 h-5" /> },
-    { label: 'Routes', href: '/admin/routes', icon: <Route className="w-5 h-5" /> },
-    { label: 'Webhooks', href: '/admin/webhooks', icon: <Webhook className="w-5 h-5" /> },
-    { label: 'Messages', href: '/admin/messages', icon: <Mail className="w-5 h-5" /> },
     { label: 'Analytics', href: '/admin/analytics', icon: <BarChart2 className="w-5 h-5" /> },
 ]
 

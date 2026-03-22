@@ -1,9 +1,22 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
+import dns from 'node:dns'
 import { db } from '../../db'
 import { domains, servers, organizationUsers } from '../../db/schema'
 import { eq, and } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
+
+const resolver = new dns.promises.Resolver()
+resolver.setServers(['8.8.8.8', '1.1.1.1'])
+
+async function resolveTxt(hostname: string): Promise<string[]> {
+    try {
+        const records = await resolver.resolveTxt(hostname)
+        return records.map((chunks) => chunks.join(''))
+    } catch {
+        return []
+    }
+}
 
 const router = Router()
 
@@ -140,7 +153,7 @@ router.post('/', async (req: Request, res: Response) => {
     }
 })
 
-// Verify domain
+// Verify domain — performs real DNS lookups
 router.post('/:id/verify', async (req: Request, res: Response) => {
     try {
         const userId = req.headers['x-user-id'] as string
@@ -164,19 +177,58 @@ router.post('/:id/verify', async (req: Request, res: Response) => {
             return res.status(403).json({ error: 'Only admins can verify domains' })
         }
 
-        // In a real implementation, this would check DNS records
-        // For now, we'll just mark it as verified
+        const domainName = domain.name
+        const expectedToken = `skaleclub-verification:${domain.verificationToken}`
+        const dkimSelector = domain.dkimSelector || 'postal'
+
+        // Run all DNS lookups in parallel
+        const [rootTxt, dkimTxt, dmarcTxt] = await Promise.all([
+            resolveTxt(domainName),
+            resolveTxt(`${dkimSelector}._domainkey.${domainName}`),
+            resolveTxt(`_dmarc.${domainName}`),
+        ])
+
+        // 1) Skale Club verification code
+        const verificationFound = rootTxt.some((r) => r === expectedToken)
+        const verificationStatus = verificationFound ? 'verified' as const : 'failed' as const
+
+        // 2) SPF
+        const spfFound = rootTxt.some((r) => r.startsWith('v=spf1') && r.includes('spf.skaleclub.com'))
+        const spfStatus = spfFound ? 'verified' : 'failed'
+        const spfError = spfFound ? null : 'SPF record not found or does not include spf.skaleclub.com'
+
+        // 3) DKIM
+        const dkimFound = dkimTxt.length > 0 && dkimTxt.some((r) => r.startsWith('v=DKIM1'))
+        const dkimError = dkimFound ? null : 'DKIM record not found'
+
+        // 4) DMARC
+        const dmarcFound = dmarcTxt.some((r) => r.startsWith('v=DMARC1'))
+        const dmarcError = dmarcFound ? null : 'DMARC record not found'
+
+        const allVerified = verificationFound && spfFound && dkimFound && dmarcFound
+
         const [updatedDomain] = await db
             .update(domains)
             .set({
-                verificationStatus: 'verified',
-                verifiedAt: new Date(),
+                verificationStatus,
+                verifiedAt: allVerified ? new Date() : null,
+                spfStatus,
+                spfError,
                 updatedAt: new Date(),
             })
             .where(eq(domains.id, domainId))
             .returning()
 
-        res.json({ domain: updatedDomain })
+        // Return per-record results so the frontend can show individual statuses
+        res.json({
+            domain: updatedDomain,
+            dnsResults: {
+                verification: { found: verificationFound },
+                spf: { found: spfFound, error: spfError },
+                dkim: { found: dkimFound, error: dkimError },
+                dmarc: { found: dmarcFound, error: dmarcError },
+            },
+        })
     } catch (error) {
         console.error('Error verifying domain:', error)
         res.status(500).json({ error: 'Internal server error' })

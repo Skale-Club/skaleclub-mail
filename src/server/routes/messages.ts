@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { db } from '../../db'
-import { messages, servers, organizationUsers, deliveries } from '../../db/schema'
+import { messages, servers, organizationUsers, deliveries, templates } from '../../db/schema'
 import { eq, and, desc, like, sql } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 import { injectTracking, incrementStat, fireWebhooks } from '../lib/tracking'
@@ -24,6 +24,8 @@ const sendMessageSchema = z.object({
         content: z.string(), // base64 encoded
         contentType: z.string(),
     })).optional(),
+    templateId: z.string().uuid().optional(),
+    templateVariables: z.record(z.string()).optional(),
 })
 
 const searchMessagesSchema = z.object({
@@ -182,9 +184,40 @@ router.post('/', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Server is suspended' })
         }
 
+        // Template rendering
+        let subject = data.subject
+        let plainBody = data.plainBody
+        let htmlBody = data.htmlBody
+
+        if (data.templateId) {
+            const template = await db.query.templates.findFirst({
+                where: eq(templates.id, data.templateId),
+            })
+
+            if (!template) {
+                return res.status(404).json({ error: 'Template not found' })
+            }
+
+            if (template.serverId !== data.serverId) {
+                return res.status(403).json({ error: 'Template does not belong to this server' })
+            }
+
+            const variables = data.templateVariables || {}
+
+            const render = (text: string | null): string | null => {
+                if (!text) return text
+                return text.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+                    return variables[key] ?? `{{${key}}}`
+                })
+            }
+
+            subject = render(template.subject) || subject
+            plainBody = render(template.plainBody) || plainBody
+            htmlBody = render(template.htmlBody) || htmlBody
+        }
+
         // Inject open/click tracking into HTML before storing
         const messageToken = uuidv4()
-        let htmlBody = data.htmlBody
 
         if (htmlBody && !server.privacyMode && (server.trackOpens || server.trackClicks)) {
             const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 9001}`
@@ -201,8 +234,8 @@ router.post('/', async (req: Request, res: Response) => {
             toAddresses: data.to,
             ccAddresses: data.cc || [],
             bccAddresses: data.bcc || [],
-            subject: data.subject,
-            plainBody: data.plainBody,
+            subject,
+            plainBody,
             htmlBody,
             headers: data.headers || {},
             attachments: data.attachments || [],

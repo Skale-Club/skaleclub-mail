@@ -5,17 +5,16 @@ import { Route, Switch } from 'wouter'
 import { Toaster } from './components/ui/toaster'
 import { ThemeProvider } from './components/theme-provider'
 import { useAuth } from './hooks/useAuth'
-import './lib/utils'
+import './index.css'
 
 // Pages
 import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
 
 // Admin Pages
+import AdminLayout from './components/admin/AdminLayout'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import OrganizationsPage from './pages/admin/OrganizationsPage'
-import ServersPage from './pages/admin/ServersPage'
-import DomainsPage from './pages/admin/DomainsPage'
+import OrganizationDetailPage from './pages/admin/OrganizationDetailPage'
 import UsersPage from './pages/admin/UsersPage'
 import AnalyticsPage from './pages/admin/AnalyticsPage'
 
@@ -42,7 +41,7 @@ function AuthCheck({ children }: { children: React.ReactNode }) {
 
 function App() {
     return (
-        <ThemeProvider defaultTheme="system">
+        <ThemeProvider defaultTheme="dark">
             <QueryClientProvider client={new QueryClient()}>
                 <div className="min-h-screen bg-background">
                     <Switch>
@@ -54,46 +53,34 @@ function App() {
                         {/* Admin routes */}
                         <Route path="/admin">
                             <AuthCheck>
-                                <AdminDashboard />
+                                <AdminLayout><AdminDashboard /></AdminLayout>
                             </AuthCheck>
                         </Route>
                         <Route path="/admin/organizations">
                             <AuthCheck>
-                                <OrganizationsPage />
+                                <AdminLayout><OrganizationsPage /></AdminLayout>
                             </AuthCheck>
                         </Route>
-                        <Route path="/admin/servers">
+                        <Route path="/admin/organizations/:id">
                             <AuthCheck>
-                                <ServersPage />
-                            </AuthCheck>
-                        </Route>
-                        <Route path="/admin/domains">
-                            <AuthCheck>
-                                <DomainsPage />
+                                <AdminLayout><OrganizationDetailPage /></AdminLayout>
                             </AuthCheck>
                         </Route>
                         <Route path="/admin/users">
                             <AuthCheck>
-                                <UsersPage />
+                                <AdminLayout><UsersPage /></AdminLayout>
                             </AuthCheck>
                         </Route>
                         <Route path="/admin/analytics">
                             <AuthCheck>
-                                <AnalyticsPage />
-                            </AuthCheck>
-                        </Route>
-
-                        {/* Legacy dashboard route */}
-                        <Route path="/dashboard">
-                            <AuthCheck>
-                                <Dashboard />
+                                <AdminLayout><AnalyticsPage /></AdminLayout>
                             </AuthCheck>
                         </Route>
 
                         {/* Default route */}
                         <Route path="/">
                             <AuthCheck>
-                                <AdminDashboard />
+                                <AdminLayout><AdminDashboard /></AdminLayout>
                             </AuthCheck>
                         </Route>
                     </Switch>

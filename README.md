@@ -59,9 +59,12 @@ DATABASE_URL=postgresql://postgres:password@db.your-project.supabase.co:5432/pos
 npm run db:push
 ```
 
-6. Apply RLS policies (run in Supabase SQL Editor):
-   - Copy contents of `supabase/migrations/001_enable_rls.sql`
-   - Paste and execute in Supabase SQL Editor
+6. Apply RLS policies:
+```bash
+npm run db:rls
+```
+
+If you prefer Supabase SQL Editor, run all files in `supabase/migrations` in filename order.
 
 ### Development
 

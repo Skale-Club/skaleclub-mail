@@ -1,19 +1,16 @@
-import { useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import { AlertCircle, BarChart2, CheckCircle, Eye, Mail, MousePointer, RefreshCw } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
 import { Progress } from '../../components/ui/progress'
-import { supabase } from '../../lib/supabase'
-import { BarChart2, Mail, CheckCircle, MousePointer, AlertCircle, Eye, RefreshCw } from 'lucide-react'
 import { Button } from '../../components/ui/button'
+import { supabase } from '../../lib/supabase'
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface ServerOption {
+interface OrganizationOption {
     id: string
     name: string
     slug: string
-    organizationName: string
+    role: string
+    serverId?: string
 }
 
 interface DailyStat {
@@ -64,51 +61,57 @@ interface Analytics {
     recentMessages: RecentMessage[]
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function pct(value: number) {
     return `${value.toFixed(1)}%`
 }
 
-function formatDate(d: string | null) {
-    if (!d) return '—'
-    return new Date(d).toLocaleString()
+function formatDate(value: string | null) {
+    return value ? new Date(value).toLocaleString() : '-'
 }
 
-function formatShortDate(d: string) {
-    return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+function formatShortDate(value: string) {
+    return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
 function getStatusColor(status: string) {
     switch (status) {
-        case 'delivered':  return 'bg-green-100 text-green-800'
-        case 'sent':       return 'bg-blue-100 text-blue-800'
+        case 'delivered':
+            return 'bg-green-100 text-green-800'
+        case 'sent':
+            return 'bg-blue-100 text-blue-800'
         case 'bounced':
-        case 'failed':     return 'bg-red-100 text-red-800'
-        case 'held':       return 'bg-yellow-100 text-yellow-800'
-        default:           return 'bg-gray-100 text-gray-800'
+        case 'failed':
+            return 'bg-red-100 text-red-800'
+        case 'held':
+            return 'bg-yellow-100 text-yellow-800'
+        default:
+            return 'bg-gray-100 text-gray-800'
     }
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 export default function AnalyticsPage() {
-    const [servers, setServers] = useState<ServerOption[]>([])
-    const [selectedServerId, setSelectedServerId] = useState('')
+    const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
+    const [selectedOrganizationId, setSelectedOrganizationId] = useState('')
     const [days, setDays] = useState(30)
     const [analytics, setAnalytics] = useState<Analytics | null>(null)
     const [isLoading, setIsLoading] = useState(false)
 
     useEffect(() => {
-        fetchServers()
+        void fetchOrganizations()
     }, [])
 
+    const selectedOrganization = useMemo(
+        () => organizations.find((organization) => organization.id === selectedOrganizationId) || null,
+        [organizations, selectedOrganizationId]
+    )
+    const selectedServerId = selectedOrganization?.serverId || ''
+
     useEffect(() => {
-        if (selectedServerId) fetchAnalytics()
+        if (selectedServerId) {
+            void fetchAnalytics()
+        } else {
+            setAnalytics(null)
+        }
     }, [selectedServerId, days])
 
     async function getToken() {
@@ -116,67 +119,58 @@ export default function AnalyticsPage() {
         return session?.access_token
     }
 
-    async function fetchServers() {
+    async function fetchOrganizations() {
         try {
             const token = await getToken()
-            // Fetch all orgs, then all servers per org
-            const orgsRes = await fetch('/api/organizations', {
-                headers: { 'Authorization': `Bearer ${token}` },
+            const response = await fetch('/api/organizations', {
+                headers: { Authorization: `Bearer ${token}` },
             })
-            if (!orgsRes.ok) return
-            const { organizations } = await orgsRes.json()
+            if (!response.ok) return
 
-            const allServers: ServerOption[] = []
-            await Promise.all(
-                (organizations || []).map(async (org: { id: string; name: string }) => {
-                    const sRes = await fetch(`/api/servers?organizationId=${org.id}`, {
-                        headers: { 'Authorization': `Bearer ${token}` },
-                    })
-                    if (sRes.ok) {
-                        const { servers: list } = await sRes.json()
-                        for (const s of list || []) {
-                            allServers.push({ id: s.id, name: s.name, slug: s.slug, organizationName: org.name })
-                        }
-                    }
-                })
-            )
-            setServers(allServers)
-            if (allServers.length > 0) setSelectedServerId(allServers[0].id)
-        } catch (err) {
-            console.error('Error fetching servers:', err)
+            const { organizations } = await response.json()
+            const options: OrganizationOption[] = (organizations || []).map((organization: any) => ({
+                id: organization.id,
+                name: organization.name,
+                slug: organization.slug,
+                role: organization.role,
+                serverId: organization.servers?.[0]?.id,
+            }))
+
+            setOrganizations(options)
+            if (options.length > 0) {
+                setSelectedOrganizationId(options[0].id)
+            }
+        } catch (error) {
+            console.error('Error fetching organizations:', error)
         }
     }
 
     async function fetchAnalytics() {
         if (!selectedServerId) return
+
         setIsLoading(true)
         try {
             const token = await getToken()
-            const res = await fetch(`/api/servers/${selectedServerId}/statistics?days=${days}`, {
-                headers: { 'Authorization': `Bearer ${token}` },
+            const response = await fetch(`/api/servers/${selectedServerId}/statistics?days=${days}`, {
+                headers: { Authorization: `Bearer ${token}` },
             })
-            if (res.ok) {
-                const data = await res.json()
+            if (response.ok) {
+                const data = await response.json()
                 setAnalytics(data)
             }
-        } catch (err) {
-            console.error('Error fetching analytics:', err)
+        } catch (error) {
+            console.error('Error fetching analytics:', error)
         } finally {
             setIsLoading(false)
         }
     }
 
-    // Build bar chart data: use daily stats if available, else an empty array
     const dailyData = analytics?.daily ?? []
-    const maxBarValue = dailyData.length
-        ? Math.max(...dailyData.map((d) => d.sent + d.bounced), 1)
-        : 1
-
+    const maxBarValue = dailyData.length ? Math.max(...dailyData.map((day) => day.sent + day.bounced), 1) : 1
     const { summary, rates } = analytics ?? { summary: null, rates: null }
 
     return (
         <div className="space-y-6">
-            {/* Header */}
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h2 className="text-2xl font-bold tracking-tight">Analytics</h2>
@@ -186,46 +180,60 @@ export default function AnalyticsPage() {
                     <select
                         className="flex h-9 rounded-md border border-input bg-background px-3 text-sm"
                         value={days}
-                        onChange={(e) => setDays(Number(e.target.value))}
+                        onChange={(event) => setDays(Number(event.target.value))}
                     >
                         <option value={7}>Last 7 days</option>
                         <option value={30}>Last 30 days</option>
                         <option value={90}>Last 90 days</option>
                     </select>
-                    <Button variant="outline" size="sm" onClick={fetchAnalytics} disabled={isLoading}>
-                        <RefreshCw className={`w-4 h-4 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
+                    <Button variant="outline" size="sm" onClick={() => void fetchAnalytics()} disabled={isLoading || !selectedServerId}>
+                        <RefreshCw className={`mr-1 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                         Refresh
                     </Button>
                 </div>
             </div>
 
-            {/* Server selector */}
             <Card>
                 <CardContent className="pt-4">
                     <select
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        value={selectedServerId}
-                        onChange={(e) => setSelectedServerId(e.target.value)}
+                        value={selectedOrganizationId}
+                        onChange={(event) => setSelectedOrganizationId(event.target.value)}
                     >
-                        <option value="">Select a server…</option>
-                        {servers.map((s) => (
-                            <option key={s.id} value={s.id}>
-                                {s.organizationName} / {s.name}
+                        <option value="">Select an organization...</option>
+                        {organizations.map((organization) => (
+                            <option key={organization.id} value={organization.id}>
+                                {organization.name}
                             </option>
                         ))}
                     </select>
                 </CardContent>
             </Card>
 
+            {selectedOrganization && !selectedServerId && (
+                <Card>
+                    <CardContent className="flex flex-col gap-4 py-6 md:flex-row md:items-center md:justify-between">
+                        <div>
+                            <p className="font-medium">{selectedOrganization.name} is not configured yet.</p>
+                            <p className="text-sm text-muted-foreground">
+                                Finish setup inside the organization detail page to unlock analytics.
+                            </p>
+                        </div>
+                        <Button onClick={() => { window.location.href = `/admin/organizations/${selectedOrganization.id}` }}>
+                            Open Organization
+                        </Button>
+                    </CardContent>
+                </Card>
+            )}
+
             {isLoading && (
                 <div className="flex justify-center p-12">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+                    <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
                 </div>
             )}
 
             {!isLoading && analytics && (
                 <>
-                    {/* Summary cards */}
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                         <MetricCard
                             icon={<Mail className="h-4 w-4 text-muted-foreground" />}
@@ -279,7 +287,6 @@ export default function AnalyticsPage() {
                         />
                     </div>
 
-                    {/* Daily bar chart */}
                     {dailyData.length > 0 && (
                         <Card>
                             <CardHeader>
@@ -287,16 +294,15 @@ export default function AnalyticsPage() {
                                 <CardDescription>Sent, opened and bounced per day</CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <div className="flex items-end gap-1 h-32 overflow-x-auto pb-2">
+                                <div className="flex h-32 items-end gap-1 overflow-x-auto pb-2">
                                     {dailyData.map((day) => (
                                         <div
                                             key={day.date}
-                                            className="flex flex-col items-center gap-0.5 flex-shrink-0"
+                                            className="flex flex-shrink-0 flex-col items-center gap-0.5"
                                             style={{ minWidth: 28 }}
                                             title={`${formatShortDate(day.date)}\nSent: ${day.sent}\nOpened: ${day.opened}\nBounced: ${day.bounced}`}
                                         >
-                                            {/* stacked: sent (blue) + bounced (red) */}
-                                            <div className="flex flex-col justify-end w-5 gap-px" style={{ height: 100 }}>
+                                            <div className="flex w-5 flex-col justify-end gap-px" style={{ height: 100 }}>
                                                 <div
                                                     className="w-full rounded-t bg-red-400"
                                                     style={{ height: `${(day.bounced / maxBarValue) * 100}%`, minHeight: day.bounced > 0 ? 2 : 0 }}
@@ -310,16 +316,16 @@ export default function AnalyticsPage() {
                                                     style={{ height: `${(day.opened / maxBarValue) * 100}%`, minHeight: day.opened > 0 ? 2 : 0 }}
                                                 />
                                             </div>
-                                            <span className="text-[9px] text-muted-foreground rotate-45 origin-left mt-1">
+                                            <span className="mt-1 origin-left rotate-45 text-[9px] text-muted-foreground">
                                                 {formatShortDate(day.date)}
                                             </span>
                                         </div>
                                     ))}
                                 </div>
-                                <div className="flex gap-4 mt-4 text-xs text-muted-foreground">
-                                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-blue-400 inline-block" /> Sent</span>
-                                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-green-400 inline-block" /> Opened</span>
-                                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-400 inline-block" /> Bounced</span>
+                                <div className="mt-4 flex gap-4 text-xs text-muted-foreground">
+                                    <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-blue-400" /> Sent</span>
+                                    <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-green-400" /> Opened</span>
+                                    <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-red-400" /> Bounced</span>
                                 </div>
                             </CardContent>
                         </Card>
@@ -333,11 +339,10 @@ export default function AnalyticsPage() {
                         </Card>
                     )}
 
-                    {/* Recent messages */}
                     <Card>
                         <CardHeader>
                             <CardTitle className="text-base">Recent Messages</CardTitle>
-                            <CardDescription>Last 20 messages — eye icon indicates opened</CardDescription>
+                            <CardDescription>Last 20 messages - eye icon indicates opened</CardDescription>
                         </CardHeader>
                         <CardContent className="p-0">
                             <div className="overflow-x-auto">
@@ -360,31 +365,31 @@ export default function AnalyticsPage() {
                                                 </td>
                                             </tr>
                                         ) : (
-                                            analytics.recentMessages.map((msg) => (
-                                                <tr key={msg.id} className="hover:bg-muted/30">
+                                            analytics.recentMessages.map((message) => (
+                                                <tr key={message.id} className="hover:bg-muted/30">
                                                     <td className="px-4 py-2">
-                                                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getStatusColor(msg.status)}`}>
-                                                            {msg.status}
+                                                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getStatusColor(message.status)}`}>
+                                                            {message.status}
                                                         </span>
                                                     </td>
-                                                    <td className="px-4 py-2 max-w-[200px] truncate" title={msg.subject ?? ''}>
-                                                        {msg.subject || <span className="text-muted-foreground">(no subject)</span>}
+                                                    <td className="max-w-[200px] truncate px-4 py-2" title={message.subject ?? ''}>
+                                                        {message.subject || <span className="text-muted-foreground">(no subject)</span>}
                                                     </td>
-                                                    <td className="px-4 py-2 text-muted-foreground truncate max-w-[160px]">
-                                                        {msg.fromAddress}
+                                                    <td className="max-w-[160px] truncate px-4 py-2 text-muted-foreground">
+                                                        {message.fromAddress}
                                                     </td>
                                                     <td className="px-4 py-2">
-                                                        {msg.openedAt ? (
-                                                            <span className="flex items-center gap-1 text-blue-600" title={formatDate(msg.openedAt)}>
-                                                                <Eye className="w-3.5 h-3.5" />
-                                                                <span className="text-xs">{formatDate(msg.openedAt)}</span>
+                                                        {message.openedAt ? (
+                                                            <span className="flex items-center gap-1 text-blue-600" title={formatDate(message.openedAt)}>
+                                                                <Eye className="h-3.5 w-3.5" />
+                                                                <span className="text-xs">{formatDate(message.openedAt)}</span>
                                                             </span>
                                                         ) : (
-                                                            <span className="text-muted-foreground text-xs">—</span>
+                                                            <span className="text-xs text-muted-foreground">-</span>
                                                         )}
                                                     </td>
-                                                    <td className="px-4 py-2 text-muted-foreground text-xs">{formatDate(msg.sentAt)}</td>
-                                                    <td className="px-4 py-2 text-muted-foreground text-xs">{formatDate(msg.createdAt)}</td>
+                                                    <td className="px-4 py-2 text-xs text-muted-foreground">{formatDate(message.sentAt)}</td>
+                                                    <td className="px-4 py-2 text-xs text-muted-foreground">{formatDate(message.createdAt)}</td>
                                                 </tr>
                                             ))
                                         )}
@@ -399,17 +404,13 @@ export default function AnalyticsPage() {
             {!isLoading && !analytics && selectedServerId && (
                 <Card>
                     <CardContent className="py-12 text-center text-muted-foreground">
-                        No data found for this server.
+                        No data found for this organization yet.
                     </CardContent>
                 </Card>
             )}
         </div>
     )
 }
-
-// ---------------------------------------------------------------------------
-// Sub-component
-// ---------------------------------------------------------------------------
 
 function MetricCard({
     icon,
@@ -419,7 +420,7 @@ function MetricCard({
     progress,
     progressColor,
 }: {
-    icon: React.ReactNode
+    icon: ReactNode
     label: string
     value: string | number
     sub: string
@@ -434,7 +435,7 @@ function MetricCard({
             </CardHeader>
             <CardContent>
                 <div className="text-2xl font-bold">{value}</div>
-                <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>
                 {progress !== undefined && (
                     <Progress
                         value={progress}

@@ -33,6 +33,9 @@ app.get('/health', (req, res) => {
 
 // Auth middleware - extract user ID from Supabase JWT
 import { createClient } from '@supabase/supabase-js'
+import { db } from '../db'
+import { users } from '../db/schema'
+import { eq } from 'drizzle-orm'
 
 const supabase = createClient(
     process.env.SUPABASE_URL!,
@@ -56,6 +59,21 @@ app.use('/api', async (req, res, next) => {
 
         if (!error && user) {
             req.headers['x-user-id'] = user.id
+
+            // Auto-create user profile if it doesn't exist yet
+            const existing = await db.query.users.findFirst({
+                where: eq(users.id, user.id),
+            })
+            if (!existing) {
+                await db.insert(users).values({
+                    id: user.id,
+                    email: user.email!,
+                    firstName: user.user_metadata?.firstName || null,
+                    lastName: user.user_metadata?.lastName || null,
+                    isAdmin: true,
+                    emailVerified: true,
+                }).onConflictDoNothing()
+            }
         }
     } catch {
         // Continue without user context
@@ -76,6 +94,7 @@ import credentialRoutes from './routes/credentials'
 import routeRoutes from './routes/routes'
 import systemRoutes from './routes/system'
 import trackRoutes from './routes/track'
+import templateRoutes from './routes/templates'
 
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
@@ -87,6 +106,7 @@ app.use('/api/webhooks', webhookRoutes)
 app.use('/api/credentials', credentialRoutes)
 app.use('/api/routes', routeRoutes)
 app.use('/api/system', systemRoutes)
+app.use('/api/templates', templateRoutes)
 
 // Public tracking endpoints — no auth, no rate-limit (high-volume pixel requests)
 app.use('/t', trackRoutes)
