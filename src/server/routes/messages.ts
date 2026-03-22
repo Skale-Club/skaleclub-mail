@@ -1,10 +1,11 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
-import { db } from '../../db'
-import { messages, servers, organizationUsers, deliveries, templates } from '../../db/schema'
 import { eq, and, desc, like, sql } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
+import { db } from '../../db'
+import { messages, servers, organizationUsers, deliveries, templates } from '../../db/schema'
 import { injectTracking, incrementStat, fireWebhooks } from '../lib/tracking'
+import { resolveOutlookMailboxForServer, sendMessageWithOutlook } from '../lib/outlook'
 
 const router = Router()
 
@@ -17,9 +18,9 @@ function escapeHtml(str: string): string {
         .replace(/'/g, '&#39;')
 }
 
-// Validation schemas
 const sendMessageSchema = z.object({
     serverId: z.string().uuid(),
+    outlookMailboxId: z.string().uuid().optional(),
     from: z.string().email(),
     to: z.array(z.string().email()).min(1),
     cc: z.array(z.string().email()).optional(),
@@ -30,7 +31,7 @@ const sendMessageSchema = z.object({
     headers: z.record(z.string()).optional(),
     attachments: z.array(z.object({
         filename: z.string(),
-        content: z.string(), // base64 encoded
+        content: z.string(),
         contentType: z.string(),
     })).optional(),
     templateId: z.string().uuid().optional(),
@@ -47,7 +48,6 @@ const searchMessagesSchema = z.object({
     limit: z.coerce.number().int().min(1).max(100).default(50),
 })
 
-// Helper to check access
 async function checkMessageAccess(userId: string, serverId: string) {
     const server = await db.query.servers.findFirst({
         where: eq(servers.id, serverId),
@@ -65,7 +65,6 @@ async function checkMessageAccess(userId: string, serverId: string) {
     return { server, membership }
 }
 
-// List/search messages
 router.get('/', async (req: Request, res: Response) => {
     try {
         const userId = req.headers['x-user-id'] as string
@@ -87,8 +86,6 @@ router.get('/', async (req: Request, res: Response) => {
 
         const { query, status, direction, from, to, page, limit } = searchMessagesSchema.parse(req.query)
         const offset = (page - 1) * limit
-
-        // Build where conditions
         const conditions = [eq(messages.serverId, serverId)]
 
         if (status) {
@@ -107,6 +104,16 @@ router.get('/', async (req: Request, res: Response) => {
             conditions.push(sql`${messages.toAddresses}::text like ${'%' + to + '%'}`)
         }
 
+        if (query) {
+            conditions.push(
+                sql`(
+                    ${messages.subject} ilike ${'%' + query + '%'}
+                    or ${messages.fromAddress} ilike ${'%' + query + '%'}
+                    or ${messages.toAddresses}::text ilike ${'%' + query + '%'}
+                )`
+            )
+        }
+
         const messagesList = await db.query.messages.findMany({
             where: and(...conditions),
             orderBy: [desc(messages.createdAt)],
@@ -114,7 +121,6 @@ router.get('/', async (req: Request, res: Response) => {
             offset,
         })
 
-        // Get total count for pagination
         const [{ count }] = await db
             .select({ count: sql<number>`count(*)` })
             .from(messages)
@@ -138,7 +144,6 @@ router.get('/', async (req: Request, res: Response) => {
     }
 })
 
-// Get message by ID
 router.get('/:id', async (req: Request, res: Response) => {
     try {
         const userId = req.headers['x-user-id'] as string
@@ -172,7 +177,6 @@ router.get('/:id', async (req: Request, res: Response) => {
     }
 })
 
-// Send new message
 router.post('/', async (req: Request, res: Response) => {
     try {
         const userId = req.headers['x-user-id'] as string
@@ -182,7 +186,6 @@ router.post('/', async (req: Request, res: Response) => {
         }
 
         const data = sendMessageSchema.parse(req.body)
-
         const { server, membership } = await checkMessageAccess(userId, data.serverId)
 
         if (!server || !membership) {
@@ -193,7 +196,6 @@ router.post('/', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Server is suspended' })
         }
 
-        // Template rendering
         let subject = data.subject
         let plainBody = data.plainBody
         let htmlBody = data.htmlBody
@@ -212,7 +214,6 @@ router.post('/', async (req: Request, res: Response) => {
             }
 
             const variables = data.templateVariables || {}
-
             const render = (text: string | null, isHtml: boolean): string | null => {
                 if (!text) return text
                 return text.replace(/\{\{(\w+)\}\}/g, (_, key) => {
@@ -226,7 +227,26 @@ router.post('/', async (req: Request, res: Response) => {
             htmlBody = render(template.htmlBody, true) || htmlBody
         }
 
-        // Inject open/click tracking into HTML before storing
+        const outlookMailbox = server.sendMode === 'outlook'
+            ? await resolveOutlookMailboxForServer(data.serverId, data.outlookMailboxId)
+            : null
+
+        if (server.sendMode === 'outlook') {
+            if (!outlookMailbox) {
+                return res.status(400).json({ error: 'No active Outlook mailbox configured for this server' })
+            }
+
+            if (data.from.toLowerCase() !== outlookMailbox.email.toLowerCase()) {
+                return res.status(400).json({
+                    error: `Outlook send mode requires the from address to match the connected mailbox (${outlookMailbox.email})`,
+                })
+            }
+        }
+
+        if (!plainBody && !htmlBody) {
+            return res.status(400).json({ error: 'Message body is required' })
+        }
+
         const messageToken = uuidv4()
 
         if (htmlBody && !server.privacyMode && (server.trackOpens || server.trackClicks)) {
@@ -234,7 +254,6 @@ router.post('/', async (req: Request, res: Response) => {
             htmlBody = injectTracking(htmlBody, messageToken, baseUrl, server.trackOpens, server.trackClicks)
         }
 
-        // Create message
         const [message] = await db.insert(messages).values({
             serverId: data.serverId,
             messageId: `<${uuidv4()}@${server.defaultFromAddress?.split('@')[1] || 'mail.local'}>`,
@@ -252,7 +271,6 @@ router.post('/', async (req: Request, res: Response) => {
             status: 'queued',
         }).returning()
 
-        // Create deliveries for each recipient
         const allRecipients = [...data.to, ...(data.cc || []), ...(data.bcc || [])]
 
         for (const recipient of allRecipients) {
@@ -264,7 +282,72 @@ router.post('/', async (req: Request, res: Response) => {
             })
         }
 
-        // Fire message_sent webhook + update stats (non-blocking)
+        if (server.sendMode === 'outlook' && outlookMailbox) {
+            try {
+                await sendMessageWithOutlook({
+                    serverId: data.serverId,
+                    mailboxId: outlookMailbox.id,
+                    fromAddress: data.from,
+                    to: data.to,
+                    cc: data.cc,
+                    bcc: data.bcc,
+                    subject,
+                    plainBody,
+                    htmlBody,
+                    attachments: data.attachments,
+                })
+
+                const sentAt = new Date()
+
+                await db
+                    .update(messages)
+                    .set({
+                        status: 'sent',
+                        sentAt,
+                        updatedAt: sentAt,
+                    })
+                    .where(eq(messages.id, message.id))
+
+                await db
+                    .update(deliveries)
+                    .set({
+                        status: 'sent',
+                        sentAt,
+                    })
+                    .where(eq(deliveries.messageId, message.id))
+
+                message.status = 'sent'
+                message.sentAt = sentAt
+            } catch (error) {
+                const details = error instanceof Error ? error.message : 'Outlook send failed'
+                const failedAt = new Date()
+
+                await db
+                    .update(messages)
+                    .set({
+                        status: 'failed',
+                        updatedAt: failedAt,
+                    })
+                    .where(eq(messages.id, message.id))
+
+                await db
+                    .update(deliveries)
+                    .set({
+                        status: 'failed',
+                        details,
+                    })
+                    .where(eq(deliveries.messageId, message.id))
+
+                return res.status(502).json({
+                    error: details,
+                    message: {
+                        ...message,
+                        status: 'failed',
+                    },
+                })
+            }
+        }
+
         Promise.allSettled([
             incrementStat(data.serverId, 'messagesSent'),
             fireWebhooks(data.serverId, 'message_sent', {
@@ -289,7 +372,6 @@ router.post('/', async (req: Request, res: Response) => {
     }
 })
 
-// Release held message
 router.post('/:id/release', async (req: Request, res: Response) => {
     try {
         const userId = req.headers['x-user-id'] as string
@@ -336,7 +418,6 @@ router.post('/:id/release', async (req: Request, res: Response) => {
     }
 })
 
-// Delete message
 router.delete('/:id', async (req: Request, res: Response) => {
     try {
         const userId = req.headers['x-user-id'] as string
@@ -360,9 +441,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
             return res.status(403).json({ error: 'Only admins can delete messages' })
         }
 
-        // Delete deliveries first
         await db.delete(deliveries).where(eq(deliveries.messageId, messageId))
-        // Delete message
         await db.delete(messages).where(eq(messages.id, messageId))
 
         res.json({ message: 'Message deleted successfully' })
@@ -372,7 +451,6 @@ router.delete('/:id', async (req: Request, res: Response) => {
     }
 })
 
-// Get message attachments
 router.get('/:id/attachments', async (req: Request, res: Response) => {
     try {
         const userId = req.headers['x-user-id'] as string

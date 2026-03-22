@@ -263,7 +263,7 @@ export default function WebhooksTab({ serverId }: WebhooksTabProps) {
                                             <div className="flex flex-wrap gap-1">
                                                 {webhook.events.slice(0, 3).map((event) => (
                                                     <span key={event} className="rounded bg-muted px-2 py-0.5 text-xs">
-                                                        {event.replaceAll('_', ' ')}
+                                                        {event.replace(/_/g, ' ')}
                                                     </span>
                                                 ))}
                                                 {webhook.events.length > 3 && (
@@ -352,7 +352,7 @@ export default function WebhooksTab({ serverId }: WebhooksTabProps) {
                                                 checked={newWebhook.events.includes(event)}
                                                 onChange={() => toggleEvent(event, newWebhook.events.includes(event), 'new')}
                                             />
-                                            <span>{event.replaceAll('_', ' ')}</span>
+                                            <span>{event.replace(/_/g, ' ')}</span>
                                         </label>
                                     ))}
                                 </div>
@@ -421,7 +421,7 @@ export default function WebhooksTab({ serverId }: WebhooksTabProps) {
                                                 checked={editData.events.includes(event)}
                                                 onChange={() => toggleEvent(event, editData.events.includes(event), 'edit')}
                                             />
-                                            <span>{event.replaceAll('_', ' ')}</span>
+                                            <span>{event.replace(/_/g, ' ')}</span>
                                         </label>
                                     ))}
                                 </div>

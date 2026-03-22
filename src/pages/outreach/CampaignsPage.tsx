@@ -1,6 +1,6 @@
 import React from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link, useLocation } from 'wouter'
+import { Link } from 'wouter'
 import {
     Plus,
     Search,
@@ -190,9 +190,7 @@ export function CampaignsPage() {
     const [search, setSearch] = React.useState('')
     const [statusFilter, setStatusFilter] = React.useState('all')
     const queryClient = useQueryClient()
-    const [, navigate] = useLocation()
-
-    const { data, isLoading, refetch } = useQuery({
+    const { data, isLoading } = useQuery({
         queryKey: ['campaigns', statusFilter, search],
         queryFn: () => fetchCampaigns({ status: statusFilter, search }),
     })

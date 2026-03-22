@@ -6,10 +6,8 @@ import {
     Search,
     Filter,
     Upload,
-    Download,
     MoreVertical,
     Mail,
-    Phone,
     Building,
     Trash2,
     Users,
@@ -168,7 +166,7 @@ export function LeadsPage() {
         queryFn: () => fetchLeads({ status: statusFilter, listId: listFilter, search }),
     })
 
-    const { data: leadLists, isLoading: listsLoading } = useQuery({
+    const { data: leadLists } = useQuery({
         queryKey: ['lead-lists'],
         queryFn: fetchLeadLists,
     })
@@ -194,12 +192,6 @@ export function LeadsPage() {
                 setSelectedLeads(leadsData.leads.map(l => l.id))
             }
         }
-    }
-
-    const handleSelectLead = (id: string) => {
-        setSelectedLeads(prev =>
-            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-        )
     }
 
     return (

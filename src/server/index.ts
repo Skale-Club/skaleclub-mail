@@ -3,55 +3,61 @@ import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
+import { createClient } from '@supabase/supabase-js'
+import { eq } from 'drizzle-orm'
+import { db } from '../db'
+import { users } from '../db/schema'
+import authRoutes from './routes/auth'
+import userRoutes from './routes/users'
+import organizationRoutes from './routes/organizations'
+import serverRoutes from './routes/servers'
+import domainRoutes from './routes/domains'
+import messageRoutes from './routes/messages'
+import webhookRoutes from './routes/webhooks'
+import credentialRoutes from './routes/credentials'
+import routeRoutes from './routes/routes'
+import systemRoutes from './routes/system'
+import trackRoutes from './routes/track'
+import templateRoutes from './routes/templates'
+import outreachRoutes from './routes/outreach'
+import outlookRoutes from './routes/outlook'
 
 const app = express()
 const PORT = process.env.PORT || 3001
 
-// Security middleware
 app.use(helmet())
 app.use(cors({
     origin: process.env.FRONTEND_URL || 'http://localhost:9000',
     credentials: true,
 }))
 
-// Rate limiting
 const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // limit each IP to 100 requests per windowMs
+    windowMs: 15 * 60 * 1000,
+    max: 100,
     message: { error: 'Too many requests, please try again later.' },
 })
 app.use('/api/', limiter)
 
-// Tracking rate limiting (more permissive)
 const trackingLimiter = rateLimit({
-    windowMs: 60 * 1000, // 1 minute
-    max: 100, // limit each IP to 100 requests per minute
+    windowMs: 60 * 1000,
+    max: 100,
     message: { error: 'Too many requests, please try again later.' },
 })
 app.use('/t/', trackingLimiter)
 
-// Body parsing
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
-// Health check
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
-// Auth middleware - extract user ID from Supabase JWT
-import { createClient } from '@supabase/supabase-js'
-import { db } from '../db'
-import { users } from '../db/schema'
-import { eq } from 'drizzle-orm'
-
 const supabase = createClient(
     process.env.SUPABASE_URL!,
-    process.env.SUPABASE_ANON_KEY!,
+    process.env.SUPABASE_ANON_KEY!
 )
 
 app.use('/api', async (req, res, next) => {
-    // Skip auth for auth routes
     if (req.path.startsWith('/auth')) {
         return next()
     }
@@ -68,10 +74,10 @@ app.use('/api', async (req, res, next) => {
         if (!error && user) {
             req.headers['x-user-id'] = user.id
 
-            // Auto-create user profile if it doesn't exist yet
             const existing = await db.query.users.findFirst({
                 where: eq(users.id, user.id),
             })
+
             if (!existing) {
                 await db.insert(users).values({
                     id: user.id,
@@ -84,26 +90,11 @@ app.use('/api', async (req, res, next) => {
             }
         }
     } catch {
-        // Continue without user context
+        // Continue without user context.
     }
 
     next()
 })
-
-// API Routes
-import authRoutes from './routes/auth'
-import userRoutes from './routes/users'
-import organizationRoutes from './routes/organizations'
-import serverRoutes from './routes/servers'
-import domainRoutes from './routes/domains'
-import messageRoutes from './routes/messages'
-import webhookRoutes from './routes/webhooks'
-import credentialRoutes from './routes/credentials'
-import routeRoutes from './routes/routes'
-import systemRoutes from './routes/system'
-import trackRoutes from './routes/track'
-import templateRoutes from './routes/templates'
-import outreachRoutes from './routes/outreach'
 
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
@@ -117,12 +108,11 @@ app.use('/api/routes', routeRoutes)
 app.use('/api/system', systemRoutes)
 app.use('/api/templates', templateRoutes)
 app.use('/api/outreach', outreachRoutes)
+app.use('/api/outlook', outlookRoutes)
 
-// Public tracking endpoints — no auth, rate-limited separately
 app.use('/t', trackRoutes)
 
-// Error handling middleware
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error('Error:', err.message)
     console.error('Stack:', err.stack)
 
@@ -132,17 +122,14 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
     })
 })
 
-// 404 handler
-app.use((req: express.Request, res: express.Response) => {
+app.use((_req: express.Request, res: express.Response) => {
     res.status(404).json({ error: 'Not found' })
 })
 
-// Start server
 app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`)
-    console.log(`📧 SkaleClub Mail API ready`)
+    console.log(`Server running on port ${PORT}`)
+    console.log('SkaleClub Mail API ready')
 
-    // Start background jobs
     import('./jobs').then(({ startJobs }) => startJobs())
 })
 

@@ -15,10 +15,11 @@ import { createInsertSchema, createSelectSchema } from 'drizzle-zod'
 // Enums
 export const userRoleEnum = pgEnum('user_role', ['admin', 'member', 'viewer'])
 export const serverModeEnum = pgEnum('server_mode', ['live', 'development'])
-export const serverSendModeEnum = pgEnum('server_send_mode', ['smtp', 'api'])
+export const serverSendModeEnum = pgEnum('server_send_mode', ['smtp', 'api', 'outlook'])
 export const domainVerificationEnum = pgEnum('domain_verification', ['pending', 'verified', 'failed'])
 export const messageStatusEnum = pgEnum('message_status', ['pending', 'queued', 'sent', 'delivered', 'bounced', 'held', 'failed'])
 export const credentialTypeEnum = pgEnum('credential_type', ['smtp', 'api'])
+export const outlookMailboxStatusEnum = pgEnum('outlook_mailbox_status', ['active', 'expired', 'revoked'])
 export const routeModeEnum = pgEnum('route_mode', ['endpoint', 'hold', 'reject'])
 export const webhookEventEnum = pgEnum('webhook_event', [
     'message_sent',
@@ -28,7 +29,8 @@ export const webhookEventEnum = pgEnum('webhook_event', [
     'message_opened',
     'link_clicked',
     'domain_verified',
-    'spam_alert'
+    'spam_alert',
+    'test'
 ])
 
 // Users table
@@ -147,6 +149,28 @@ export const credentials = pgTable('credentials', {
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
+
+// Outlook mailboxes
+export const outlookMailboxes = pgTable('outlook_mailboxes', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    serverId: uuid('server_id').references(() => servers.id).notNull(),
+    email: text('email').notNull(),
+    displayName: text('display_name'),
+    microsoftUserId: text('microsoft_user_id').notNull(),
+    tenantId: text('tenant_id'),
+    scopes: jsonb('scopes').notNull().default([]),
+    accessTokenEncrypted: text('access_token_encrypted').notNull(),
+    refreshTokenEncrypted: text('refresh_token_encrypted').notNull(),
+    tokenExpiresAt: timestamp('token_expires_at').notNull(),
+    status: outlookMailboxStatusEnum('status').default('active').notNull(),
+    lastSyncedAt: timestamp('last_synced_at'),
+    lastSendAt: timestamp('last_send_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    serverEmailUnique: uniqueIndex('outlook_mailboxes_server_email_unique').on(table.serverId, table.email),
+    microsoftUserUnique: uniqueIndex('outlook_mailboxes_microsoft_user_unique').on(table.microsoftUserId),
+}))
 
 // Routes table
 export const routes = pgTable('routes', {
@@ -384,6 +408,7 @@ export const serversRelations = relations(servers, ({ one, many }) => ({
     smtpEndpoints: many(smtpEndpoints),
     httpEndpoints: many(httpEndpoints),
     addressEndpoints: many(addressEndpoints),
+    outlookMailboxes: many(outlookMailboxes),
     trackDomains: many(trackDomains),
     suppressions: many(suppressions),
     statistics: many(statistics),
@@ -400,6 +425,13 @@ export const domainsRelations = relations(domains, ({ one }) => ({
 export const credentialsRelations = relations(credentials, ({ one }) => ({
     server: one(servers, {
         fields: [credentials.serverId],
+        references: [servers.id],
+    }),
+}))
+
+export const outlookMailboxesRelations = relations(outlookMailboxes, ({ one }) => ({
+    server: one(servers, {
+        fields: [outlookMailboxes.serverId],
         references: [servers.id],
     }),
 }))
@@ -480,6 +512,9 @@ export const selectDomainSchema = createSelectSchema(domains)
 export const insertCredentialSchema = createInsertSchema(credentials)
 export const selectCredentialSchema = createSelectSchema(credentials)
 
+export const insertOutlookMailboxSchema = createInsertSchema(outlookMailboxes)
+export const selectOutlookMailboxSchema = createSelectSchema(outlookMailboxes)
+
 export const insertRouteSchema = createInsertSchema(routes)
 export const selectRouteSchema = createSelectSchema(routes)
 
@@ -510,6 +545,9 @@ export type NewDomain = typeof domains.$inferInsert
 
 export type Credential = typeof credentials.$inferSelect
 export type NewCredential = typeof credentials.$inferInsert
+
+export type OutlookMailbox = typeof outlookMailboxes.$inferSelect
+export type NewOutlookMailbox = typeof outlookMailboxes.$inferInsert
 
 export type Route = typeof routes.$inferSelect
 export type NewRoute = typeof routes.$inferInsert

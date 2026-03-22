@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
+import { Building2, Server, Globe, Users, Mail, TrendingUp, AlertCircle, CheckCircle, HardDrive } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
 import { Button } from '../../components/ui/button'
 import { Progress } from '../../components/ui/progress'
 import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../lib/supabase'
-import { Building2, Server, Globe, Users, Mail, TrendingUp, AlertCircle, CheckCircle, HardDrive } from 'lucide-react'
 
 interface DashboardStats {
     organizations: number
@@ -57,29 +57,34 @@ export default function AdminDashboard() {
     const [usageLoading, setUsageLoading] = useState(true)
 
     useEffect(() => {
-        fetchStats()
-        fetchUsage()
+        void fetchStats()
+        void fetchUsage()
     }, [])
 
     async function fetchStats() {
         try {
             const { data: { session } } = await supabase.auth.getSession()
             const token = session?.access_token
+            const headers = { Authorization: `Bearer ${token}` }
 
-            // Fetch organizations (includes servers)
-            const orgsRes = await fetch('/api/organizations', {
-                headers: { 'Authorization': `Bearer ${token}` },
-            })
-            const orgsData = orgsRes.ok ? await orgsRes.json() : { organizations: [] }
-            const orgs = orgsData.organizations || []
+            const orgResponse = await fetch('/api/organizations', { headers })
+            const userResponse = await fetch('/api/users', { headers })
 
-            const serverCount = orgs.reduce((acc: number, org: any) => acc + (org.servers?.length || 0), 0)
+            const orgPayload = orgResponse.ok ? await orgResponse.json() : { organizations: [] }
+            const userPayload = userResponse.ok ? await userResponse.json() : { users: [] }
+            const organizations = orgPayload.organizations || []
+
+            const organizationsCount = organizations.length
+            const serversCount = organizations.reduce(
+                (total: number, org: { servers?: unknown[] }) => total + (org.servers?.length || 0),
+                0
+            )
 
             setStats({
-                organizations: orgs.length,
-                servers: serverCount,
+                organizations: organizationsCount,
+                servers: serversCount,
                 domains: 0,
-                users: 0,
+                users: (userPayload.users || []).length,
                 messages: { sent: 0, delivered: 0, bounced: 0, pending: 0 },
             })
         } catch (error) {
@@ -94,7 +99,7 @@ export default function AdminDashboard() {
             const { data: { session } } = await supabase.auth.getSession()
             const token = session?.access_token
             const response = await fetch('/api/system/usage', {
-                headers: { 'Authorization': `Bearer ${token}` },
+                headers: { Authorization: `Bearer ${token}` },
             })
             if (response.ok) {
                 const data = await response.json()
@@ -121,7 +126,6 @@ export default function AdminDashboard() {
 
     return (
         <div className="space-y-6">
-            {/* Welcome Section */}
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
@@ -129,13 +133,18 @@ export default function AdminDashboard() {
                         Welcome back, {user?.user_metadata?.firstName || user?.email}
                     </p>
                 </div>
-                <Button onClick={() => window.location.href = '/admin/organizations'}>
-                    <Building2 className="w-4 h-4 mr-2" />
-                    New Organization
-                </Button>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => window.location.href = '/admin/organizations'}>
+                        <Building2 className="mr-2 h-4 w-4" />
+                        Organizations
+                    </Button>
+                    <Button onClick={() => window.location.href = '/admin/servers'}>
+                        <Server className="mr-2 h-4 w-4" />
+                        Servers
+                    </Button>
+                </div>
             </div>
 
-            {/* Stats Cards */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -182,7 +191,6 @@ export default function AdminDashboard() {
                 </Card>
             </div>
 
-            {/* Message Stats */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -229,7 +237,6 @@ export default function AdminDashboard() {
                 </Card>
             </div>
 
-            {/* System Storage Usage */}
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0">
                     <div>
@@ -256,8 +263,8 @@ export default function AdminDashboard() {
                                     storagePercent > 90
                                         ? 'bg-red-500'
                                         : storagePercent > 70
-                                        ? 'bg-yellow-500'
-                                        : 'bg-primary'
+                                            ? 'bg-yellow-500'
+                                            : 'bg-primary'
                                 }
                             />
                             <p className="mt-1 text-xs text-muted-foreground">
@@ -268,7 +275,6 @@ export default function AdminDashboard() {
                 </CardContent>
             </Card>
 
-            {/* Per-User Usage */}
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -298,20 +304,20 @@ export default function AdminDashboard() {
                                 return (
                                     <div key={u.id} className="space-y-2">
                                         <div className="flex items-center justify-between text-sm">
-                                            <span className="font-medium truncate max-w-[200px]" title={u.email}>
+                                            <span className="max-w-[200px] truncate font-medium" title={u.email}>
                                                 {displayName}
                                             </span>
-                                            <span className="text-muted-foreground text-xs shrink-0 ml-2">
-                                                {u.messageCount} msg · {formatBytes(u.attachmentBytes)}
+                                            <span className="ml-2 shrink-0 text-xs text-muted-foreground">
+                                                {u.messageCount} msg | {formatBytes(u.attachmentBytes)}
                                             </span>
                                         </div>
                                         <div className="space-y-1">
                                             <div className="flex items-center gap-2">
-                                                <span className="w-20 text-xs text-muted-foreground shrink-0">Messages</span>
+                                                <span className="w-20 shrink-0 text-xs text-muted-foreground">Messages</span>
                                                 <Progress value={msgPercent} className="flex-1" />
                                             </div>
                                             <div className="flex items-center gap-2">
-                                                <span className="w-20 text-xs text-muted-foreground shrink-0">Attachments</span>
+                                                <span className="w-20 shrink-0 text-xs text-muted-foreground">Attachments</span>
                                                 <Progress value={bytesPercent} className="flex-1" indicatorClassName="bg-blue-500" />
                                             </div>
                                         </div>
@@ -323,7 +329,6 @@ export default function AdminDashboard() {
                 </CardContent>
             </Card>
 
-            {/* Quick Actions */}
             <Card>
                 <CardHeader>
                     <CardTitle>Quick Actions</CardTitle>
@@ -332,15 +337,15 @@ export default function AdminDashboard() {
                 <CardContent>
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                         <Button variant="outline" className="justify-start" onClick={() => window.location.href = '/admin/organizations'}>
-                            <Building2 className="w-4 h-4 mr-2" />
+                            <Building2 className="mr-2 h-4 w-4" />
                             View Organizations
                         </Button>
                         <Button variant="outline" className="justify-start" onClick={() => window.location.href = '/admin/users'}>
-                            <Users className="w-4 h-4 mr-2" />
+                            <Users className="mr-2 h-4 w-4" />
                             Manage Users
                         </Button>
                         <Button variant="outline" className="justify-start" onClick={() => window.location.href = '/admin/analytics'}>
-                            <TrendingUp className="w-4 h-4 mr-2" />
+                            <TrendingUp className="mr-2 h-4 w-4" />
                             Open Analytics
                         </Button>
                     </div>
@@ -349,7 +354,7 @@ export default function AdminDashboard() {
 
             {isLoading && (
                 <div className="flex items-center justify-center p-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                    <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
                 </div>
             )}
         </div>

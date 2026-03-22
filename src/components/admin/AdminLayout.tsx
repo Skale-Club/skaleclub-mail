@@ -1,6 +1,7 @@
 import { ReactNode, useState } from 'react'
 import { useLocation } from 'wouter'
 import { useAuth } from '../../hooks/useAuth'
+import { supabase } from '../../lib/supabase'
 import { Button } from '../ui/button'
 import {
     Building2,
@@ -43,8 +44,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     }
 
     const handleLogout = async () => {
-        // Implement logout logic
-        window.location.href = '/login'
+        await supabase.auth.signOut()
+        navigate('/login')
     }
 
     return (

@@ -1,11 +1,8 @@
 import React from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-    Settings,
     Mail,
-    Clock,
     Globe,
-    Shield,
     Bell,
     Key,
     Save,

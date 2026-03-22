@@ -98,6 +98,7 @@ type WebhookEvent =
     | 'link_clicked'
     | 'domain_verified'
     | 'spam_alert'
+    | 'test'
 
 /**
  * Fires all active webhooks subscribed to the given event for a server.

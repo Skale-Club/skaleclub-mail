@@ -13,7 +13,7 @@ const createServerSchema = z.object({
     slug: z.string().min(1).max(50).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with hyphens'),
     organizationId: z.string().uuid(),
     mode: z.enum(['live', 'development']).default('live'),
-    sendMode: z.enum(['smtp', 'api']).default('smtp'),
+    sendMode: z.enum(['smtp', 'api', 'outlook']).default('smtp'),
     description: z.string().optional(),
     defaultFromAddress: z.string().email().optional(),
     defaultFromName: z.string().optional(),
@@ -22,7 +22,7 @@ const createServerSchema = z.object({
 const updateServerSchema = z.object({
     name: z.string().min(1).max(100).optional(),
     mode: z.enum(['live', 'development']).optional(),
-    sendMode: z.enum(['smtp', 'api']).optional(),
+    sendMode: z.enum(['smtp', 'api', 'outlook']).optional(),
     description: z.string().optional(),
     defaultFromAddress: z.string().email().optional(),
     defaultFromName: z.string().optional(),

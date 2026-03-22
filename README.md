@@ -21,6 +21,35 @@ A complete email system built with modern web technologies, inspired by Postal. 
 - 📊 **Statistics** - Email delivery analytics
 - 🔒 **Row Level Security** - Supabase RLS for data isolation
 
+## Outlook Outreach Integration
+
+The backend now includes a Microsoft Outlook / Microsoft 365 outreach integration:
+
+- OAuth 2.0 mailbox connection through Microsoft Graph
+- Encrypted access and refresh token storage
+- Outlook mailbox management per mail server
+- Message delivery through Graph when `sendMode` is `outlook`
+- Test send endpoint at `/api/outlook/mailboxes/:id/send-test`
+
+### Outlook environment variables
+
+Add these variables to your `.env` file:
+
+```env
+MICROSOFT_CLIENT_ID=your_microsoft_app_client_id
+MICROSOFT_CLIENT_SECRET=your_microsoft_app_client_secret
+MICROSOFT_REDIRECT_URI=http://localhost:9001/api/outlook/callback
+OUTLOOK_TOKEN_ENCRYPTION_KEY=use_a_long_random_secret_here
+```
+
+### Outlook database migration
+
+Apply the migration before using the integration:
+
+```text
+supabase/migrations/002_outlook_integration.sql
+```
+
 ## Getting Started
 
 ### Prerequisites

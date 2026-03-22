@@ -1,76 +1,100 @@
 import * as React from 'react'
 import * as ToastPrimitives from '@radix-ui/react-toast'
+import { X } from 'lucide-react'
+import { cn } from '../../lib/utils'
 
-const ToastProvider = ToastPrimitives.Provider
-const ToastViewport = ToastPrimitives.Viewport
-const Toast = ToastPrimitives.Root
-const ToastClose = ToastPrimitives.Close
-const ToastTitle = ToastPrimitives.Title
-const ToastDescription = ToastPrimitives.Description
+type ToastVariant = 'default' | 'success' | 'destructive'
 
-interface ToastProps {
+type ToastItem = {
     id: string
     title?: string
     description?: string
-    variant?: 'default' | 'success' | 'destructive'
+    variant?: ToastVariant
 }
 
-interface ToastContextValue {
-    toasts: ToastProps[]
-    addToast: (toast: Omit<ToastProps, 'id'>) => void
-    removeToast: (id: string) => void
+type ToastInput = Omit<ToastItem, 'id'>
+
+const listeners = new Set<(toasts: ToastItem[]) => void>()
+let toastState: ToastItem[] = []
+
+function emit() {
+    for (const listener of listeners) {
+        listener(toastState)
+    }
 }
 
-export const ToastContext = React.createContext<ToastContextValue>({
-    toasts: [],
-    addToast: () => { },
-    removeToast: () => { },
-})
+function removeToast(id: string) {
+    toastState = toastState.filter((toastItem) => toastItem.id !== id)
+    emit()
+}
+
+export function toast(input: ToastInput | string) {
+    const nextToast: ToastItem =
+        typeof input === 'string'
+            ? { id: crypto.randomUUID(), title: input, variant: 'default' }
+            : { id: crypto.randomUUID(), variant: 'default', ...input }
+
+    toastState = [...toastState, nextToast]
+    emit()
+
+    window.setTimeout(() => removeToast(nextToast.id), 5000)
+
+    return nextToast.id
+}
+
+export function useToast() {
+    return {
+        toast,
+        dismiss: removeToast,
+    }
+}
 
 export function Toaster() {
-    const [toasts, setToasts] = React.useState<ToastProps[]>([])
+    const [toasts, setToasts] = React.useState<ToastItem[]>(toastState)
 
-    const addToast = (toast: Omit<ToastProps, 'id'>) => {
-        const id = crypto.randomUUID()
-        setToasts((prev) => [...prev, { ...toast, id }])
-
-        setTimeout(() => {
-            removeToast(id)
-        }, 5000)
-    }
-
-    const removeToast = (id: string) => {
-        setToasts((prev) => prev.filter((toast) => toast.id !== id))
-    }
+    React.useEffect(() => {
+        listeners.add(setToasts)
+        return () => {
+            listeners.delete(setToasts)
+        }
+    }, [])
 
     return (
-        <ToastContext.Provider value={{ toasts, addToast, removeToast }}>
-            <ToastProvider>
-                <ToastViewport>
-                    {toasts.map((toast) => (
-                        <Toast key={toast.id} className="bg-background border rounded-lg p-4 shadow-lg">
-                            <div className="flex justify-between items-start gap-2">
-                                <div>
-                                    {toast.title && <ToastTitle>{toast.title}</ToastTitle>}
-                                    {toast.description && <ToastDescription>{toast.description}</ToastDescription>}
-                                </div>
-                                <ToastClose className="cursor-pointer">✕</ToastClose>
-                            </div>
-                        </Toast>
-                    ))}
-                </ToastViewport>
-            </ToastProvider>
-        </ToastContext.Provider>
+        <ToastPrimitives.Provider swipeDirection="right">
+            {toasts.map((toastItem) => (
+                <ToastPrimitives.Root
+                    key={toastItem.id}
+                    open
+                    onOpenChange={(open) => {
+                        if (!open) {
+                            removeToast(toastItem.id)
+                        }
+                    }}
+                    className={cn(
+                        'pointer-events-auto relative flex w-full max-w-sm items-start gap-3 overflow-hidden rounded-lg border p-4 shadow-lg',
+                        toastItem.variant === 'success' && 'border-emerald-200 bg-emerald-50 text-emerald-950',
+                        toastItem.variant === 'destructive' && 'border-red-200 bg-red-50 text-red-950',
+                        (!toastItem.variant || toastItem.variant === 'default') && 'bg-background'
+                    )}
+                >
+                    <div className="grid gap-1">
+                        {toastItem.title && (
+                            <ToastPrimitives.Title className="font-medium">
+                                {toastItem.title}
+                            </ToastPrimitives.Title>
+                        )}
+                        {toastItem.description && (
+                            <ToastPrimitives.Description className="text-sm text-muted-foreground">
+                                {toastItem.description}
+                            </ToastPrimitives.Description>
+                        )}
+                    </div>
+                    <ToastPrimitives.Close className="absolute right-3 top-3 rounded text-muted-foreground transition hover:text-foreground">
+                        <X className="h-4 w-4" />
+                    </ToastPrimitives.Close>
+                </ToastPrimitives.Root>
+            ))}
+            <ToastPrimitives.Viewport className="fixed bottom-0 right-0 z-[100] flex max-h-screen w-full flex-col gap-2 p-4 sm:max-w-sm" />
+        </ToastPrimitives.Provider>
     )
-}
-
-export const useToast = () => {
-    const context = React.useContext(ToastContext)
-    if (!context) {
-        throw new Error('useToast must be used within a Toaster')
-    }
-    return {
-        toast: (props: Omit<ToastProps, 'id'>) => context.addToast(props),
-        dismiss: (id: string) => context.removeToast(id),
-    }
 }

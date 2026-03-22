@@ -1,18 +1,6 @@
-import React from 'react'
+import type { ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'wouter'
-import {
-    BarChart3,
-    TrendingUp,
-    Calendar,
-    Mail,
-    Users,
-    Target,
-    Eye,
-    MousePointer,
-    ArrowUp,
-    ArrowDown
-} from 'lucide-react'
+import { TrendingUp, Mail, Users, Target, Eye, MousePointer } from 'lucide-react'
 import { OutreachLayout } from '../../components/outreach/OutreachLayout'
 
 interface AnalyticsData {
@@ -30,22 +18,17 @@ interface AnalyticsData {
         avgReplyRate: number
         avgBounceRate: number
     }
-    campaignStats: Array<{
-        id: string
-        name: string
-        emailsSent: number
-        opens: number
-        clicks: number
-        replies: number
-    }>
-    dailyStats: Array<{
-        date: string
-        emailsSent: number
-        opens: number
-        clicks: number
-        replies: number
-    }>
 }
+
+type DailyStat = {
+    date: string
+    emailsSent: number
+    opens: number
+    clicks: number
+    replies: number
+}
+
+type StatColor = 'blue' | 'green' | 'purple' | 'orange' | 'red'
 
 async function fetchAnalytics(): Promise<AnalyticsData> {
     const response = await fetch('/api/outreach/campaigns/analytics')
@@ -53,26 +36,26 @@ async function fetchAnalytics(): Promise<AnalyticsData> {
     return response.json()
 }
 
-async function fetchCampaignStats(campaignId: string): Promise<{ opens: number; clicks: number; replies: number }> {
-    const response = await fetch(`/api/outreach/campaigns/${campaignId}/stats`)
-    if (!response.ok) throw new Error('Failed to fetch campaign stats')
-    return response.json()
-}
-
-async function fetchDailyStats(): Promise<{ date: string; emailsSent: number; opens: number; clicks: number; replies: number }[]> {
+async function fetchDailyStats(): Promise<DailyStat[]> {
     const response = await fetch('/api/outreach/campaigns/analytics/daily')
     if (!response.ok) throw new Error('Failed to fetch daily stats')
     return response.json()
 }
 
-function StatCard({ title, value, change, icon, color = 'blue' | 'green' | 'purple' | 'orange' | 'red' }: {
+function StatCard({
+    title,
+    value,
+    change,
+    icon,
+    color = 'blue',
+}: {
     title: string
     value: string | number
     change?: number
-    icon: React.ReactNode
-    color?: 'blue' | 'green' | 'purple' | 'orange' | 'red'
+    icon: ReactNode
+    color?: StatColor
 }) {
-    const colorClasses = {
+    const colorClasses: Record<StatColor, string> = {
         blue: 'text-blue-600 dark:text-blue-400',
         green: 'text-green-600 dark:text-green-400',
         purple: 'text-purple-600 dark:text-purple-400',
@@ -83,20 +66,18 @@ function StatCard({ title, value, change, icon, color = 'blue' | 'green' | 'purp
     const displayValue = typeof value === 'number' ? value.toLocaleString() : value
 
     return (
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+        <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
             <div className="flex items-center justify-between">
                 <div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">{title}</p>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                        {displayValue}
-                    </p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{displayValue}</p>
                     {change !== undefined && (
                         <p className={`text-sm ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                             {change >= 0 ? '+' : ''}{change.toFixed(1)}%
                         </p>
                     )}
                 </div>
-                <div className={`p-2 rounded-lg bg-gray-100 dark:bg-gray-700 ${colorClasses[color] || ''}`}>
+                <div className={`rounded-lg bg-gray-100 p-2 dark:bg-gray-700 ${colorClasses[color]}`}>
                     {icon}
                 </div>
             </div>
@@ -104,12 +85,16 @@ function StatCard({ title, value, change, icon, color = 'blue' | 'green' | 'purp
     )
 }
 
-function MiniChart({ data, title, color = 'blue' }: {
+function MiniChart({
+    data,
+    title,
+    color = 'blue',
+}: {
     data: { name: string; value: number }[]
     title: string
     color?: 'blue' | 'green' | 'purple' | 'orange'
 }) {
-    const max = Math.max(...data.map(d => d.value))
+    const max = Math.max(...data.map((d) => d.value))
     const colorClasses = {
         blue: 'bg-blue-500',
         green: 'bg-green-500',
@@ -118,13 +103,13 @@ function MiniChart({ data, title, color = 'blue' }: {
     }
 
     return (
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">{title}</h4>
-            <div className="space-y-2 mt-2">
+        <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+            <h4 className="mb-3 text-sm font-medium text-gray-700 dark:text-gray-300">{title}</h4>
+            <div className="mt-2 space-y-2">
                 {data.map((item, index) => (
                     <div key={index} className="flex items-center gap-2">
-                        <span className="text-sm text-gray-500 dark:text-gray-400 w-20">{item.name}</span>
-                        <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-2">
+                        <span className="w-20 text-sm text-gray-500 dark:text-gray-400">{item.name}</span>
+                        <div className="h-2 flex-1 rounded-full bg-gray-100 dark:bg-gray-700">
                             <div
                                 className={`h-2 rounded-full ${colorClasses[color]}`}
                                 style={{ width: `${(item.value / max) * 100}%` }}
@@ -152,93 +137,89 @@ export function AnalyticsPage() {
     return (
         <OutreachLayout>
             <div className="space-y-6">
-                {/* Header */}
                 <div className="flex items-center justify-between">
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Analytics</h1>
-                        <p className="text-gray-500 dark:text-gray-400 mt-1">
+                        <p className="mt-1 text-gray-500 dark:text-gray-400">
                             Track your cold email campaign performance
                         </p>
                     </div>
                     <div className="flex items-center gap-2">
-                        <select className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm">
+                        <select className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800">
                             <option value="7">Last 7 days</option>
                             <option value="30">Last 30 days</option>
                             <option value="90">Last 90 days</option>
                         </select>
-                        <select className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm">
+                        <select className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800">
                             <option value="all">All Campaigns</option>
                         </select>
                     </div>
                 </div>
 
-                {/* Overview Stats */}
                 {overviewLoading ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                         {[...Array(4)].map((_, i) => (
-                            <div key={i} className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 animate-pulse">
-                                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-2"></div>
-                                <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+                            <div key={i} className="rounded-lg border border-gray-200 bg-white p-4 animate-pulse dark:border-gray-700 dark:bg-gray-800">
+                                <div className="mb-2 h-4 w-1/2 rounded bg-gray-200 dark:bg-gray-700" />
+                                <div className="h-8 w-3/4 rounded bg-gray-200 dark:bg-gray-700" />
                             </div>
                         ))}
                     </div>
                 ) : overview?.overview && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                         <StatCard
                             title="Active Campaigns"
                             value={overview.overview.activeCampaigns}
-                            icon={<Target className="w-6 h-6" />}
+                            icon={<Target className="h-6 w-6" />}
                             color="blue"
                         />
                         <StatCard
                             title="Total Leads"
                             value={overview.overview.totalLeads.toLocaleString()}
-                            icon={<Users className="w-6 h-6" />}
+                            icon={<Users className="h-6 w-6" />}
                             color="green"
                         />
                         <StatCard
                             title="Emails Sent"
                             value={overview.overview.totalEmailsSent.toLocaleString()}
-                            icon={<Mail className="w-6 h-6" />}
+                            icon={<Mail className="h-6 w-6" />}
                             color="purple"
                         />
                         <StatCard
                             title="Avg Open Rate"
                             value={`${overview.overview.avgOpenRate.toFixed(1)}%`}
-                            icon={<Eye className="w-6 h-6" />}
+                            icon={<Eye className="h-6 w-6" />}
                             color="orange"
                             change={2.5}
                         />
                     </div>
                 )}
 
-                {/* Secondary Stats */}
                 {overview?.overview && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                         <StatCard
                             title="Avg Click Rate"
                             value={`${overview.overview.avgClickRate.toFixed(1)}%`}
-                            icon={<MousePointer className="w-5 h-5" />}
+                            icon={<MousePointer className="h-5 w-5" />}
                             color="blue"
                         />
                         <StatCard
                             title="Avg Reply Rate"
                             value={`${overview.overview.avgReplyRate.toFixed(1)}%`}
-                            icon={<TrendingUp className="w-5 h-5" />}
+                            icon={<TrendingUp className="h-5 w-5" />}
                             color="green"
                         />
                         <StatCard
                             title="Avg Bounce Rate"
                             value={`${overview.overview.avgBounceRate.toFixed(1)}%`}
-                            icon={<Target className="w-5 h-5" />}
+                            icon={<Target className="h-5 w-5" />}
                             color="red"
                             change={-0.5}
                         />
                     </div>
                 )}
 
-                {/* Charts */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                     <MiniChart
                         title="Emails Sent Over Time"
                         data={[
@@ -267,17 +248,16 @@ export function AnalyticsPage() {
                     />
                 </div>
 
-                {/* Daily Stats Table */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                    <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+                    <div className="border-b border-gray-200 p-4 dark:border-gray-700">
                         <h3 className="font-semibold text-gray-900 dark:text-white">Daily Performance</h3>
                     </div>
                     {dailyLoading ? (
-                        <div className="p-4 space-y-3">
+                        <div className="space-y-3 p-4">
                             {[...Array(7)].map((_, i) => (
-                                <div key={i} className="animate-pulse flex gap-4">
-                                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-20"></div>
-                                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-16"></div>
+                                <div key={i} className="flex gap-4 animate-pulse">
+                                    <div className="h-4 w-20 rounded bg-gray-200 dark:bg-gray-700" />
+                                    <div className="h-4 w-16 rounded bg-gray-200 dark:bg-gray-700" />
                                 </div>
                             ))}
                         </div>

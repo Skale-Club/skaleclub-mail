@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
+import { Building2, Plus, Search, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
-import { Building2, Plus, Search, Trash2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
 interface Organization {
@@ -17,13 +17,6 @@ interface Organization {
     server_count?: number
 }
 
-interface OrganizationMember {
-    id: string
-    user_id: string
-    organization_id: string
-    role: string
-}
-
 export default function OrganizationsPage() {
     const [organizations, setOrganizations] = useState<Organization[]>([])
     const [isLoading, setIsLoading] = useState(true)
@@ -32,7 +25,7 @@ export default function OrganizationsPage() {
     const [newOrg, setNewOrg] = useState({ name: '', slug: '', timezone: 'UTC' })
 
     useEffect(() => {
-        fetchOrganizations()
+        void fetchOrganizations()
     }, [])
 
     async function fetchOrganizations() {
@@ -42,7 +35,7 @@ export default function OrganizationsPage() {
 
             const response = await fetch('/api/organizations', {
                 headers: {
-                    'Authorization': `Bearer ${token}`,
+                    Authorization: `Bearer ${token}`,
                 },
             })
 
@@ -57,7 +50,7 @@ export default function OrganizationsPage() {
         }
     }
 
-    const filteredOrganizations = organizations.filter(org =>
+    const filteredOrganizations = organizations.filter((org) =>
         org.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         org.slug.toLowerCase().includes(searchQuery.toLowerCase())
     )
@@ -70,7 +63,7 @@ export default function OrganizationsPage() {
             const response = await fetch('/api/organizations', {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${token}`,
+                    Authorization: `Bearer ${token}`,
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(newOrg),
@@ -102,12 +95,12 @@ export default function OrganizationsPage() {
             const response = await fetch(`/api/organizations/${id}`, {
                 method: 'DELETE',
                 headers: {
-                    'Authorization': `Bearer ${token}`,
+                    Authorization: `Bearer ${token}`,
                 },
             })
 
             if (response.ok) {
-                setOrganizations(organizations.filter(org => org.id !== id))
+                setOrganizations(organizations.filter((org) => org.id !== id))
             }
         } catch (error) {
             console.error('Error deleting organization:', error)
@@ -124,24 +117,20 @@ export default function OrganizationsPage() {
 
     return (
         <div className="space-y-6">
-            {/* Header */}
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h2 className="text-2xl font-bold tracking-tight">Organizations</h2>
-                    <p className="text-muted-foreground">
-                        Manage your email organizations
-                    </p>
+                    <p className="text-muted-foreground">Manage your email organizations</p>
                 </div>
                 <Button onClick={() => setShowCreateModal(true)}>
-                    <Plus className="w-4 h-4 mr-2" />
+                    <Plus className="mr-2 h-4 w-4" />
                     New Organization
                 </Button>
             </div>
 
-            {/* Search */}
             <div className="flex items-center gap-4">
                 <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                         placeholder="Search organizations..."
                         value={searchQuery}
@@ -151,15 +140,14 @@ export default function OrganizationsPage() {
                 </div>
             </div>
 
-            {/* Organizations Grid */}
             {isLoading ? (
                 <div className="flex items-center justify-center p-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                    <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
                 </div>
             ) : filteredOrganizations.length === 0 ? (
                 <Card>
                     <CardContent className="flex flex-col items-center justify-center py-12">
-                        <Building2 className="w-12 h-12 text-muted-foreground mb-4" />
+                        <Building2 className="mb-4 h-12 w-12 text-muted-foreground" />
                         <p className="text-muted-foreground">No organizations found</p>
                         <Button className="mt-4" onClick={() => setShowCreateModal(true)}>
                             Create your first organization
@@ -171,14 +159,16 @@ export default function OrganizationsPage() {
                     {filteredOrganizations.map((org) => (
                         <Card
                             key={org.id}
-                            className="hover:shadow-md transition-shadow cursor-pointer"
-                            onClick={() => window.location.href = `/admin/organizations/${org.id}`}
+                            className="cursor-pointer transition-shadow hover:shadow-md"
+                            onClick={() => {
+                                window.location.href = `/admin/organizations/${org.id}`
+                            }}
                         >
                             <CardHeader>
                                 <div className="flex items-start justify-between">
                                     <div className="flex items-center gap-3">
                                         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                                            <Building2 className="w-5 h-5 text-primary" />
+                                            <Building2 className="h-5 w-5 text-primary" />
                                         </div>
                                         <div>
                                             <CardTitle className="text-lg">{org.name}</CardTitle>
@@ -190,10 +180,10 @@ export default function OrganizationsPage() {
                                         size="icon"
                                         onClick={(e) => {
                                             e.stopPropagation()
-                                            handleDeleteOrg(org.id)
+                                            void handleDeleteOrg(org.id)
                                         }}
                                     >
-                                        <Trash2 className="w-4 h-4 text-destructive" />
+                                        <Trash2 className="h-4 w-4 text-destructive" />
                                     </Button>
                                 </div>
                             </CardHeader>
@@ -208,10 +198,9 @@ export default function OrganizationsPage() {
                 </div>
             )}
 
-            {/* Create Modal */}
             {showCreateModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                    <Card className="w-full max-w-md mx-4">
+                    <Card className="mx-4 w-full max-w-md">
                         <CardHeader>
                             <CardTitle>Create Organization</CardTitle>
                             <CardDescription>

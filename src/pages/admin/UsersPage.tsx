@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
+import { useEffect, useMemo, useState } from 'react'
+import { Mail, Plus, Search, Shield, Trash2, UserCog } from 'lucide-react'
 import { Button } from '../../components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
-import { Users, Plus, Search, MoreHorizontal, Trash2, Edit, Shield, Mail } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
+import { apiFetch, matchesSearch } from './helpers'
 
-interface User {
+type UserRecord = {
     id: string
     email: string
     firstName: string | null
@@ -15,315 +15,334 @@ interface User {
     emailVerified: boolean
     createdAt: string
     lastLoginAt: string | null
-    organizations?: {
-        id: string
-        name: string
-        role: string
-    }[]
+}
+
+const emptyCreate = {
+    email: '',
+    password: '',
+    firstName: '',
+    lastName: '',
+    isAdmin: false,
+    sendInvite: true,
+}
+
+const emptyEdit = {
+    firstName: '',
+    lastName: '',
+    isAdmin: false,
+    emailVerified: false,
 }
 
 export default function UsersPage() {
-    const [users, setUsers] = useState<User[]>([])
-    const [isLoading, setIsLoading] = useState(true)
+    const [users, setUsers] = useState<UserRecord[]>([])
     const [searchQuery, setSearchQuery] = useState('')
+    const [isLoading, setIsLoading] = useState(true)
     const [showCreateModal, setShowCreateModal] = useState(false)
-    const [showEditModal, setShowEditModal] = useState(false)
-    const [selectedUser, setSelectedUser] = useState<User | null>(null)
-    const [editData, setEditData] = useState({
-        firstName: '',
-        lastName: '',
-        isAdmin: false,
-    })
+    const [editingUser, setEditingUser] = useState<UserRecord | null>(null)
+    const [createForm, setCreateForm] = useState(emptyCreate)
+    const [editForm, setEditForm] = useState(emptyEdit)
 
     useEffect(() => {
-        fetchUsers()
+        void fetchUsers()
     }, [])
 
     async function fetchUsers() {
+        setIsLoading(true)
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-
-            const response = await fetch('/api/users', {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                },
-            })
-
-            if (response.ok) {
-                const data = await response.json()
-                setUsers(data.users || [])
-            }
+            const data = await apiFetch<{ users: UserRecord[] }>('/api/users')
+            setUsers(data.users || [])
         } catch (error) {
             console.error('Error fetching users:', error)
+            setUsers([])
         } finally {
             setIsLoading(false)
         }
     }
 
-    const filteredUsers = users.filter(user =>
-        user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (user.firstName?.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        user.lastName?.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-
-    const handleUpdateUser = async (id: string, updates: Partial<User>) => {
+    async function handleCreateUser() {
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-
-            const response = await fetch(`/api/users/${id}`, {
-                method: 'PATCH',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(updates),
+            const data = await apiFetch<{ user: UserRecord }>('/api/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(createForm),
             })
-
-            if (response.ok) {
-                const data = await response.json()
-                setUsers(users.map(u => u.id === id ? data.user : u))
-                setShowEditModal(false)
-                setSelectedUser(null)
-            }
+            setUsers((current) => [data.user, ...current])
+            setCreateForm(emptyCreate)
+            setShowCreateModal(false)
         } catch (error) {
-            console.error('Error updating user:', error)
+            window.alert(error instanceof Error ? error.message : 'Failed to create user')
         }
     }
 
-    const handleDeleteUser = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
+    function openEditModal(user: UserRecord) {
+        setEditingUser(user)
+        setEditForm({
+            firstName: user.firstName || '',
+            lastName: user.lastName || '',
+            isAdmin: user.isAdmin,
+            emailVerified: user.emailVerified,
+        })
+    }
+
+    async function handleUpdateUser() {
+        if (!editingUser) {
             return
         }
 
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-
-            const response = await fetch(`/api/users/${id}`, {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                },
-            })
-
-            if (response.ok) {
-                setUsers(users.filter(u => u.id !== id))
-            }
-        } catch (error) {
-            console.error('Error deleting user:', error)
-        }
-    }
-
-    const handleToggleAdmin = async (id: string, isAdmin: boolean) => {
-        try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-
-            const response = await fetch(`/api/users/${id}`, {
+            const data = await apiFetch<{ user: UserRecord }>(`/api/users/${editingUser.id}`, {
                 method: 'PATCH',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ isAdmin }),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(editForm),
             })
-
-            if (response.ok) {
-                setUsers(users.map(u => u.id === id ? { ...u, isAdmin } : u))
-            }
+            setUsers((current) => current.map((user) => user.id === editingUser.id ? data.user : user))
+            setEditingUser(null)
         } catch (error) {
-            console.error('Error updating user admin status:', error)
+            window.alert(error instanceof Error ? error.message : 'Failed to update user')
         }
     }
+
+    async function handleResendInvite(userId: string) {
+        try {
+            await apiFetch(`/api/users/${userId}/resend-invite`, { method: 'POST' })
+            window.alert('Invitation sent.')
+        } catch (error) {
+            window.alert(error instanceof Error ? error.message : 'Failed to resend invitation')
+        }
+    }
+
+    async function handleDeleteUser(userId: string) {
+        if (!window.confirm('Delete this user?')) {
+            return
+        }
+
+        try {
+            await apiFetch(`/api/users/${userId}`, { method: 'DELETE' })
+            setUsers((current) => current.filter((user) => user.id !== userId))
+            if (editingUser?.id === userId) {
+                setEditingUser(null)
+            }
+        } catch (error) {
+            window.alert(error instanceof Error ? error.message : 'Failed to delete user')
+        }
+    }
+
+    const filteredUsers = useMemo(
+        () =>
+            users.filter((user) =>
+                matchesSearch(user.email, searchQuery) ||
+                matchesSearch(user.firstName || '', searchQuery) ||
+                matchesSearch(user.lastName || '', searchQuery)
+            ),
+        [users, searchQuery]
+    )
 
     return (
         <div className="space-y-6">
-            {/* Header */}
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h2 className="text-2xl font-bold tracking-tight">Users</h2>
-                    <p className="text-muted-foreground">
-                        Manage system users and their </p>
+                    <p className="text-muted-foreground">Manage administrator access and invitations.</p>
                 </div>
                 <Button onClick={() => setShowCreateModal(true)}>
-                    <Plus className="w-4 h-4 mr-2" />
+                    <Plus className="mr-2 h-4 w-4" />
                     New User
                 </Button>
             </div>
 
-            {/* Search */}
-            <div className="flex items-center gap-4">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Search users..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                </div>
-            </div>
+            <Card>
+                <CardContent className="pt-6">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            className="pl-10"
+                            placeholder="Search by email or name"
+                            value={searchQuery}
+                            onChange={(event) => setSearchQuery(event.target.value)}
+                        />
+                    </div>
+                </CardContent>
+            </Card>
 
-            {/* Users List */}
-            {isLoading ? (
-                <div className="flex justify-center p-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                </div>
-            ) : (
-                <div className="rounded-md border">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">User</th>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Name</th>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Admin</th>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Verified</th>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Last Login</th>
-                                <th className="px-4 py-3 text-right text-sm font-medium text-gray-500">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 bg-white">
-                            {filteredUsers.length === 0 ? (
-                                <tr>
-                                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
-                                        No users found. Create a user to get started.
-                                    </td>
-                                </tr>
-                            ) : (
-                                filteredUsers.map((user) => (
-                                    <tr key={user.id}>
-                                        <td className="px-4 py-3">
-                                            <div className="flex items-center gap-3">
-                                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold">
-                                                    {user.email.charAt(0).toUpperCase()}
-                                                </div>
-                                                <div>
-                                                    <div className="font-medium">{user.email}</div>
-                                                    <div className="text-sm text-muted-foreground">
-                                                        {user.organizations?.length || 0} organizations
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <div className="font-medium">
-                                                {user.firstName} {user.lastName}
-                                            </div>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <Button
-                                                variant={user.isAdmin ? 'default' : 'outline'}
-                                                size="sm"
-                                                onClick={() => handleToggleAdmin(user.id, !user.isAdmin)}
-                                            >
-                                                {user.isAdmin ? (
-                                                    <Shield className="w-4 h-4 text-green-500" />
-                                                ) : (
-                                                    <Shield className="w-4 h-4 text-gray-400" />
-                                                )}
-                                            </Button>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${user.emailVerified
-                                                    ? 'bg-green-100 text-green-800'
-                                                    : 'bg-yellow-100 text-yellow-800'
-                                                }`}>
-                                                {user.emailVerified ? 'Verified' : 'Pending'}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <span className="text-sm text-gray-500">
-                                                {user.lastLoginAt
-                                                    ? new Date(user.lastLoginAt).toLocaleDateString()
-                                                    : 'Never'}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3 text-right">
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => {
-                                                    setSelectedUser(user)
-                                                    setEditData({
-                                                        firstName: user.firstName || '',
-                                                        lastName: user.lastName || '',
-                                                        isAdmin: user.isAdmin,
-                                                    })
-                                                    setShowEditModal(true)
-                                                }}
-                                            >
-                                                <Edit className="w-4 h-4" />
-                                            </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => handleDeleteUser(user.id)}
-                                            >
-                                                <Trash2 className="w-4 h-4 text-red-500" />
-                                            </Button>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
+            <Card>
+                <CardHeader>
+                    <CardTitle>User directory</CardTitle>
+                    <CardDescription>{filteredUsers.length} users</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    {isLoading ? (
+                        <p className="py-8 text-center text-muted-foreground">Loading users...</p>
+                    ) : filteredUsers.length === 0 ? (
+                        <p className="py-8 text-center text-muted-foreground">No users found.</p>
+                    ) : (
+                        filteredUsers.map((user) => (
+                            <div key={user.id} className="rounded-lg border p-4">
+                                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                    <div className="space-y-1">
+                                        <div className="flex items-center gap-2">
+                                            <Mail className="h-4 w-4 text-primary" />
+                                            <span className="font-medium">{user.email}</span>
+                                            {user.isAdmin && (
+                                                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                                                    Admin
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-sm text-muted-foreground">
+                                            {[user.firstName, user.lastName].filter(Boolean).join(' ') || 'No profile name'}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                            Created {new Date(user.createdAt).toLocaleDateString()}
+                                            {user.lastLoginAt ? ` - Last login ${new Date(user.lastLoginAt).toLocaleString()}` : ''}
+                                        </p>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        <Button variant="outline" size="sm" onClick={() => openEditModal(user)}>
+                                            <UserCog className="mr-2 h-4 w-4" />
+                                            Edit
+                                        </Button>
+                                        <Button variant="outline" size="sm" onClick={() => handleResendInvite(user.id)}>
+                                            <Shield className="mr-2 h-4 w-4" />
+                                            Resend invite
+                                        </Button>
+                                        <Button variant="outline" size="sm" onClick={() => handleDeleteUser(user.id)}>
+                                            <Trash2 className="h-4 w-4 text-destructive" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </CardContent>
+            </Card>
+
+            {showCreateModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <Card className="w-full max-w-lg">
+                        <CardHeader>
+                            <CardTitle>Create user</CardTitle>
+                            <CardDescription>Create a user directly or send an invitation.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <Field label="Email">
+                                <Input
+                                    type="email"
+                                    value={createForm.email}
+                                    onChange={(event) => setCreateForm((current) => ({ ...current, email: event.target.value }))}
+                                />
+                            </Field>
+                            <Field label="Password">
+                                <Input
+                                    type="password"
+                                    value={createForm.password}
+                                    onChange={(event) => setCreateForm((current) => ({ ...current, password: event.target.value }))}
+                                />
+                            </Field>
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <Field label="First name">
+                                    <Input
+                                        value={createForm.firstName}
+                                        onChange={(event) => setCreateForm((current) => ({ ...current, firstName: event.target.value }))}
+                                    />
+                                </Field>
+                                <Field label="Last name">
+                                    <Input
+                                        value={createForm.lastName}
+                                        onChange={(event) => setCreateForm((current) => ({ ...current, lastName: event.target.value }))}
+                                    />
+                                </Field>
+                            </div>
+                            <Toggle
+                                label="Administrator"
+                                checked={createForm.isAdmin}
+                                onChange={(checked) => setCreateForm((current) => ({ ...current, isAdmin: checked }))}
+                            />
+                            <Toggle
+                                label="Send invite instead of keeping password"
+                                checked={createForm.sendInvite}
+                                onChange={(checked) => setCreateForm((current) => ({ ...current, sendInvite: checked }))}
+                            />
+                            <div className="flex justify-end gap-2">
+                                <Button variant="outline" onClick={() => setShowCreateModal(false)}>
+                                    Cancel
+                                </Button>
+                                <Button onClick={handleCreateUser} disabled={!createForm.email || !createForm.password}>
+                                    Create user
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
                 </div>
             )}
 
-            {/* Edit User Modal */}
-            {showEditModal && selectedUser && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                    <div className="bg-white rounded-lg p-6 max-w-md w-full">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Edit User</CardTitle>
-                                <CardDescription>
-                                    Update user information
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                <div>
-                                    <Label htmlFor="firstName">First Name</Label>
+            {editingUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <Card className="w-full max-w-lg">
+                        <CardHeader>
+                            <CardTitle>Edit user</CardTitle>
+                            <CardDescription>{editingUser.email}</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <Field label="First name">
                                     <Input
-                                        id="firstName"
-                                        value={editData.firstName}
-                                        onChange={(e) => setEditData({ ...editData, firstName: e.target.value })}
+                                        value={editForm.firstName}
+                                        onChange={(event) => setEditForm((current) => ({ ...current, firstName: event.target.value }))}
                                     />
-                                </div>
-                                <div>
-                                    <Label htmlFor="lastName">Last Name</Label>
+                                </Field>
+                                <Field label="Last name">
                                     <Input
-                                        id="lastName"
-                                        value={editData.lastName}
-                                        onChange={(e) => setEditData({ ...editData, lastName: e.target.value })}
+                                        value={editForm.lastName}
+                                        onChange={(event) => setEditForm((current) => ({ ...current, lastName: event.target.value }))}
                                     />
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <input
-                                        type="checkbox"
-                                        id="isAdmin"
-                                        checked={editData.isAdmin}
-                                        onChange={(e) => setEditData({ ...editData, isAdmin: e.target.checked })}
-                                    />
-                                    <Label htmlFor="isAdmin">Administrator</Label>
-                                </div>
-                                <div className="flex justify-end gap-2 pt-4">
-                                    <Button variant="outline" onClick={() => {
-                                        setShowEditModal(false)
-                                        setSelectedUser(null)
-                                    }}>
-                                        Cancel
-                                    </Button>
-                                    <Button onClick={() => handleUpdateUser(selectedUser.id, editData)}>
-                                        Save Changes
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
+                                </Field>
+                            </div>
+                            <Toggle
+                                label="Administrator"
+                                checked={editForm.isAdmin}
+                                onChange={(checked) => setEditForm((current) => ({ ...current, isAdmin: checked }))}
+                            />
+                            <Toggle
+                                label="Email verified"
+                                checked={editForm.emailVerified}
+                                onChange={(checked) => setEditForm((current) => ({ ...current, emailVerified: checked }))}
+                            />
+                            <div className="flex justify-end gap-2">
+                                <Button variant="outline" onClick={() => setEditingUser(null)}>
+                                    Cancel
+                                </Button>
+                                <Button onClick={handleUpdateUser}>Save changes</Button>
+                            </div>
+                        </CardContent>
+                    </Card>
                 </div>
             )}
         </div>
+    )
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+    return (
+        <div className="space-y-2">
+            <Label>{label}</Label>
+            {children}
+        </div>
+    )
+}
+
+function Toggle({
+    label,
+    checked,
+    onChange,
+}: {
+    label: string
+    checked: boolean
+    onChange: (checked: boolean) => void
+}) {
+    return (
+        <label className="flex items-center justify-between rounded-lg border p-3 text-sm">
+            <span>{label}</span>
+            <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+        </label>
     )
 }

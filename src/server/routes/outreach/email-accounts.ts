@@ -1,9 +1,7 @@
-
-
-import { Router } from 'express'
+import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { db } from '../../../db'
-import { emailAccounts } from '../../../db/schema'
+import { emailAccounts, organizationUsers } from '../../../db/schema'
 import { eq, and } from 'drizzle-orm'
 
 const router = Router()

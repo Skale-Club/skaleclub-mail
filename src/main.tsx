@@ -5,21 +5,23 @@ import { Route, Switch } from 'wouter'
 import { Toaster } from './components/ui/toaster'
 import { ThemeProvider } from './components/theme-provider'
 import { useAuth } from './hooks/useAuth'
+import AdminLayout from './components/admin/AdminLayout'
 import './index.css'
 
-// Pages
 import Login from './pages/Login'
 
-// Admin Pages
-import AdminLayout from './components/admin/AdminLayout'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import OrganizationsPage from './pages/admin/OrganizationsPage'
 import OrganizationDetailPage from './pages/admin/OrganizationDetailPage'
+import ServersPage from './pages/admin/ServersPage'
+import DomainsPage from './pages/admin/DomainsPage'
 import UsersPage from './pages/admin/UsersPage'
 import AnalyticsPage from './pages/admin/AnalyticsPage'
+import CredentialsPage from './pages/admin/CredentialsPage'
+import RoutesPage from './pages/admin/RoutesPage'
+import WebhooksPage from './pages/admin/WebhooksPage'
+import MessagesPage from './pages/admin/MessagesPage'
 
-// Outreach Pages
-import { OutreachLayout } from './components/outreach/OutreachLayout'
 import { OutreachDashboard } from './pages/outreach/OutreachDashboard'
 import { CampaignsPage } from './pages/outreach/CampaignsPage'
 import { LeadsPage } from './pages/outreach/LeadsPage'
@@ -28,15 +30,16 @@ import { SequencesPage } from './pages/outreach/SequencesPage'
 import { AnalyticsPage as OutreachAnalyticsPage } from './pages/outreach/AnalyticsPage'
 import { SettingsPage } from './pages/outreach/SettingsPage'
 
-// Simple auth check component
+const queryClient = new QueryClient()
+
 function AuthCheck({ children }: { children: React.ReactNode }) {
     const { user, isLoading } = useAuth()
     const pathname = window.location.pathname
 
     if (isLoading) {
         return (
-            <div className="flex items-center justify-center min-h-screen">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <div className="flex min-h-screen items-center justify-center">
+                <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
             </div>
         )
     }
@@ -51,43 +54,92 @@ function AuthCheck({ children }: { children: React.ReactNode }) {
 
 function App() {
     return (
-        <ThemeProvider defaultTheme="dark">
-            <QueryClientProvider client={new QueryClient()}>
+        <ThemeProvider defaultTheme="system">
+            <QueryClientProvider client={queryClient}>
                 <div className="min-h-screen bg-background">
                     <Switch>
-                        {/* Auth routes */}
                         <Route path="/login">
                             <Login />
                         </Route>
 
-                        {/* Admin routes */}
                         <Route path="/admin">
                             <AuthCheck>
-                                <AdminLayout><AdminDashboard /></AdminLayout>
+                                <AdminLayout>
+                                    <AdminDashboard />
+                                </AdminLayout>
                             </AuthCheck>
                         </Route>
                         <Route path="/admin/organizations">
                             <AuthCheck>
-                                <AdminLayout><OrganizationsPage /></AdminLayout>
+                                <AdminLayout>
+                                    <OrganizationsPage />
+                                </AdminLayout>
                             </AuthCheck>
                         </Route>
                         <Route path="/admin/organizations/:id">
                             <AuthCheck>
-                                <AdminLayout><OrganizationDetailPage /></AdminLayout>
+                                <AdminLayout>
+                                    <OrganizationDetailPage />
+                                </AdminLayout>
+                            </AuthCheck>
+                        </Route>
+                        <Route path="/admin/servers">
+                            <AuthCheck>
+                                <AdminLayout>
+                                    <ServersPage />
+                                </AdminLayout>
+                            </AuthCheck>
+                        </Route>
+                        <Route path="/admin/domains">
+                            <AuthCheck>
+                                <AdminLayout>
+                                    <DomainsPage />
+                                </AdminLayout>
                             </AuthCheck>
                         </Route>
                         <Route path="/admin/users">
                             <AuthCheck>
-                                <AdminLayout><UsersPage /></AdminLayout>
+                                <AdminLayout>
+                                    <UsersPage />
+                                </AdminLayout>
+                            </AuthCheck>
+                        </Route>
+                        <Route path="/admin/credentials">
+                            <AuthCheck>
+                                <AdminLayout>
+                                    <CredentialsPage />
+                                </AdminLayout>
+                            </AuthCheck>
+                        </Route>
+                        <Route path="/admin/routes">
+                            <AuthCheck>
+                                <AdminLayout>
+                                    <RoutesPage />
+                                </AdminLayout>
+                            </AuthCheck>
+                        </Route>
+                        <Route path="/admin/webhooks">
+                            <AuthCheck>
+                                <AdminLayout>
+                                    <WebhooksPage />
+                                </AdminLayout>
+                            </AuthCheck>
+                        </Route>
+                        <Route path="/admin/messages">
+                            <AuthCheck>
+                                <AdminLayout>
+                                    <MessagesPage />
+                                </AdminLayout>
                             </AuthCheck>
                         </Route>
                         <Route path="/admin/analytics">
                             <AuthCheck>
-                                <AdminLayout><AnalyticsPage /></AdminLayout>
+                                <AdminLayout>
+                                    <AnalyticsPage />
+                                </AdminLayout>
                             </AuthCheck>
                         </Route>
 
-                        {/* Outreach routes */}
                         <Route path="/outreach">
                             <AuthCheck>
                                 <OutreachDashboard />
@@ -124,10 +176,11 @@ function App() {
                             </AuthCheck>
                         </Route>
 
-                        {/* Default route */}
                         <Route path="/">
                             <AuthCheck>
-                                <AdminLayout><AdminDashboard /></AdminLayout>
+                                <AdminLayout>
+                                    <AdminDashboard />
+                                </AdminLayout>
                             </AuthCheck>
                         </Route>
                     </Switch>
