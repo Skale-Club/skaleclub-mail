@@ -28,7 +28,15 @@ import { LeadsPage } from './pages/outreach/LeadsPage'
 import { InboxesPage } from './pages/outreach/InboxesPage'
 import { SequencesPage } from './pages/outreach/SequencesPage'
 import { AnalyticsPage as OutreachAnalyticsPage } from './pages/outreach/AnalyticsPage'
-import { SettingsPage } from './pages/outreach/SettingsPage'
+import { SettingsPage as OutreachSettingsPage } from './pages/outreach/SettingsPage'
+
+import InboxPage from './pages/mail/InboxPage'
+import SentPage from './pages/mail/SentPage'
+import DraftsPage from './pages/mail/DraftsPage'
+import TrashPage from './pages/mail/TrashPage'
+import ComposePage from './pages/mail/ComposePage'
+import MailSettingsPage from './pages/mail/SettingsPage'
+import SearchPage from './pages/mail/SearchPage'
 
 const queryClient = new QueryClient()
 
@@ -172,7 +180,48 @@ function App() {
                         </Route>
                         <Route path="/outreach/settings">
                             <AuthCheck>
-                                <SettingsPage />
+                                <OutreachSettingsPage />
+                            </AuthCheck>
+                        </Route>
+
+                        <Route path="/mail/inbox">
+                            <AuthCheck>
+                                <InboxPage />
+                            </AuthCheck>
+                        </Route>
+                        <Route path="/mail/sent">
+                            <AuthCheck>
+                                <SentPage />
+                            </AuthCheck>
+                        </Route>
+                        <Route path="/mail/drafts">
+                            <AuthCheck>
+                                <DraftsPage />
+                            </AuthCheck>
+                        </Route>
+                        <Route path="/mail/trash">
+                            <AuthCheck>
+                                <TrashPage />
+                            </AuthCheck>
+                        </Route>
+                        <Route path="/mail/compose">
+                            <AuthCheck>
+                                <ComposePage />
+                            </AuthCheck>
+                        </Route>
+                        <Route path="/mail/settings">
+                            <AuthCheck>
+                                <MailSettingsPage />
+                            </AuthCheck>
+                        </Route>
+                        <Route path="/mail/search">
+                            <AuthCheck>
+                                <SearchPage />
+                            </AuthCheck>
+                        </Route>
+                        <Route path="/mail">
+                            <AuthCheck>
+                                <InboxPage />
                             </AuthCheck>
                         </Route>
 

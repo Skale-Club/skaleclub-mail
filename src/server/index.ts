@@ -21,6 +21,7 @@ import trackRoutes from './routes/track'
 import templateRoutes from './routes/templates'
 import outreachRoutes from './routes/outreach'
 import outlookRoutes from './routes/outlook'
+import mailRoutes from './routes/mail'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -126,6 +127,7 @@ app.use('/api/system', systemRoutes)
 app.use('/api/templates', templateRoutes)
 app.use('/api/outreach', outreachRoutes)
 app.use('/api/outlook', outlookRoutes)
+app.use('/api/mail', mailRoutes)
 
 app.use('/t', trackRoutes)
 

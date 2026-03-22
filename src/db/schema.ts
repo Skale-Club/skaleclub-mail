@@ -1014,3 +1014,128 @@ export type NewOutreachEmail = typeof outreachEmails.$inferInsert
 
 export type OutreachAnalytic = typeof outreachAnalytics.$inferSelect
 export type NewOutreachAnalytic = typeof outreachAnalytics.$inferInsert
+
+// ============================================
+// USER MAIL MODULE (Webmail)
+// ============================================
+
+// User Mailboxes (user's email accounts for webmail)
+export const mailboxes = pgTable('mailboxes', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').references(() => users.id).notNull(),
+    email: text('email').notNull(),
+    displayName: text('display_name'),
+    // SMTP settings
+    smtpHost: text('smtp_host').notNull(),
+    smtpPort: integer('smtp_port').default(587).notNull(),
+    smtpUsername: text('smtp_username').notNull(),
+    smtpPasswordEncrypted: text('smtp_password_encrypted').notNull(),
+    smtpSecure: boolean('smtp_secure').default(true).notNull(),
+    // IMAP settings
+    imapHost: text('imap_host').notNull(),
+    imapPort: integer('imap_port').default(993).notNull(),
+    imapUsername: text('imap_username').notNull(),
+    imapPasswordEncrypted: text('imap_password_encrypted').notNull(),
+    imapSecure: boolean('imap_secure').default(true).notNull(),
+    // Status
+    isDefault: boolean('is_default').default(false).notNull(),
+    isActive: boolean('is_active').default(true).notNull(),
+    lastSyncAt: timestamp('last_sync_at'),
+    syncError: text('sync_error'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
+// Mail Folders (INBOX, SENT, DRAFTS, etc.)
+export const mailFolders = pgTable('mail_folders', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    mailboxId: uuid('mailbox_id').references(() => mailboxes.id).notNull(),
+    remoteId: text('remote_id').notNull(),
+    name: text('name').notNull(),
+    type: text('type').default('custom'), // 'inbox', 'sent', 'drafts', 'trash', 'spam', 'custom'
+    unreadCount: integer('unread_count').default(0).notNull(),
+    totalCount: integer('total_count').default(0).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    mailboxRemoteUnique: uniqueIndex('mail_folder_mailbox_remote_unique').on(table.mailboxId, table.remoteId),
+}))
+
+// Mail Messages (emails)
+export const mailMessages = pgTable('mail_messages', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    mailboxId: uuid('mailbox_id').references(() => mailboxes.id).notNull(),
+    folderId: uuid('folder_id').references(() => mailFolders.id).notNull(),
+    // RFC 2822
+    messageId: text('message_id'),
+    inReplyTo: text('in_reply_to'),
+    references: text('references'),
+    // Headers
+    subject: text('subject'),
+    fromAddress: text('from_address'),
+    fromName: text('from_name'),
+    toAddresses: jsonb('to_addresses').default([]),
+    ccAddresses: jsonb('cc_addresses').default([]),
+    bccAddresses: jsonb('bcc_addresses').default([]),
+    // Content
+    plainBody: text('plain_body'),
+    htmlBody: text('html_body'),
+    headers: jsonb('headers').default({}),
+    // Attachments
+    attachments: jsonb('attachments').default([]),
+    hasAttachments: boolean('has_attachments').default(false).notNull(),
+    // Status
+    isRead: boolean('is_read').default(false).notNull(),
+    isStarred: boolean('is_starred').default(false).notNull(),
+    isDeleted: boolean('is_deleted').default(false).notNull(),
+    isDraft: boolean('is_draft').default(false).notNull(),
+    // Remote
+    remoteUid: integer('remote_uid'),
+    remoteDate: timestamp('remote_date'),
+    size: integer('size').default(0),
+    // Timestamps
+    receivedAt: timestamp('received_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    mailboxUidUnique: uniqueIndex('mail_message_mailbox_uid_unique').on(table.mailboxId, table.remoteUid),
+}))
+
+// Mailbox Relations
+export const mailboxesRelations = relations(mailboxes, ({ one, many }) => ({
+    user: one(users, {
+        fields: [mailboxes.userId],
+        references: [users.id],
+    }),
+    folders: many(mailFolders),
+    messages: many(mailMessages),
+}))
+
+export const mailFoldersRelations = relations(mailFolders, ({ one, many }) => ({
+    mailbox: one(mailboxes, {
+        fields: [mailFolders.mailboxId],
+        references: [mailboxes.id],
+    }),
+    messages: many(mailMessages),
+}))
+
+export const mailMessagesRelations = relations(mailMessages, ({ one }) => ({
+    mailbox: one(mailboxes, {
+        fields: [mailMessages.mailboxId],
+        references: [mailboxes.id],
+    }),
+    folder: one(mailFolders, {
+        fields: [mailMessages.folderId],
+        references: [mailFolders.id],
+    }),
+}))
+
+// Types
+export type Mailbox = typeof mailboxes.$inferSelect
+export type NewMailbox = typeof mailboxes.$inferInsert
+
+export type MailFolder = typeof mailFolders.$inferSelect
+export type NewMailFolder = typeof mailFolders.$inferInsert
+
+export type MailMessage = typeof mailMessages.$inferSelect
+export type NewMailMessage = typeof mailMessages.$inferInsert
