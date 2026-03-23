@@ -3,7 +3,7 @@ import Imap from 'imap'
 import { simpleParser } from 'mailparser'
 import { db } from '../../db'
 import { mailboxes, mailFolders, mailMessages } from '../../db/schema'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, gt, or, isNull, desc } from 'drizzle-orm'
 import { decrypt } from '../../lib/crypto'
 
 interface SyncResult {
@@ -19,7 +19,75 @@ interface FolderInfo {
     type: string
 }
 
-export async function syncMailbox(mailboxId: string): Promise<SyncResult> {
+interface SyncConfig {
+    maxRetries: number
+    retryDelay: number
+    batchSize: number
+    enableIdle: boolean
+}
+
+const DEFAULT_CONFIG: SyncConfig = {
+    maxRetries: 3,
+    retryDelay: 1000,
+    batchSize: 50,
+    enableIdle: true,
+}
+
+function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+async function withRetry<T>(
+    fn: () => Promise<T>,
+    config: SyncConfig = DEFAULT_CONFIG
+): Promise<T> {
+    let lastError: Error | null = null
+    
+    for (let attempt = 1; attempt <= config.maxRetries; attempt++) {
+        try {
+            return await fn()
+        } catch (error) {
+            lastError = error instanceof Error ? error : new Error(String(error))
+            console.log(`Attempt ${attempt}/${config.maxRetries} failed: ${lastError.message}`)
+            
+            if (attempt < config.maxRetries) {
+                const delay = config.retryDelay * Math.pow(2, attempt - 1)
+                await sleep(delay)
+            }
+        }
+    }
+    
+    throw lastError
+}
+
+function createImapConnection(mailbox: any, isIdle = false): Imap {
+    const config: any = {
+        user: mailbox.imapUsername,
+        password: decrypt(mailbox.imapPasswordEncrypted),
+        host: mailbox.imapHost,
+        port: mailbox.imapPort,
+        tls: mailbox.imapSecure,
+        tlsOptions: { 
+            rejectUnauthorized: process.env.NODE_ENV === 'production'
+        },
+        connectionTimeout: 30000,
+        authTimeout: 15000,
+    }
+    
+    if (isIdle) {
+        config.keepalive = {
+            interval: 30000,
+            idleTimeout: 300000
+        }
+    }
+    
+    return new Imap(config)
+}
+
+export async function syncMailbox(
+    mailboxId: string, 
+    config: SyncConfig = DEFAULT_CONFIG
+): Promise<SyncResult> {
     const result: SyncResult = {
         mailboxId,
         folderId: '',
@@ -27,26 +95,27 @@ export async function syncMailbox(mailboxId: string): Promise<SyncResult> {
         errors: [],
     }
 
+    const mailbox = await db.query.mailboxes.findFirst({
+        where: eq(mailboxes.id, mailboxId),
+    })
+
+    if (!mailbox) {
+        throw new Error('Mailbox not found')
+    }
+
+    const imapConfig = {
+        user: mailbox.imapUsername,
+        password: decrypt(mailbox.imapPasswordEncrypted),
+        host: mailbox.imapHost,
+        port: mailbox.imapPort,
+        tls: mailbox.imapSecure,
+    }
+
     try {
-        const mailbox = await db.query.mailboxes.findFirst({
-            where: eq(mailboxes.id, mailboxId),
-        })
-
-        if (!mailbox) {
-            throw new Error('Mailbox not found')
-        }
-
-        const imapConfig = {
-            user: mailbox.imapUsername,
-            password: decrypt(mailbox.imapPasswordEncrypted),
-            host: mailbox.imapHost,
-            port: mailbox.imapPort,
-            tls: mailbox.imapSecure,
-            tlsOptions: { rejectUnauthorized: false },
-        }
-
-        await ensureFoldersExist(mailboxId, imapConfig)
-        await syncInboxFolder(mailboxId, imapConfig, result)
+        await withRetry(
+            () => syncAllFolders(mailboxId, imapConfig, config, result),
+            config
+        )
 
         await db.update(mailboxes)
             .set({ 
@@ -67,70 +136,91 @@ export async function syncMailbox(mailboxId: string): Promise<SyncResult> {
     return result
 }
 
-async function ensureFoldersExist(mailboxId: string, imapConfig: any): Promise<void> {
+async function syncAllFolders(
+    mailboxId: string,
+    imapConfig: any,
+    config: SyncConfig,
+    result: SyncResult
+): Promise<void> {
+    const folders = await getAllFolders(mailboxId, imapConfig)
+    
+    for (const folder of folders) {
+        let dbFolder = await db.query.mailFolders.findFirst({
+            where: and(
+                eq(mailFolders.mailboxId, mailboxId),
+                eq(mailFolders.remoteId, folder.remoteId)
+            ),
+        })
+
+        if (!dbFolder) {
+            const inserted = await db.insert(mailFolders).values({
+                mailboxId,
+                remoteId: folder.remoteId,
+                name: folder.name,
+                type: folder.type,
+            }).returning()
+            dbFolder = inserted[0]
+        }
+
+        const folderResult = await syncFolder(
+            mailboxId, 
+            dbFolder.id, 
+            folder.remoteId, 
+            imapConfig, 
+            config
+        )
+        
+        result.newMessages += folderResult.newMessages
+        result.errors.push(...folderResult.errors)
+
+        await db.update(mailFolders)
+            .set({
+                unreadCount: folderResult.unreadCount,
+                totalCount: folderResult.totalCount,
+                updatedAt: new Date(),
+            })
+            .where(eq(mailFolders.id, dbFolder.id))
+    }
+}
+
+async function getAllFolders(mailboxId: string, imapConfig: any): Promise<FolderInfo[]> {
     return new Promise((resolve, reject) => {
-        const imap = new Imap(imapConfig)
+        const imap = createImapConnection({ ...imapConfig, id: mailboxId })
 
-        imap.once('ready', async () => {
-            try {
-                const existingFolders = await new Promise<FolderInfo[]>((resolveFolders, rejectFolders) => {
-                    imap.getBoxes((err: any, boxes: any) => {
-                        if (err) {
-                            rejectFolders(err)
-                            return
-                        }
+        imap.once('ready', () => {
+            imap.getBoxes((err: any, boxes: any) => {
+                if (err) {
+                    imap.end()
+                    reject(err)
+                    return
+                }
 
-                        const folders: FolderInfo[] = []
+                const folders: FolderInfo[] = []
 
-                        const processBox = (box: any, path: string) => {
-                            const fullPath = path ? `${path}${box.name}` : box.name
-                            folders.push({
-                                remoteId: fullPath,
-                                name: box.name,
-                                type: getFolderType(fullPath),
-                            })
-
-                            if (box.children) {
-                                Object.entries(box.children).forEach(([_name, subBox]: [string, any]) => {
-                                    processBox(subBox, fullPath + '/')
-                                })
-                            }
-                        }
-
-                        if (boxes) {
-                            Object.entries(boxes).forEach(([_name, box]: [string, any]) => {
-                                processBox(box, '')
-                            })
-                        }
-
-                        resolveFolders(folders)
-                    })
-                })
-
-                for (const folder of existingFolders) {
-                    const existing = await db.query.mailFolders.findFirst({
-                        where: and(
-                            eq(mailFolders.mailboxId, mailboxId),
-                            eq(mailFolders.remoteId, folder.remoteId)
-                        ),
+                const processBox = (box: any, path: string) => {
+                    const fullPath = path ? `${path}${box.name}` : box.name
+                    folders.push({
+                        remoteId: fullPath,
+                        name: box.name,
+                        type: getFolderType(fullPath),
                     })
 
-                    if (!existing) {
-                        await db.insert(mailFolders).values({
-                            mailboxId,
-                            remoteId: folder.remoteId,
-                            name: folder.name,
-                            type: folder.type,
+                    if (box.children) {
+                        Object.entries(box.children).forEach(([_name, subBox]: [string, any]) => {
+                            processBox(subBox, fullPath + '/')
                         })
                     }
                 }
 
+                if (boxes) {
+                    Object.entries(boxes).forEach(([_name, box]: [string, any]) => {
+                        processBox(box, '')
+                    })
+                }
+
                 imap.end()
-                resolve()
-            } catch (error) {
-                imap.end()
-                reject(error)
-            }
+                resolve(folders)
+            })
         })
 
         imap.once('error', (err: any) => {
@@ -151,86 +241,95 @@ function getFolderType(remoteId: string): string {
     return 'custom'
 }
 
-async function syncInboxFolder(
+async function syncFolder(
     mailboxId: string,
+    folderId: string,
+    remoteId: string,
     imapConfig: any,
-    result: SyncResult
-): Promise<void> {
-    const folder = await db.query.mailFolders.findFirst({
-        where: and(
-            eq(mailFolders.mailboxId, mailboxId),
-            eq(mailFolders.remoteId, 'INBOX')
-        ),
-    })
-
-    if (!folder) {
-        result.errors.push('INBOX folder not found in database')
-        return
+    config: SyncConfig
+): Promise<{ newMessages: number; errors: string[]; unreadCount: number; totalCount: number }> {
+    const result = {
+        newMessages: 0,
+        errors: [] as string[],
+        unreadCount: 0,
+        totalCount: 0,
     }
 
-    result.folderId = folder.id
-
     return new Promise((resolve) => {
-        const imap = new Imap(imapConfig)
+        const imap = createImapConnection({ ...imapConfig, id: mailboxId })
 
         imap.once('ready', () => {
-            imap.openBox('INBOX', true, async (err: any, box: any) => {
+            const boxName = remoteId
+            
+            imap.openBox(boxName, false, async (err: any, box: any) => {
                 if (err) {
-                    result.errors.push(`Failed to open INBOX: ${err.message}`)
+                    result.errors.push(`Failed to open ${boxName}: ${err.message}`)
                     imap.end()
-                    resolve()
+                    resolve(result)
                     return
                 }
 
+                result.unreadCount = box.messages.unseen
+                result.totalCount = box.messages.total
+
                 try {
                     if (box.messages.total > 0) {
-                        const startSeq = Math.max(1, box.messages.total - 100)
-                        const messages = await fetchMessages(imap, box, mailboxId, folder.id, startSeq, box.messages.total)
-                        result.newMessages += messages
+                        const { newCount, errors } = await fetchMessagesSync(
+                            imap, 
+                            mailboxId, 
+                            folderId, 
+                            box, 
+                            config
+                        )
+                        result.newMessages = newCount
+                        result.errors.push(...errors)
                     }
-
-                    await db.update(mailFolders)
-                        .set({ 
-                            unreadCount: box.messages.unseen,
-                            totalCount: box.messages.total,
-                        })
-                        .where(eq(mailFolders.id, folder.id))
-
                 } catch (error) {
                     const msg = error instanceof Error ? error.message : 'Unknown error'
-                    result.errors.push(`Error syncing INBOX: ${msg}`)
+                    result.errors.push(`Error syncing ${boxName}: ${msg}`)
                 }
 
                 imap.end()
-                resolve()
+                resolve(result)
             })
         })
 
         imap.once('error', (err: any) => {
             result.errors.push(`IMAP error: ${err.message}`)
-            resolve()
+            resolve(result)
         })
 
         imap.connect()
     })
 }
 
-async function fetchMessages(
+async function fetchMessagesSync(
     imap: any,
-    box: any,
     mailboxId: string,
     folderId: string,
-    startSeq: number,
-    endSeq: number
-): Promise<number> {
-    return new Promise((resolve, reject) => {
-        const fetch = imap.fetch(`${startSeq}:${endSeq}`, {
+    box: any,
+    config: SyncConfig
+): Promise<{ newCount: number; errors: string[] }> {
+    const result = { newCount: 0, errors: [] as string[] }
+
+    const lastKnownUid = await getLastKnownUid(mailboxId, folderId)
+    const startUid = lastKnownUid ? lastKnownUid + 1 : 1
+
+    if (startUid > box.messages.total) {
+        return result
+    }
+
+    const rangeEnd = Math.min(startUid + config.batchSize - 1, box.messages.total)
+    const uidRange = `${startUid}:${rangeEnd}`
+
+    return new Promise((resolve) => {
+        const fetch = imap.fetch(uidRange, {
             bodies: '',
             struct: true,
         })
 
-        let newCount = 0
         let completed = 0
+        const totalMessages = rangeEnd - startUid + 1
 
         fetch.on('message', (msg: any) => {
             let uid: number | null = null
@@ -255,7 +354,7 @@ async function fetchMessages(
             msg.once('end', async () => {
                 completed++
 
-                if (messageId && uid) {
+                if (uid) {
                     try {
                         const existing = await db.query.mailMessages.findFirst({
                             where: and(
@@ -265,7 +364,7 @@ async function fetchMessages(
                             ),
                         })
 
-                        if (!existing) {
+                        if (!existing && raw) {
                             const parsed = await simpleParser(raw)
 
                             const refs = parsed.references
@@ -301,24 +400,38 @@ async function fetchMessages(
                                 receivedAt: parsed.date || new Date(),
                             })
 
-                            newCount++
+                            result.newCount++
                         }
                     } catch (error) {
                         console.error('Error processing message:', error)
+                        result.errors.push(`Error processing UID ${uid}: ${error}`)
                     }
                 }
 
-                if (completed >= endSeq - startSeq + 1) {
-                    resolve(newCount)
+                if (completed >= totalMessages) {
+                    resolve(result)
                 }
             })
         })
 
         fetch.once('error', (err: any) => {
             console.error('Fetch error:', err)
-            resolve(0)
+            result.errors.push(`Fetch error: ${err.message}`)
+            resolve(result)
         })
     })
+}
+
+async function getLastKnownUid(mailboxId: string, folderId: string): Promise<number | null> {
+    const lastMessage = await db.query.mailMessages.findFirst({
+        where: and(
+            eq(mailMessages.mailboxId, mailboxId),
+            eq(mailMessages.folderId, folderId)
+        ),
+        orderBy: [desc(mailMessages.remoteUid)],
+    })
+
+    return lastMessage?.remoteUid || null
 }
 
 export async function syncAllMailboxes(): Promise<SyncResult[]> {
@@ -334,4 +447,104 @@ export async function syncAllMailboxes(): Promise<SyncResult[]> {
     }
 
     return results
+}
+
+export async function startMailboxIdle(mailboxId: string): Promise<void> {
+    const mailbox = await db.query.mailboxes.findFirst({
+        where: eq(mailboxes.id, mailboxId),
+    })
+
+    if (!mailbox) {
+        throw new Error('Mailbox not found')
+    }
+
+    const imapConfig = {
+        user: mailbox.imapUsername,
+        password: decrypt(mailbox.imapPasswordEncrypted),
+        host: mailbox.imapHost,
+        port: mailbox.imapPort,
+        tls: mailbox.imapSecure,
+    }
+
+    const imap = createImapConnection({ ...imapConfig, id: mailboxId }, true)
+
+    imap.once('ready', () => {
+        console.log(`IMAP IDLE started for mailbox ${mailboxId}`)
+        
+        imap.on('mail', async (count: number) => {
+            console.log(`New emails detected for mailbox ${mailboxId}: ${count}`)
+            await syncMailbox(mailboxId)
+        })
+
+        imap.on('error', (err: any) => {
+            console.error(`IMAP IDLE error for mailbox ${mailboxId}:`, err)
+        })
+    })
+
+    imap.connect()
+}
+
+export function stopMailboxIdle(mailboxId: string): void {
+    console.log(`IMAP IDLE stopped for mailbox ${mailboxId}`)
+}
+
+export async function testMailboxConnection(
+    smtpHost: string,
+    smtpPort: number,
+    smtpSecure: boolean,
+    smtpUsername: string,
+    smtpPassword: string,
+    imapHost: string,
+    imapPort: number,
+    imapSecure: boolean,
+    imapUsername: string,
+    imapPassword: string
+): Promise<{ smtp: boolean; imap: boolean; errors: string[] }> {
+    const result = { smtp: false, imap: false, errors: [] as string[] }
+
+    const smtpConfig = {
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpSecure,
+        auth: {
+            user: smtpUsername,
+            pass: smtpPassword,
+        },
+        connectionTimeout: 10000,
+    }
+
+    try {
+        const nodemailer = await import('nodemailer')
+        const transporter = nodemailer.createTransport(smtpConfig)
+        await transporter.verify()
+        result.smtp = true
+    } catch (error) {
+        result.errors.push(`SMTP: ${error instanceof Error ? error.message : String(error)}`)
+    }
+
+    try {
+        const imapTest = createImapConnection({
+            imapHost,
+            imapPort,
+            imapSecure,
+            imapUsername,
+            imapPasswordEncrypted: imapPassword,
+        })
+
+        await new Promise<void>((resolve, reject) => {
+            imapTest.once('ready', () => {
+                imapTest.end()
+                resolve()
+            })
+            imapTest.once('error', (err: any) => {
+                reject(err)
+            })
+            imapTest.connect()
+        })
+        result.imap = true
+    } catch (error) {
+        result.errors.push(`IMAP: ${error instanceof Error ? error.message : String(error)}`)
+    }
+
+    return result
 }

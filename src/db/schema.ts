@@ -1101,6 +1101,21 @@ export const mailMessages = pgTable('mail_messages', {
     mailboxUidUnique: uniqueIndex('mail_message_mailbox_uid_unique').on(table.mailboxId, table.remoteUid),
 }))
 
+// Email Filters
+export const mailFilters = pgTable('mail_filters', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    mailboxId: uuid('mailbox_id').references(() => mailboxes.id).notNull(),
+    name: text('name').notNull(),
+    // Conditions (JSON)
+    conditions: jsonb('conditions').notNull(), // { field: 'from'|'to'|'subject'|'body', operator: 'contains'|'equals'|'startsWith'|'regex', value: string }
+    // Actions
+    actions: jsonb('actions').notNull(), // { action: 'markRead'|'markStarred'|'moveToFolder'|'addLabel'|'markSpam'|'archive', value?: string }
+    isActive: boolean('is_active').default(true).notNull(),
+    priority: integer('priority').default(0).notNull(), // Higher = runs first
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
 // Mailbox Relations
 export const mailboxesRelations = relations(mailboxes, ({ one, many }) => ({
     user: one(users, {
@@ -1130,6 +1145,13 @@ export const mailMessagesRelations = relations(mailMessages, ({ one }) => ({
     }),
 }))
 
+export const mailFiltersRelations = relations(mailFilters, ({ one }) => ({
+    mailbox: one(mailboxes, {
+        fields: [mailFilters.mailboxId],
+        references: [mailboxes.id],
+    }),
+}))
+
 // Types
 export type Mailbox = typeof mailboxes.$inferSelect
 export type NewMailbox = typeof mailboxes.$inferInsert
@@ -1140,41 +1162,6 @@ export type NewMailFolder = typeof mailFolders.$inferInsert
 export type MailMessage = typeof mailMessages.$inferSelect
 export type NewMailMessage = typeof mailMessages.$inferInsert
 
-// ============================================
-// NATIVE MAIL ACCOUNTS (Platform-managed SMTP/IMAP)
-// ============================================
-
-// Native Mailboxes — platform-managed email accounts (alice@yourdomain.com)
-// Users authenticate to our own SMTP/IMAP servers using these credentials
-export const nativeMailboxes = pgTable('native_mailboxes', {
-    id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id').references(() => users.id).notNull(),
-    email: text('email').notNull().unique(),
-    displayName: text('display_name'),
-    passwordHash: text('password_hash').notNull(), // bcrypt hash for SMTP/IMAP auth
-    quotaMb: integer('quota_mb').default(1000).notNull(), // Storage quota in MB
-    usedMb: integer('used_mb').default(0).notNull(),     // Approximate used storage
-    isActive: boolean('is_active').default(true).notNull(),
-    isDefault: boolean('is_default').default(false).notNull(),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
-
-export const nativeMailboxesRelations = relations(nativeMailboxes, ({ one, many }) => ({
-    user: one(users, {
-        fields: [nativeMailboxes.userId],
-        references: [users.id],
-    }),
-    folders: many(mailFolders),
-}))
-
-// Extend mailFolders to optionally link to a nativeMailbox (nullable mailboxId means native)
-// Note: We reuse the existing mailFolders and mailMessages tables for native accounts too,
-// by allowing mailboxId to reference either a normal mailbox or using nativeMailboxId field.
-// For simplicity, native accounts create entries in the existing mailboxes table (as a shim)
-// pointing to localhost IMAP, but that approach adds complexity.
-// Instead, we add a nullable nativeMailboxId FK to mailFolders.
-
 // Zod schemas
 export const insertNativeMailboxSchema = createInsertSchema(nativeMailboxes)
 export const selectNativeMailboxSchema = createSelectSchema(nativeMailboxes)
@@ -1182,3 +1169,6 @@ export const selectNativeMailboxSchema = createSelectSchema(nativeMailboxes)
 // Types
 export type NativeMailbox = typeof nativeMailboxes.$inferSelect
 export type NewNativeMailbox = typeof nativeMailboxes.$inferInsert
+
+export type MailFilter = typeof mailFilters.$inferSelect
+export type NewMailFilter = typeof mailFilters.$inferInsert
