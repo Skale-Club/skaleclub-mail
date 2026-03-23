@@ -8,6 +8,7 @@ import { mailFolders, mailMessages } from '../../../db/schema'
 import { eq, and } from 'drizzle-orm'
 import { decrypt } from '../../../lib/crypto'
 import { checkUserMailboxAccess } from './mailboxes'
+import { createMultipartEmail } from '../../lib/html-to-text'
 
 const router = Router()
 
@@ -136,6 +137,8 @@ router.post('/:mailboxId/send', async (req: Request, res: Response) => {
                 ),
             })
 
+            const { headers: contentHeaders, body: contentBody } = createMultipartEmail(data.plainBody, data.htmlBody)
+            
             const rawEmail = [
                 `From: ${mailbox.displayName ? `${mailbox.displayName} <${mailbox.email}>` : mailbox.email}`,
                 `To: ${data.to.map(t => t.name ? `${t.name} <${t.address}>` : t.address).join(', ')}`,
@@ -145,10 +148,8 @@ router.post('/:mailboxId/send', async (req: Request, res: Response) => {
                 `Message-ID: ${messageId}`,
                 data.inReplyTo ? `In-Reply-To: ${data.inReplyTo}` : '',
                 data.references ? `References: ${data.references}` : '',
-                `MIME-Version: 1.0`,
-                `Content-Type: text/plain; charset=UTF-8`,
-                '',
-                data.plainBody || '',
+                ...contentHeaders,
+                contentBody,
             ].filter(Boolean).join('\r\n')
 
             if (sentFolder) {

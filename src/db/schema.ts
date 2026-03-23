@@ -8,6 +8,7 @@ import {
     jsonb,
     pgEnum,
     uniqueIndex,
+    bigint,
 } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { createInsertSchema, createSelectSchema } from 'drizzle-zod'
@@ -103,6 +104,23 @@ export const servers = pgTable('servers', {
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
     orgSlugUnique: uniqueIndex('server_org_slug_unique').on(table.organizationId, table.slug),
+}))
+
+// Native Mailboxes (for built-in SMTP/IMAP servers)
+export const nativeMailboxes = pgTable('native_mailboxes', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    serverId: uuid('server_id').references(() => servers.id).notNull(),
+    email: text('email').notNull(),
+    username: text('username').notNull(),
+    passwordHash: text('password_hash').notNull(),
+    quotaBytes: bigint('quota_bytes', { mode: 'number' }).default(1073741824),
+    usedBytes: bigint('used_bytes', { mode: 'number' }).default(0).notNull(),
+    isActive: boolean('is_active').default(true).notNull(),
+    lastLoginAt: timestamp('last_login_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    serverEmailUnique: uniqueIndex('native_mailbox_server_email_unique').on(table.serverId, table.email),
 }))
 
 // Domains table
@@ -413,6 +431,14 @@ export const serversRelations = relations(servers, ({ one, many }) => ({
     suppressions: many(suppressions),
     statistics: many(statistics),
     templates: many(templates),
+    nativeMailboxes: many(nativeMailboxes),
+}))
+
+export const nativeMailboxesRelations = relations(nativeMailboxes, ({ one }) => ({
+    server: one(servers, {
+        fields: [nativeMailboxes.serverId],
+        references: [servers.id],
+    }),
 }))
 
 export const domainsRelations = relations(domains, ({ one }) => ({

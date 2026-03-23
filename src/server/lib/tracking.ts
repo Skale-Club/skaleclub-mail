@@ -7,10 +7,57 @@ import { eq, and, sql } from 'drizzle-orm'
 // HTML injection
 // ---------------------------------------------------------------------------
 
-/**
- * Rewrites an HTML email body to add open-tracking pixel and/or click-tracking
- * redirects. Safe to call even if both flags are false.
- */
+const SKIP_PROTOCOLS = ['javascript:', 'mailto:', 'tel:', 'data:']
+
+function shouldSkipUrl(url: string): boolean {
+    const lower = url.toLowerCase().trim()
+
+    if (SKIP_PROTOCOLS.some((p) => lower.startsWith(p))) return true
+    if (lower.startsWith('#')) return true
+    if (/\{\{.*?\}\}/.test(url)) return true
+
+    return false
+}
+
+function encodeTrackingUrl(url: string, baseUrl: string, token: string): string {
+    const encoded = Buffer.from(url).toString('base64url')
+    return `${baseUrl}/t/click/${token}?u=${encoded}`
+}
+
+export function rewriteLinks(html: string, baseUrl: string, token: string): string {
+    const hrefRegex = /href\s*=\s*(["'])([^"']*?)\1|href\s*=\s*([^\s>]+)/gi
+
+    return html.replace(hrefRegex, (match, quote: string | undefined, quotedUrl: string | undefined, unquotedUrl: string | undefined) => {
+        const url = quotedUrl ?? unquotedUrl
+
+        if (!url) return match
+
+        if (shouldSkipUrl(url)) return match
+
+        const trimmed = url.trim()
+        if (!/^https?:\/\//i.test(trimmed)) return match
+
+        const trackingUrl = encodeTrackingUrl(trimmed, baseUrl, token)
+
+        if (quote) {
+            return `href=${quote}${trackingUrl}${quote}`
+        }
+        return `href="${trackingUrl}"`
+    })
+}
+
+export function injectTrackingPixel(html: string, token: string, baseUrl: string): string {
+    const pixel =
+        `<img src="${baseUrl}/t/open/${token}" ` +
+        `width="1" height="1" alt="" ` +
+        `style="display:none!important;width:1px!important;height:1px!important" />`
+
+    if (/<\/body>/i.test(html)) {
+        return html.replace(/<\/body>/i, `${pixel}</body>`)
+    }
+    return html + pixel
+}
+
 export function injectTracking(
     html: string,
     token: string,
@@ -21,28 +68,11 @@ export function injectTracking(
     let result = html
 
     if (trackClicks) {
-        // Rewrite every href="http(s)://..." to go through the click endpoint.
-        // We base64url-encode the original URL so no DB lookup is needed on click.
-        result = result.replace(
-            /href="(https?:\/\/[^"#][^"]*?)"/gi,
-            (_, url: string) => {
-                const encoded = Buffer.from(url).toString('base64url')
-                return `href="${baseUrl}/t/click/${token}?u=${encoded}"`
-            }
-        )
+        result = rewriteLinks(result, baseUrl, token)
     }
 
     if (trackOpens) {
-        const pixel =
-            `<img src="${baseUrl}/t/open/${token}" ` +
-            `width="1" height="1" alt="" ` +
-            `style="display:none!important;width:1px!important;height:1px!important" />`
-
-        if (/<\/body>/i.test(result)) {
-            result = result.replace(/<\/body>/i, `${pixel}</body>`)
-        } else {
-            result += pixel
-        }
+        result = injectTrackingPixel(result, token, baseUrl)
     }
 
     return result
