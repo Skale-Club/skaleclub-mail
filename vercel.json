@@ -1,7 +1,12 @@
 {
-    "buildCommand": "npm run build:client",
+    "buildCommand": "npm run build:vercel",
     "outputDirectory": "dist/client",
     "framework": null,
+    "functions": {
+        "api/index.js": {
+            "maxDuration": 30
+        }
+    },
     "rewrites": [
         { "source": "/api/(.*)", "destination": "/api" },
         { "source": "/t/(.*)", "destination": "/api" },

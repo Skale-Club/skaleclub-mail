@@ -10,6 +10,8 @@
         "build": "npm run build:client && npm run build:server",
         "build:client": "vite build",
         "build:server": "tsc -p tsconfig.server.json",
+        "build:api": "esbuild src/server/index.ts --bundle --platform=node --format=esm --packages=external --outfile=api/index.js",
+        "build:vercel": "npm run build:client && npm run build:api",
         "preview": "vite preview",
         "start": "node dist/server/index.js",
         "db:generate": "drizzle-kit generate:pg",
