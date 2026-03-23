@@ -1,0 +1,11 @@
+{
+    "buildCommand": "npm run build:client",
+    "outputDirectory": "dist/client",
+    "framework": null,
+    "rewrites": [
+        { "source": "/api/(.*)", "destination": "/api" },
+        { "source": "/t/(.*)", "destination": "/api" },
+        { "source": "/health", "destination": "/api" },
+        { "source": "/(.*)", "destination": "/index.html" }
+    ]
+}

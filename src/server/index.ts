@@ -145,11 +145,13 @@ app.use((_req: express.Request, res: express.Response) => {
     res.status(404).json({ error: 'Not found' })
 })
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`)
-    console.log('SkaleClub Mail API ready')
+if (!process.env.VERCEL) {
+    app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`)
+        console.log('SkaleClub Mail API ready')
 
-    import('./jobs').then(({ startSyncWorker }) => startSyncWorker())
-})
+        import('./jobs').then(({ startSyncWorker }) => startSyncWorker())
+    })
+}
 
 export default app
