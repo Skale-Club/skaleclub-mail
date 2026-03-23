@@ -268,18 +268,22 @@ async function fetchMessages(
                         if (!existing) {
                             const parsed = await simpleParser(raw)
 
+                            const refs = parsed.references
+                            const refsStr = Array.isArray(refs) ? refs.join(' ') : refs || null
+                            const toObj = parsed.to && !Array.isArray(parsed.to) ? parsed.to : Array.isArray(parsed.to) ? parsed.to[0] : undefined
+
                             await db.insert(mailMessages).values({
                                 mailboxId,
                                 folderId,
                                 messageId: parsed.messageId || null,
                                 inReplyTo: parsed.inReplyTo || null,
-                                references: parsed.references?.join(' ') || null,
+                                references: refsStr,
                                 subject: parsed.subject || null,
                                 fromAddress: parsed.from?.value[0]?.address || null,
                                 fromName: parsed.from?.value[0]?.name || null,
-                                toAddresses: parsed.to?.value.map((v: any) => ({ 
-                                    name: v.name, 
-                                    address: v.address 
+                                toAddresses: toObj?.value.map(v => ({
+                                    name: v.name,
+                                    address: v.address
                                 })) || [],
                                 plainBody: parsed.text || null,
                                 htmlBody: parsed.html as string || null,

@@ -63,23 +63,39 @@ export interface ParsedEmail {
 export async function parseRawEmail(rawContent: Buffer | string): Promise<ParsedEmail> {
     const parsed: ParsedMail = await simpleParser(rawContent)
 
+    const getAddressList = (addr: ParsedMail['to']) => {
+        if (!addr) return []
+        const obj = Array.isArray(addr) ? addr[0] : addr
+        return obj?.value.map(v => ({ name: v.name || null, address: v.address || null })) || []
+    }
+
+    const refs = parsed.references
+    const referencesStr = Array.isArray(refs) ? refs.join(' ') : refs || null
+
+    const headers: Record<string, string> = {}
+    if (parsed.headers) {
+        parsed.headers.forEach((value, key) => {
+            headers[key] = typeof value === 'string' ? value : Array.isArray(value) ? value.join(', ') : String(value)
+        })
+    }
+
     return {
         messageId: parsed.messageId || null,
         inReplyTo: parsed.inReplyTo || null,
-        references: parsed.references?.join(' ') || null,
+        references: referencesStr,
         subject: parsed.subject || null,
         from: {
             name: parsed.from?.value[0]?.name || null,
             address: parsed.from?.value[0]?.address || null,
         },
-        to: parsed.to?.value.map(v => ({ name: v.name || null, address: v.address || null })) || [],
-        cc: parsed.cc?.value.map(v => ({ name: v.name || null, address: v.address || null })) || [],
-        bcc: parsed.bcc?.value.map(v => ({ name: v.name || null, address: v.address || null })) || [],
+        to: getAddressList(parsed.to),
+        cc: getAddressList(parsed.cc),
+        bcc: getAddressList(parsed.bcc),
         plainBody: parsed.text || null,
         htmlBody: parsed.html as string || null,
-        headers: parsed.headers ? Object.fromEntries(parsed.headers) : {},
+        headers,
         attachments: parsed.attachments.map(att => ({
-            filename: att.filename,
+            filename: att.filename || '',
             contentType: att.contentType,
             size: att.size,
             content: att.content,
