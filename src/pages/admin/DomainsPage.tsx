@@ -241,24 +241,32 @@ export default function DomainsPage() {
                         ) : (
                             <>
                                 <DnsRecord
-                                    label="Verification TXT"
-                                    value={selectedDomain.verificationToken || 'Token unavailable'}
+                                    label="Verification TXT (@ record)"
+                                    value={`skaleclub-verification:${selectedDomain.verificationToken || 'Token unavailable'}`}
                                 />
                                 <DnsRecord
-                                    label="DKIM selector"
-                                    value={`${selectedDomain.dkimSelector || 'postal'}._domainkey.${selectedDomain.name}`}
+                                    label="SPF TXT (@ record)"
+                                    value="v=spf1 include:spf.skaleclub.com ~all"
                                 />
                                 <DnsRecord
-                                    label="DKIM value"
-                                    value={selectedDomain.dkimPublicKey || 'Generate after backend DKIM implementation'}
+                                    label="DKIM TXT record name"
+                                    value={`${selectedDomain.dkimSelector || 'skaleclub'}._domainkey.${selectedDomain.name}`}
                                 />
                                 <DnsRecord
-                                    label="Suggested MX"
-                                    value={`10 mail.${selectedDomain.name}`}
+                                    label="DKIM TXT record value"
+                                    value={selectedDomain.dkimPublicKey || '(generated after domain verification)'}
                                 />
                                 <DnsRecord
-                                    label="Suggested SPF"
-                                    value={`v=spf1 include:mail.${selectedDomain.name} -all`}
+                                    label="DMARC TXT (_dmarc record)"
+                                    value={`v=DMARC1; p=quarantine; rua=mailto:dmarc@${selectedDomain.name}`}
+                                />
+                                <DnsRecord
+                                    label="MX Record (@ record)"
+                                    value="10 mx.skaleclub.com"
+                                />
+                                <DnsRecord
+                                    label="Return-Path CNAME (rp record)"
+                                    value="rp.skaleclub.com"
                                 />
                             </>
                         )}

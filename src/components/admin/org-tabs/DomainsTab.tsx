@@ -38,6 +38,8 @@ interface DnsResults {
     spf: { found: boolean; error: string | null }
     dkim: { found: boolean; error: string | null }
     dmarc: { found: boolean; error: string | null }
+    mx: { found: boolean; error: string | null }
+    returnPath: { found: boolean; error: string | null }
 }
 
 interface DomainsTabProps {
@@ -270,25 +272,11 @@ export default function DomainsTab({ serverId }: DomainsTabProps) {
 
         return [
             {
-                label: 'Skale Club Code',
+                label: 'Skale Club Verification',
                 type: 'TXT',
                 name: '@',
                 value: `skaleclub-verification:${domain.verificationToken}`,
                 status: statusFor(domain.verificationStatus, 'verification'),
-            },
-            {
-                label: 'DKIM Record',
-                type: 'TXT',
-                name: `${domain.dkimSelector || 'postal'}._domainkey`,
-                value: domain.dkimPublicKey || '(generated after domain verification)',
-                status: statusFor(null, 'dkim'),
-            },
-            {
-                label: 'DMARC Record',
-                type: 'TXT',
-                name: '_dmarc',
-                value: `v=DMARC1; p=none; rua=mailto:dmarc@${domain.name}`,
-                status: statusFor(null, 'dmarc'),
             },
             {
                 label: 'SPF Record',
@@ -296,6 +284,34 @@ export default function DomainsTab({ serverId }: DomainsTabProps) {
                 name: '@',
                 value: 'v=spf1 include:spf.skaleclub.com ~all',
                 status: statusFor(domain.spfStatus, 'spf'),
+            },
+            {
+                label: 'DKIM Record',
+                type: 'TXT',
+                name: `${domain.dkimSelector || 'skaleclub'}._domainkey`,
+                value: domain.dkimPublicKey || '(generated after domain verification)',
+                status: statusFor(null, 'dkim'),
+            },
+            {
+                label: 'DMARC Record',
+                type: 'TXT',
+                name: '_dmarc',
+                value: `v=DMARC1; p=quarantine; rua=mailto:dmarc@${domain.name}`,
+                status: statusFor(null, 'dmarc'),
+            },
+            {
+                label: 'MX Record',
+                type: 'MX',
+                name: '@',
+                value: '10 mx.skaleclub.com',
+                status: statusFor(domain.mxStatus, 'mx'),
+            },
+            {
+                label: 'Return-Path',
+                type: 'CNAME',
+                name: 'rp',
+                value: 'rp.skaleclub.com',
+                status: statusFor(domain.returnPathStatus, 'returnPath'),
             },
         ]
     }

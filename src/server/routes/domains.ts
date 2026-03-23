@@ -10,10 +10,29 @@ import { isPlatformAdmin } from '../lib/admin'
 const resolver = new dnsPromises.Resolver()
 resolver.setServers((process.env.DNS_SERVERS || '8.8.8.8,1.1.1.1').split(','))
 
+/** Mail server hostname that users should point their MX and Return-Path to */
+const MAIL_HOST = process.env.MAIL_HOST || 'mx.skaleclub.com'
+
 async function resolveTxt(hostname: string): Promise<string[]> {
     try {
         const records = await resolver.resolveTxt(hostname)
         return records.map((chunks) => chunks.join(''))
+    } catch {
+        return []
+    }
+}
+
+async function resolveMx(hostname: string): Promise<{ exchange: string; priority: number }[]> {
+    try {
+        return await resolver.resolveMx(hostname)
+    } catch {
+        return []
+    }
+}
+
+async function resolveCname(hostname: string): Promise<string[]> {
+    try {
+        return await resolver.resolveCname(hostname)
     } catch {
         return []
     }
@@ -184,13 +203,15 @@ router.post('/:id/verify', async (req: Request, res: Response) => {
 
         const domainName = domain.name
         const expectedToken = `skaleclub-verification:${domain.verificationToken}`
-        const dkimSelector = domain.dkimSelector || 'postal'
+        const dkimSelector = domain.dkimSelector || 'skaleclub'
 
         // Run all DNS lookups in parallel
-        const [rootTxt, dkimTxt, dmarcTxt] = await Promise.all([
+        const [rootTxt, dkimTxt, dmarcTxt, mxRecords, returnPathCname] = await Promise.all([
             resolveTxt(domainName),
             resolveTxt(`${dkimSelector}._domainkey.${domainName}`),
             resolveTxt(`_dmarc.${domainName}`),
+            resolveMx(domainName),
+            resolveCname(`rp.${domainName}`),
         ])
 
         // 1) Skale Club verification code
@@ -212,7 +233,18 @@ router.post('/:id/verify', async (req: Request, res: Response) => {
         const dmarcStatus = dmarcFound ? 'verified' : 'failed'
         const dmarcError = dmarcFound ? null : 'DMARC record not found'
 
-        const allVerified = verificationFound && spfFound && dkimFound && dmarcFound
+        // 5) MX — must contain at least one record pointing to MAIL_HOST
+        const mxFound = mxRecords.some((r) => r.exchange.toLowerCase() === MAIL_HOST.toLowerCase())
+        const mxStatus = mxFound ? 'verified' : 'failed'
+        const mxError = mxFound ? null : `MX record not found or does not point to ${MAIL_HOST}`
+
+        // 6) Return-Path — CNAME rp.<domain> → rp.skaleclub.com
+        const returnPathTarget = 'rp.skaleclub.com'
+        const returnPathFound = returnPathCname.some((r) => r.toLowerCase() === returnPathTarget)
+        const returnPathStatus = returnPathFound ? 'verified' : 'failed'
+        const returnPathError = returnPathFound ? null : `Return-Path CNAME not found (expected rp.${domainName} → ${returnPathTarget})`
+
+        const allVerified = verificationFound && spfFound && dkimFound && dmarcFound && mxFound && returnPathFound
 
         const [updatedDomain] = await db
             .update(domains)
@@ -225,6 +257,10 @@ router.post('/:id/verify', async (req: Request, res: Response) => {
                 dkimError,
                 dmarcStatus,
                 dmarcError,
+                mxStatus,
+                mxError,
+                returnPathStatus,
+                returnPathError,
                 updatedAt: new Date(),
             })
             .where(eq(domains.id, domainId))
@@ -238,6 +274,8 @@ router.post('/:id/verify', async (req: Request, res: Response) => {
                 spf: { found: spfFound, error: spfError },
                 dkim: { found: dkimFound, error: dkimError },
                 dmarc: { found: dmarcFound, error: dmarcError },
+                mx: { found: mxFound, error: mxError },
+                returnPath: { found: returnPathFound, error: returnPathError },
             },
         })
     } catch (error) {

@@ -22,6 +22,9 @@ import templateRoutes from './routes/templates'
 import outreachRoutes from './routes/outreach'
 import outlookRoutes from './routes/outlook'
 import mailRoutes from './routes/mail'
+import nativeMailboxRoutes from './routes/native-mailboxes'
+import { createSMTPServer } from './smtp-server'
+import { createIMAPServer } from './imap-server'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -128,6 +131,7 @@ app.use('/api/templates', templateRoutes)
 app.use('/api/outreach', outreachRoutes)
 app.use('/api/outlook', outlookRoutes)
 app.use('/api/mail', mailRoutes)
+app.use('/api/native-mailboxes', nativeMailboxRoutes)
 
 app.use('/t', trackRoutes)
 
@@ -151,6 +155,12 @@ if (!process.env.VERCEL) {
         console.log('SkaleClub Mail API ready')
 
         import('./jobs').then(({ startSyncWorker }) => startSyncWorker())
+
+        // Start native SMTP + IMAP servers
+        const smtpServer = createSMTPServer()
+        const imapServer = createIMAPServer()
+        smtpServer.start()
+        imapServer.start()
     })
 }
 

@@ -117,7 +117,7 @@ export const domains = pgTable('domains', {
     // DKIM
     dkimPrivateKey: text('dkim_private_key'),
     dkimPublicKey: text('dkim_public_key'),
-    dkimSelector: text('dkim_selector').default('postal'),
+    dkimSelector: text('dkim_selector').default('skaleclub'),
     dkimStatus: text('dkim_status').default('pending'),
     dkimError: text('dkim_error'),
     // SPF
@@ -1139,3 +1139,46 @@ export type NewMailFolder = typeof mailFolders.$inferInsert
 
 export type MailMessage = typeof mailMessages.$inferSelect
 export type NewMailMessage = typeof mailMessages.$inferInsert
+
+// ============================================
+// NATIVE MAIL ACCOUNTS (Platform-managed SMTP/IMAP)
+// ============================================
+
+// Native Mailboxes — platform-managed email accounts (alice@yourdomain.com)
+// Users authenticate to our own SMTP/IMAP servers using these credentials
+export const nativeMailboxes = pgTable('native_mailboxes', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').references(() => users.id).notNull(),
+    email: text('email').notNull().unique(),
+    displayName: text('display_name'),
+    passwordHash: text('password_hash').notNull(), // bcrypt hash for SMTP/IMAP auth
+    quotaMb: integer('quota_mb').default(1000).notNull(), // Storage quota in MB
+    usedMb: integer('used_mb').default(0).notNull(),     // Approximate used storage
+    isActive: boolean('is_active').default(true).notNull(),
+    isDefault: boolean('is_default').default(false).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
+export const nativeMailboxesRelations = relations(nativeMailboxes, ({ one, many }) => ({
+    user: one(users, {
+        fields: [nativeMailboxes.userId],
+        references: [users.id],
+    }),
+    folders: many(mailFolders),
+}))
+
+// Extend mailFolders to optionally link to a nativeMailbox (nullable mailboxId means native)
+// Note: We reuse the existing mailFolders and mailMessages tables for native accounts too,
+// by allowing mailboxId to reference either a normal mailbox or using nativeMailboxId field.
+// For simplicity, native accounts create entries in the existing mailboxes table (as a shim)
+// pointing to localhost IMAP, but that approach adds complexity.
+// Instead, we add a nullable nativeMailboxId FK to mailFolders.
+
+// Zod schemas
+export const insertNativeMailboxSchema = createInsertSchema(nativeMailboxes)
+export const selectNativeMailboxSchema = createSelectSchema(nativeMailboxes)
+
+// Types
+export type NativeMailbox = typeof nativeMailboxes.$inferSelect
+export type NewNativeMailbox = typeof nativeMailboxes.$inferInsert
