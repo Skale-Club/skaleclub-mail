@@ -1,10 +1,11 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
-import { eq, and, desc } from 'drizzle-orm'
+import { eq, and, desc, inArray } from 'drizzle-orm'
 import { db } from '../../../db'
 import { mailMessages, mailFolders, mailboxes } from '../../../db/schema'
 import { checkUserMailboxAccess } from './mailboxes'
 import { mailMessageToListItem } from '../../lib/mail'
+import { runFiltersOnMessage } from './filters'
 
 const router = Router()
 
@@ -222,6 +223,221 @@ router.delete('/:mailboxId/messages/:messageId', async (req: Request, res: Respo
         res.json({ success: true })
     } catch (error) {
         console.error('Error deleting message:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+router.post('/:mailboxId/messages/:messageId/archive', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        const mailboxId = req.params.mailboxId
+        const messageId = req.params.messageId
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        const mailbox = await checkUserMailboxAccess(userId, mailboxId)
+        if (!mailbox) {
+            return res.status(404).json({ error: 'Mailbox not found' })
+        }
+
+        const archiveFolder = await db.query.mailFolders.findFirst({
+            where: and(
+                eq(mailFolders.mailboxId, mailboxId),
+                eq(mailFolders.remoteId, 'Archive')
+            ),
+        })
+
+        if (archiveFolder) {
+            await db.update(mailMessages)
+                .set({ folderId: archiveFolder.id, updatedAt: new Date() })
+                .where(eq(mailMessages.id, messageId))
+        }
+
+        res.json({ success: true })
+    } catch (error) {
+        console.error('Error archiving message:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+router.post('/:mailboxId/messages/:messageId/spam', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        const mailboxId = req.params.mailboxId
+        const messageId = req.params.messageId
+        const isSpam = req.body.isSpam ?? true
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        const mailbox = await checkUserMailboxAccess(userId, mailboxId)
+        if (!mailbox) {
+            return res.status(404).json({ error: 'Mailbox not found' })
+        }
+
+        const spamFolder = await db.query.mailFolders.findFirst({
+            where: and(
+                eq(mailFolders.mailboxId, mailboxId),
+                eq(mailFolders.type, 'spam')
+            ),
+        })
+
+        if (spamFolder && isSpam) {
+            await db.update(mailMessages)
+                .set({ folderId: spamFolder.id, updatedAt: new Date() })
+                .where(eq(mailMessages.id, messageId))
+        } else {
+            const inboxFolder = await db.query.mailFolders.findFirst({
+                where: and(
+                    eq(mailFolders.mailboxId, mailboxId),
+                    eq(mailFolders.remoteId, 'INBOX')
+                ),
+            })
+            if (inboxFolder) {
+                await db.update(mailMessages)
+                    .set({ folderId: inboxFolder.id, updatedAt: new Date() })
+                    .where(eq(mailMessages.id, messageId))
+            }
+        }
+
+        res.json({ success: true })
+    } catch (error) {
+        console.error('Error marking message as spam:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+router.post('/:mailboxId/messages/:messageId/move', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        const mailboxId = req.params.mailboxId
+        const messageId = req.params.messageId
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        const mailbox = await checkUserMailboxAccess(userId, mailboxId)
+        if (!mailbox) {
+            return res.status(404).json({ error: 'Mailbox not found' })
+        }
+
+        const schema = z.object({
+            folderId: z.string().uuid(),
+        })
+
+        const data = schema.parse(req.body)
+
+        await db.update(mailMessages)
+            .set({ folderId: data.folderId, updatedAt: new Date() })
+            .where(eq(mailMessages.id, messageId))
+
+        res.json({ success: true })
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({ error: error.errors })
+        }
+        console.error('Error moving message:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+router.post('/:mailboxId/messages/batch', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        const mailboxId = req.params.mailboxId
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        const mailbox = await checkUserMailboxAccess(userId, mailboxId)
+        if (!mailbox) {
+            return res.status(404).json({ error: 'Mailbox not found' })
+        }
+
+        const schema = z.object({
+            messageIds: z.array(z.string().uuid()).min(1),
+            action: z.enum(['archive', 'spam', 'unspam', 'delete', 'read', 'unread', 'star', 'unstar']),
+            folderId: z.string().uuid().optional(),
+        })
+
+        const data = schema.parse(req.body)
+
+        const updateData: any = { updatedAt: new Date() }
+
+        switch (data.action) {
+            case 'archive':
+                const archiveFolder = await db.query.mailFolders.findFirst({
+                    where: and(
+                        eq(mailFolders.mailboxId, mailboxId),
+                        eq(mailFolders.remoteId, 'Archive')
+                    ),
+                })
+                if (archiveFolder) {
+                    updateData.folderId = archiveFolder.id
+                }
+                break
+            case 'spam':
+                const spamFolder = await db.query.mailFolders.findFirst({
+                    where: and(
+                        eq(mailFolders.mailboxId, mailboxId),
+                        eq(mailFolders.type, 'spam')
+                    ),
+                })
+                if (spamFolder) {
+                    updateData.folderId = spamFolder.id
+                }
+                break
+            case 'unspam':
+                const inboxFolder = await db.query.mailFolders.findFirst({
+                    where: and(
+                        eq(mailFolders.mailboxId, mailboxId),
+                        eq(mailFolders.remoteId, 'INBOX')
+                    ),
+                })
+                if (inboxFolder) {
+                    updateData.folderId = inboxFolder.id
+                }
+                break
+            case 'delete':
+                updateData.isDeleted = true
+                break
+            case 'read':
+                updateData.isRead = true
+                break
+            case 'unread':
+                updateData.isRead = false
+                break
+            case 'star':
+                updateData.isStarred = true
+                break
+            case 'unstar':
+                updateData.isStarred = false
+                break
+        }
+
+        if (data.folderId && ['archive', 'spam', 'unspam'].includes(data.action)) {
+            updateData.folderId = data.folderId
+        }
+
+        await db.update(mailMessages)
+            .set(updateData)
+            .where(inArray(mailMessages.id, data.messageIds))
+
+        for (const messageId of data.messageIds) {
+            await runFiltersOnMessage(messageId)
+        }
+
+        res.json({ success: true })
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({ error: error.errors })
+        }
+        console.error('Error batch updating messages:', error)
         res.status(500).json({ error: 'Internal server error' })
     }
 })

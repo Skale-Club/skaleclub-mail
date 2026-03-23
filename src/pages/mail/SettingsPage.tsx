@@ -12,12 +12,26 @@ import {
     Shield,
     Palette,
     Key,
-    Globe,
-    Smartphone,
-    Clock
+    Mail,
+    Plus,
+    Trash2,
+    RefreshCw,
+    AlertCircle,
+    CheckCircle,
+    ExternalLink,
+    Server,
+    Filter,
+    Trash,
+    ArrowLeft,
+    ArrowRight,
+    Star,
+    Archive,
+    AlertTriangle,
+    MoreHorizontal
 } from 'lucide-react'
+import { supabase } from '../../lib/supabase'
 
-type TabId = 'profile' | 'notifications' | 'security' | 'appearance' | 'integrations'
+type TabId = 'profile' | 'notifications' | 'security' | 'appearance' | 'accounts' | 'filters'
 
 interface Tab {
     id: TabId
@@ -30,12 +44,313 @@ const tabs: Tab[] = [
     { id: 'notifications', label: 'Notifications', icon: <Bell className="w-5 h-5" /> },
     { id: 'security', label: 'Security', icon: <Shield className="w-5 h-5" /> },
     { id: 'appearance', label: 'Appearance', icon: <Palette className="w-5 h-5" /> },
-    { id: 'integrations', label: 'Integrations', icon: <Globe className="w-5 h-5" /> },
+    { id: 'accounts', label: 'Accounts', icon: <Mail className="w-5 h-5" /> },
+    { id: 'filters', label: 'Filters', icon: <Filter className="w-5 h-5" /> },
 ]
 
+interface Mailbox {
+    id: string
+    email: string
+    displayName: string | null
+    isDefault: boolean
+    isActive: boolean
+    lastSyncAt: string | null
+    syncError: string | null
+}
+
+interface FilterCondition {
+    field: 'from' | 'to' | 'subject' | 'body' | 'hasAttachment'
+    operator: 'contains' | 'equals' | 'startsWith' | 'notContains' | 'regex'
+    value: string
+}
+
+interface FilterAction {
+    action: 'markRead' | 'markUnread' | 'markStarred' | 'unmarkStarred' | 'moveToFolder' | 'markSpam' | 'markNotSpam' | 'archive' | 'addLabel'
+    value?: string
+}
+
+interface MailFilter {
+    id: string
+    name: string
+    conditions: FilterCondition[]
+    actions: FilterAction[]
+    isActive: boolean
+    priority: number
+    createdAt: string
+}
+
 export default function MailSettingsPage() {
-    const [activeTab, setActiveTab] = React.useState<TabId>('profile')
+    const [activeTab, setActiveTab] = React.useState<TabId>('accounts')
     const [isSaving, setIsSaving] = React.useState(false)
+    const [showAddAccount, setShowAddAccount] = React.useState(false)
+    const [showAddFilter, setShowAddFilter] = React.useState(false)
+    const [selectedMailboxId, setSelectedMailboxId] = React.useState<string | null>(null)
+    const [isLoadingMailboxes, setIsLoadingMailboxes] = React.useState(false)
+    const [isLoadingFilters, setIsLoadingFilters] = React.useState(false)
+    const [mailboxes, setMailboxes] = React.useState<Mailbox[]>([])
+    const [filters, setFilters] = React.useState<MailFilter[]>([])
+    const [isTesting, setIsTesting] = React.useState(false)
+    const [isSavingAccount, setIsSavingAccount] = React.useState(false)
+    const [isSavingFilter, setIsSavingFilter] = React.useState(false)
+
+    const [newAccount, setNewAccount] = React.useState({
+        email: '',
+        displayName: '',
+        smtpHost: '',
+        smtpPort: '587',
+        smtpUsername: '',
+        smtpPassword: '',
+        smtpSecure: true,
+        imapHost: '',
+        imapPort: '993',
+        imapUsername: '',
+        imapPassword: '',
+        imapSecure: true,
+        isDefault: false,
+    })
+
+    const [newFilter, setNewFilter] = React.useState({
+        name: '',
+        conditions: [{ field: 'from', operator: 'contains', value: '' }] as FilterCondition[],
+        actions: [{ action: 'markRead' }] as FilterAction[],
+        priority: 0,
+    })
+
+    const fetchMailboxes = React.useCallback(async () => {
+        setIsLoadingMailboxes(true)
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            const token = session?.access_token
+            const response = await fetch('/api/mail/mailboxes', {
+                headers: { Authorization: `Bearer ${token}` },
+            })
+            if (response.ok) {
+                const data = await response.json()
+                setMailboxes(data.mailboxes || [])
+                if (data.mailboxes?.length > 0 && !selectedMailboxId) {
+                    setSelectedMailboxId(data.mailboxes[0].id)
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching mailboxes:', error)
+        } finally {
+            setIsLoadingMailboxes(false)
+        }
+    }, [selectedMailboxId])
+
+    const fetchFilters = React.useCallback(async () => {
+        if (!selectedMailboxId) return
+        setIsLoadingFilters(true)
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            const token = session?.access_token
+            const response = await fetch(`/api/mail/mailboxes/${selectedMailboxId}/filters`, {
+                headers: { Authorization: `Bearer ${token}` },
+            })
+            if (response.ok) {
+                const data = await response.json()
+                setFilters(data.filters || [])
+            }
+        } catch (error) {
+            console.error('Error fetching filters:', error)
+        } finally {
+            setIsLoadingFilters(false)
+        }
+    }, [selectedMailboxId])
+
+    React.useEffect(() => {
+        fetchMailboxes()
+    }, [fetchMailboxes])
+
+    React.useEffect(() => {
+        if (selectedMailboxId && activeTab === 'filters') {
+            fetchFilters()
+        }
+    }, [selectedMailboxId, activeTab, fetchFilters])
+
+    const handleTestConnection = async () => {
+        setIsTesting(true)
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            const token = session?.access_token
+            const response = await fetch('/api/mail/mailboxes/test-connection', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    smtpHost: newAccount.smtpHost,
+                    smtpPort: parseInt(newAccount.smtpPort),
+                    smtpSecure: newAccount.smtpSecure,
+                    smtpUsername: newAccount.smtpUsername || newAccount.email,
+                    smtpPassword: newAccount.smtpPassword,
+                    imapHost: newAccount.imapHost,
+                    imapPort: parseInt(newAccount.imapPort),
+                    imapSecure: newAccount.imapSecure,
+                    imapUsername: newAccount.imapUsername || newAccount.email,
+                    imapPassword: newAccount.imapPassword,
+                }),
+            })
+            const data = await response.json()
+            if (data.data?.smtp && data.data?.imap) {
+                toast({ title: 'Connection successful!', variant: 'success' })
+            } else {
+                toast({ 
+                    title: 'Connection failed', 
+                    description: data.data?.errors?.join(', '),
+                    variant: 'destructive' 
+                })
+            }
+        } catch (error) {
+            toast({ title: 'Connection test failed', variant: 'destructive' })
+        } finally {
+            setIsTesting(false)
+        }
+    }
+
+    const handleAddAccount = async () => {
+        setIsSavingAccount(true)
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            const token = session?.access_token
+            const response = await fetch('/api/mail/mailboxes', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    ...newAccount,
+                    smtpPort: parseInt(newAccount.smtpPort),
+                    imapPort: parseInt(newAccount.imapPort),
+                    smtpUsername: newAccount.smtpUsername || newAccount.email,
+                    imapUsername: newAccount.imapUsername || newAccount.email,
+                }),
+            })
+            if (response.ok) {
+                setShowAddAccount(false)
+                setNewAccount({
+                    email: '',
+                    displayName: '',
+                    smtpHost: '',
+                    smtpPort: '587',
+                    smtpUsername: '',
+                    smtpPassword: '',
+                    smtpSecure: true,
+                    imapHost: '',
+                    imapPort: '993',
+                    imapUsername: '',
+                    imapPassword: '',
+                    imapSecure: true,
+                    isDefault: false,
+                })
+                fetchMailboxes()
+                toast({ title: 'Account added successfully', variant: 'success' })
+            } else {
+                const data = await response.json()
+                toast({ title: 'Failed to add account', description: data.error, variant: 'destructive' })
+            }
+        } catch (error) {
+            toast({ title: 'Failed to add account', variant: 'destructive' })
+        } finally {
+            setIsSavingAccount(false)
+        }
+    }
+
+    const handleDeleteMailbox = async (id: string) => {
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            const token = session?.access_token
+            const response = await fetch(`/api/mail/mailboxes/${id}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` },
+            })
+            if (response.ok) {
+                fetchMailboxes()
+                toast({ title: 'Account removed successfully', variant: 'success' })
+            }
+        } catch (error) {
+            toast({ title: 'Failed to remove account', variant: 'destructive' })
+        }
+    }
+
+    const handleAddFilter = async () => {
+        if (!selectedMailboxId) return
+        setIsSavingFilter(true)
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            const token = session?.access_token
+            const response = await fetch(`/api/mail/mailboxes/${selectedMailboxId}/filters`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name: newFilter.name,
+                    conditions: newFilter.conditions.filter(c => c.value),
+                    actions: newFilter.actions,
+                    priority: newFilter.priority,
+                }),
+            })
+            if (response.ok) {
+                setShowAddFilter(false)
+                setNewFilter({
+                    name: '',
+                    conditions: [{ field: 'from', operator: 'contains', value: '' }],
+                    actions: [{ action: 'markRead' }],
+                    priority: 0,
+                })
+                fetchFilters()
+                toast({ title: 'Filter created successfully', variant: 'success' })
+            } else {
+                const data = await response.json()
+                toast({ title: 'Failed to create filter', description: data.error, variant: 'destructive' })
+            }
+        } catch (error) {
+            toast({ title: 'Failed to create filter', variant: 'destructive' })
+        } finally {
+            setIsSavingFilter(false)
+        }
+    }
+
+    const handleDeleteFilter = async (id: string) => {
+        if (!selectedMailboxId) return
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            const token = session?.access_token
+            const response = await fetch(`/api/mail/mailboxes/${selectedMailboxId}/filters/${id}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` },
+            })
+            if (response.ok) {
+                fetchFilters()
+                toast({ title: 'Filter deleted successfully', variant: 'success' })
+            }
+        } catch (error) {
+            toast({ title: 'Failed to delete filter', variant: 'destructive' })
+        }
+    }
+
+    const handleToggleFilter = async (id: string, isActive: boolean) => {
+        if (!selectedMailboxId) return
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            const token = session?.access_token
+            await fetch(`/api/mail/mailboxes/${selectedMailboxId}/filters/${id}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ isActive }),
+            })
+            fetchFilters()
+        } catch (error) {
+            toast({ title: 'Failed to update filter', variant: 'destructive' })
+        }
+    }
 
     const [profile, setProfile] = React.useState({
         firstName: 'John',
@@ -76,6 +391,34 @@ export default function MailSettingsPage() {
         toast({ title: 'Settings saved successfully', variant: 'success' })
     }
 
+    const addCondition = () => {
+        setNewFilter({ ...newFilter, conditions: [...newFilter.conditions, { field: 'from', operator: 'contains', value: '' }] })
+    }
+
+    const removeCondition = (index: number) => {
+        setNewFilter({ ...newFilter, conditions: newFilter.conditions.filter((_, i) => i !== index) })
+    }
+
+    const updateCondition = (index: number, field: keyof FilterCondition, value: string) => {
+        const updated = [...newFilter.conditions]
+        updated[index] = { ...updated[index], [field]: value }
+        setNewFilter({ ...newFilter, conditions: updated })
+    }
+
+    const addAction = () => {
+        setNewFilter({ ...newFilter, actions: [...newFilter.actions, { action: 'markRead' }] })
+    }
+
+    const removeAction = (index: number) => {
+        setNewFilter({ ...newFilter, actions: newFilter.actions.filter((_, i) => i !== index) })
+    }
+
+    const updateAction = (index: number, field: keyof FilterAction, value: string) => {
+        const updated = [...newFilter.actions]
+        updated[index] = { ...updated[index], [field]: value }
+        setNewFilter({ ...newFilter, actions: updated })
+    }
+
     return (
         <MailLayout>
             <div className="h-full overflow-y-auto">
@@ -110,337 +453,521 @@ export default function MailSettingsPage() {
                         </div>
 
                         <div className="flex-1">
-                            {activeTab === 'profile' && (
+                            {activeTab === 'accounts' && (
                                 <div className="space-y-6">
                                     <Card>
                                         <CardHeader>
                                             <CardTitle className="flex items-center gap-2">
-                                                <User className="w-5 h-5" />
-                                                Profile Information
+                                                <Mail className="w-5 h-5" />
+                                                Connected Email Accounts
                                             </CardTitle>
                                             <CardDescription>
-                                                Update your personal information
+                                                Add external email accounts to send and receive emails
                                             </CardDescription>
                                         </CardHeader>
                                         <CardContent className="space-y-4">
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <Label htmlFor="firstName">First name</Label>
-                                                    <Input
-                                                        id="firstName"
-                                                        value={profile.firstName}
-                                                        onChange={(e) => setProfile({ ...profile, firstName: e.target.value })}
-                                                    />
+                                            {isLoadingMailboxes ? (
+                                                <p className="text-gray-500">Loading accounts...</p>
+                                            ) : mailboxes.length === 0 ? (
+                                                <div className="text-center py-8">
+                                                    <Mail className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                                                    <p className="text-gray-500 mb-4">No email accounts connected yet</p>
+                                                    <Button onClick={() => setShowAddAccount(true)}>
+                                                        <Plus className="w-4 h-4 mr-2" />
+                                                        Add Email Account
+                                                    </Button>
                                                 </div>
-                                                <div>
-                                                    <Label htmlFor="lastName">Last name</Label>
-                                                    <Input
-                                                        id="lastName"
-                                                        value={profile.lastName}
-                                                        onChange={(e) => setProfile({ ...profile, lastName: e.target.value })}
-                                                    />
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <Label htmlFor="email">Email address</Label>
-                                                <Input
-                                                    id="email"
-                                                    type="email"
-                                                    value={profile.email}
-                                                    disabled
-                                                    className="opacity-60"
-                                                />
-                                                <p className="text-xs text-gray-500 mt-1">
-                                                    Contact support to change your email address
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <Label htmlFor="displayName">Display name</Label>
-                                                <Input
-                                                    id="displayName"
-                                                    value={profile.displayName}
-                                                    onChange={(e) => setProfile({ ...profile, displayName: e.target.value })}
-                                                />
-                                            </div>
-                                            <div>
-                                                <Label htmlFor="bio">Bio</Label>
-                                                <textarea
-                                                    id="bio"
-                                                    value={profile.bio}
-                                                    onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
-                                                    className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-blue-500"
-                                                    rows={3}
-                                                />
-                                            </div>
-                                            <div>
-                                                <Label htmlFor="timezone">Timezone</Label>
-                                                <select
-                                                    id="timezone"
-                                                    value={profile.timezone}
-                                                    onChange={(e) => setProfile({ ...profile, timezone: e.target.value })}
-                                                    className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-slate-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-blue-500"
-                                                >
-                                                    <option value="America/New_York">Eastern Time (US & Canada)</option>
-                                                    <option value="America/Chicago">Central Time (US & Canada)</option>
-                                                    <option value="America/Denver">Mountain Time (US & Canada)</option>
-                                                    <option value="America/Los_Angeles">Pacific Time (US & Canada)</option>
-                                                    <option value="Europe/London">London</option>
-                                                    <option value="Europe/Paris">Paris</option>
-                                                    <option value="Asia/Tokyo">Tokyo</option>
-                                                </select>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                </div>
-                            )}
-
-                            {activeTab === 'notifications' && (
-                                <div className="space-y-6">
-                                    <Card>
-                                        <CardHeader>
-                                            <CardTitle className="flex items-center gap-2">
-                                                <Bell className="w-5 h-5" />
-                                                Notification Preferences
-                                            </CardTitle>
-                                            <CardDescription>
-                                                Choose how you want to be notified
-                                            </CardDescription>
-                                        </CardHeader>
-                                        <CardContent className="space-y-6">
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <Label>Email notifications</Label>
-                                                    <p className="text-sm text-gray-500">Receive email notifications for new messages</p>
-                                                </div>
-                                                <Switch
-                                                    checked={notifications.emailNotifications}
-                                                    onCheckedChange={(checked: boolean) => setNotifications({ ...notifications, emailNotifications: checked })}
-                                                />
-                                            </div>
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <Label>Push notifications</Label>
-                                                    <p className="text-sm text-gray-500">Receive push notifications on your devices</p>
-                                                </div>
-                                                <Switch
-                                                    checked={notifications.pushNotifications}
-                                                    onCheckedChange={(checked: boolean) => setNotifications({ ...notifications, pushNotifications: checked })}
-                                                />
-                                            </div>
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <Label>Desktop notifications</Label>
-                                                    <p className="text-sm text-gray-500">Show desktop notifications when app is open</p>
-                                                </div>
-                                                <Switch
-                                                    checked={notifications.desktopNotifications}
-                                                    onCheckedChange={(checked: boolean) => setNotifications({ ...notifications, desktopNotifications: checked })}
-                                                />
-                                            </div>
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <Label>Sound</Label>
-                                                    <p className="text-sm text-gray-500">Play sound for new notifications</p>
-                                                </div>
-                                                <Switch
-                                                    checked={notifications.soundEnabled}
-                                                    onCheckedChange={(checked: boolean) => setNotifications({ ...notifications, soundEnabled: checked })}
-                                                />
-                                            </div>
-                                            <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-                                                <h3 className="font-medium mb-4">Reports</h3>
-                                                <div className="flex items-center justify-between">
-                                                    <div>
-                                                        <Label>Daily digest</Label>
-                                                        <p className="text-sm text-gray-500">Receive a daily summary of your activity</p>
-                                                    </div>
-                                                    <Switch
-                                                        checked={notifications.dailyDigest}
-                                                        onCheckedChange={(checked: boolean) => setNotifications({ ...notifications, dailyDigest: checked })}
-                                                    />
-                                                </div>
-                                                <div className="flex items-center justify-between mt-4">
-                                                    <div>
-                                                        <Label>Weekly report</Label>
-                                                        <p className="text-sm text-gray-500">Receive weekly email analytics</p>
-                                                    </div>
-                                                    <Switch
-                                                        checked={notifications.weeklyReport}
-                                                        onCheckedChange={(checked: boolean) => setNotifications({ ...notifications, weeklyReport: checked })}
-                                                    />
-                                                </div>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                </div>
-                            )}
-
-                            {activeTab === 'security' && (
-                                <div className="space-y-6">
-                                    <Card>
-                                        <CardHeader>
-                                            <CardTitle className="flex items-center gap-2">
-                                                <Shield className="w-5 h-5" />
-                                                Security Settings
-                                            </CardTitle>
-                                            <CardDescription>
-                                                Manage your account security
-                                            </CardDescription>
-                                        </CardHeader>
-                                        <CardContent className="space-y-6">
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <Label>Two-factor authentication</Label>
-                                                    <p className="text-sm text-gray-500">Add an extra layer of security</p>
-                                                </div>
-                                                <Button variant="outline">
-                                                    {security.twoFactorEnabled ? 'Enabled' : 'Enable'}
-                                                </Button>
-                                            </div>
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <Label>Login alerts</Label>
-                                                    <p className="text-sm text-gray-500">Get notified of new sign-ins</p>
-                                                </div>
-                                                <Switch
-                                                    checked={security.loginAlerts}
-                                                    onCheckedChange={(checked: boolean) => setSecurity({ ...security, loginAlerts: checked })}
-                                                />
-                                            </div>
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <Label>Session timeout</Label>
-                                                    <p className="text-sm text-gray-500">Automatically log out after inactivity</p>
-                                                </div>
-                                                <select
-                                                    value={security.sessionTimeout}
-                                                    onChange={(e) => setSecurity({ ...security, sessionTimeout: e.target.value })}
-                                                    className="px-3 py-2 border rounded-lg bg-white dark:bg-slate-800 border-gray-200 dark:border-gray-700"
-                                                >
-                                                    <option value="15">15 minutes</option>
-                                                    <option value="30">30 minutes</option>
-                                                    <option value="60">1 hour</option>
-                                                    <option value="never">Never</option>
-                                                </select>
-                                            </div>
-                                            <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-                                                <Button variant="outline" className="flex items-center gap-2">
-                                                    <Key className="w-4 h-4" />
-                                                    Change password
-                                                </Button>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                </div>
-                            )}
-
-                            {activeTab === 'appearance' && (
-                                <div className="space-y-6">
-                                    <Card>
-                                        <CardHeader>
-                                            <CardTitle className="flex items-center gap-2">
-                                                <Palette className="w-5 h-5" />
-                                                Appearance Settings
-                                            </CardTitle>
-                                            <CardDescription>
-                                                Customize how SkaleMail looks
-                                            </CardDescription>
-                                        </CardHeader>
-                                        <CardContent className="space-y-6">
-                                            <div>
-                                                <Label>Theme</Label>
-                                                <div className="grid grid-cols-3 gap-3 mt-2">
-                                                    {['light', 'dark', 'system'].map((theme) => (
-                                                        <button
-                                                            key={theme}
-                                                            onClick={() => setAppearance({ ...appearance, theme })}
-                                                            className={`
-                                                                px-4 py-3 border rounded-xl text-sm font-medium capitalize transition-all
-                                                                ${appearance.theme === theme
-                                                                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
-                                                                    : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                                                                }
-                                                            `}
-                                                        >
-                                                            {theme}
-                                                        </button>
+                                            ) : (
+                                                <div className="space-y-3">
+                                                    {mailboxes.map((mb) => (
+                                                        <div key={mb.id} className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-xl">
+                                                            <div className="flex items-center gap-4">
+                                                                <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                                                                    <Mail className="w-6 h-6 text-blue-600" />
+                                                                </div>
+                                                                <div>
+                                                                    <h3 className="font-medium">{mb.email}</h3>
+                                                                    <p className="text-sm text-gray-500">
+                                                                        {mb.isDefault && <span className="text-blue-600">Default • </span>}
+                                                                        {mb.lastSyncAt ? `Last sync: ${new Date(mb.lastSyncAt).toLocaleString()}` : 'Not synced'}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                {mb.syncError ? (
+                                                                    <AlertCircle className="w-5 h-5 text-red-500" />
+                                                                ) : (
+                                                                    <CheckCircle className="w-5 h-5 text-green-500" />
+                                                                )}
+                                                                <Button variant="outline" size="sm" onClick={fetchMailboxes}>
+                                                                    <RefreshCw className="w-4 h-4" />
+                                                                </Button>
+                                                                <Button variant="outline" size="sm" onClick={() => handleDeleteMailbox(mb.id)}>
+                                                                    <Trash2 className="w-4 h-4 text-red-500" />
+                                                                </Button>
+                                                            </div>
+                                                        </div>
                                                     ))}
+                                                    <Button onClick={() => setShowAddAccount(true)} className="mt-4">
+                                                        <Plus className="w-4 h-4 mr-2" />
+                                                        Add Email Account
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+
+                                    <Card>
+                                        <CardHeader>
+                                            <CardTitle className="flex items-center gap-2">
+                                                <Server className="w-5 h-5" />
+                                                How to Connect External Email
+                                            </CardTitle>
+                                            <CardDescription>
+                                                Follow these instructions to connect your email provider
+                                            </CardDescription>
+                                        </CardHeader>
+                                        <CardContent className="space-y-6">
+                                            <div className="grid gap-4 md:grid-cols-2">
+                                                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
+                                                    <h4 className="font-medium text-blue-700 dark:text-blue-300 mb-2">Gmail</h4>
+                                                    <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                                                        <li><strong>SMTP:</strong> smtp.gmail.com</li>
+                                                        <li><strong>IMAP:</strong> imap.gmail.com</li>
+                                                        <li><strong>Port:</strong> 587 (SMTP) / 993 (IMAP)</li>
+                                                        <li><strong>Security:</strong> TLS/SSL</li>
+                                                        <li><strong>Note:</strong> Enable 2-Step Verification and use App Password</li>
+                                                    </ul>
+                                                </div>
+                                                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
+                                                    <h4 className="font-medium text-blue-700 dark:text-blue-300 mb-2">Outlook.com</h4>
+                                                    <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                                                        <li><strong>SMTP:</strong> smtp-mail.outlook.com</li>
+                                                        <li><strong>IMAP:</strong> outlook.office365.com</li>
+                                                        <li><strong>Port:</strong> 587 (SMTP) / 993 (IMAP)</li>
+                                                        <li><strong>Security:</strong> TLS/SSL</li>
+                                                        <li><strong>Note:</strong> Use your regular password</li>
+                                                    </ul>
+                                                </div>
+                                                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
+                                                    <h4 className="font-medium text-blue-700 dark:text-blue-300 mb-2">Yahoo</h4>
+                                                    <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                                                        <li><strong>SMTP:</strong> smtp.mail.yahoo.com</li>
+                                                        <li><strong>IMAP:</strong> imap.mail.yahoo.com</li>
+                                                        <li><strong>Port:</strong> 587 (SMTP) / 993 (IMAP)</li>
+                                                        <li><strong>Security:</strong> TLS/SSL</li>
+                                                        <li><strong>Note:</strong> Use App Password</li>
+                                                    </ul>
+                                                </div>
+                                                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
+                                                    <h4 className="font-medium text-blue-700 dark:text-blue-300 mb-2">iCloud Mail</h4>
+                                                    <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                                                        <li><strong>SMTP:</strong> smtp.mail.me.com</li>
+                                                        <li><strong>IMAP:</strong> imap.mail.me.com</li>
+                                                        <li><strong>Port:</strong> 587 (SMTP) / 993 (IMAP)</li>
+                                                        <li><strong>Security:</strong> TLS/SSL</li>
+                                                        <li><strong>Note:</strong> Enable 2FA and use App Specific Password</li>
+                                                    </ul>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <Label>Compact mode</Label>
-                                                    <p className="text-sm text-gray-500">Show more emails in your inbox</p>
-                                                </div>
-                                                <Switch
-                                                    checked={appearance.compactMode}
-                                                    onCheckedChange={(checked: boolean) => setAppearance({ ...appearance, compactMode: checked })}
-                                                />
+
+                                            <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-xl border border-yellow-200 dark:border-yellow-800">
+                                                <h4 className="font-medium text-yellow-800 dark:text-yellow-200 mb-2">Important Notes</h4>
+                                                <ul className="text-sm text-yellow-700 dark:text-yellow-300 space-y-2">
+                                                    <li>• Use your <strong>email address</strong> as username (e.g., yourname@gmail.com)</li>
+                                                    <li>• For Gmail/Yahoo/iCloud, generate an <strong>App Password</strong> in your account security settings</li>
+                                                    <li>• Make sure <strong>IMAP</strong> is enabled in your email provider settings</li>
+                                                    <li>• Port 587 uses STARTTLS, Port 993 uses SSL/TLS</li>
+                                                </ul>
                                             </div>
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <Label>Conversation view</Label>
-                                                    <p className="text-sm text-gray-500">Group related messages together</p>
-                                                </div>
-                                                <Switch
-                                                    checked={appearance.conversationView}
-                                                    onCheckedChange={(checked: boolean) => setAppearance({ ...appearance, conversationView: checked })}
-                                                />
+
+                                            <div className="flex items-center gap-2 text-sm text-gray-500">
+                                                <ExternalLink className="w-4 h-4" />
+                                                <a 
+                                                    href="https://support.google.com/mail/answer/7129" 
+                                                    target="_blank" 
+                                                    rel="noopener noreferrer"
+                                                    className="hover:text-blue-600 hover:underline"
+                                                >
+                                                    Learn more about enabling IMAP in Gmail
+                                                </a>
                                             </div>
                                         </CardContent>
                                     </Card>
+
+                                    {showAddAccount && (
+                                        <Card>
+                                            <CardHeader>
+                                                <CardTitle>Add New Email Account</CardTitle>
+                                                <CardDescription>
+                                                    Enter your email account details
+                                                </CardDescription>
+                                            </CardHeader>
+                                            <CardContent className="space-y-6">
+                                                <div>
+                                                    <h4 className="font-medium mb-4">Account Information</h4>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        <div>
+                                                            <Label>Email Address</Label>
+                                                            <Input
+                                                                type="email"
+                                                                value={newAccount.email}
+                                                                onChange={(e) => setNewAccount({ ...newAccount, email: e.target.value })}
+                                                                placeholder="your@email.com"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <Label>Display Name</Label>
+                                                            <Input
+                                                                value={newAccount.displayName}
+                                                                onChange={(e) => setNewAccount({ ...newAccount, displayName: e.target.value })}
+                                                                placeholder="Your Name"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div className="mt-4">
+                                                        <div className="flex items-center gap-2">
+                                                            <Switch
+                                                                checked={newAccount.isDefault}
+                                                                onCheckedChange={(checked) => setNewAccount({ ...newAccount, isDefault: checked })}
+                                                            />
+                                                            <Label>Set as default account</Label>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <h4 className="font-medium mb-4 flex items-center gap-2">
+                                                        <Server className="w-4 h-4" />
+                                                        SMTP Settings (Sending)
+                                                    </h4>
+                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                        <div>
+                                                            <Label>SMTP Host</Label>
+                                                            <Input
+                                                                value={newAccount.smtpHost}
+                                                                onChange={(e) => setNewAccount({ ...newAccount, smtpHost: e.target.value })}
+                                                                placeholder="smtp.gmail.com"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <Label>Port</Label>
+                                                            <Input
+                                                                type="number"
+                                                                value={newAccount.smtpPort}
+                                                                onChange={(e) => setNewAccount({ ...newAccount, smtpPort: e.target.value })}
+                                                                placeholder="587"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <Label>Username (usually same as email)</Label>
+                                                            <Input
+                                                                value={newAccount.smtpUsername}
+                                                                onChange={(e) => setNewAccount({ ...newAccount, smtpUsername: e.target.value })}
+                                                                placeholder="your@email.com"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                                                        <div>
+                                                            <Label>Password / App Password</Label>
+                                                            <Input
+                                                                type="password"
+                                                                value={newAccount.smtpPassword}
+                                                                onChange={(e) => setNewAccount({ ...newAccount, smtpPassword: e.target.value })}
+                                                                placeholder="••••••••"
+                                                            />
+                                                        </div>
+                                                        <div className="flex items-center gap-2 mt-6">
+                                                            <Switch
+                                                                checked={newAccount.smtpSecure}
+                                                                onCheckedChange={(checked) => setNewAccount({ ...newAccount, smtpSecure: checked })}
+                                                            />
+                                                            <Label>Use SSL/TLS (Port 993/465)</Label>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <h4 className="font-medium mb-4 flex items-center gap-2">
+                                                        <Server className="w-4 h-4" />
+                                                        IMAP Settings (Receiving)
+                                                    </h4>
+                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                        <div>
+                                                            <Label>IMAP Host</Label>
+                                                            <Input
+                                                                value={newAccount.imapHost}
+                                                                onChange={(e) => setNewAccount({ ...newAccount, imapHost: e.target.value })}
+                                                                placeholder="imap.gmail.com"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <Label>Port</Label>
+                                                            <Input
+                                                                type="number"
+                                                                value={newAccount.imapPort}
+                                                                onChange={(e) => setNewAccount({ ...newAccount, imapPort: e.target.value })}
+                                                                placeholder="993"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <Label>Username (usually same as email)</Label>
+                                                            <Input
+                                                                value={newAccount.imapUsername}
+                                                                onChange={(e) => setNewAccount({ ...newAccount, imapUsername: e.target.value })}
+                                                                placeholder="your@email.com"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                                                        <div>
+                                                            <Label>Password / App Password</Label>
+                                                            <Input
+                                                                type="password"
+                                                                value={newAccount.imapPassword}
+                                                                onChange={(e) => setNewAccount({ ...newAccount, imapPassword: e.target.value })}
+                                                                placeholder="••••••••"
+                                                            />
+                                                        </div>
+                                                        <div className="flex items-center gap-2 mt-6">
+                                                            <Switch
+                                                                checked={newAccount.imapSecure}
+                                                                onCheckedChange={(checked) => setNewAccount({ ...newAccount, imapSecure: checked })}
+                                                            />
+                                                            <Label>Use SSL/TLS (Port 993)</Label>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex gap-3">
+                                                    <Button 
+                                                        variant="outline" 
+                                                        onClick={handleTestConnection}
+                                                        disabled={isTesting || !newAccount.email || !newAccount.smtpHost || !newAccount.imapHost}
+                                                    >
+                                                        {isTesting ? 'Testing...' : 'Test Connection'}
+                                                    </Button>
+                                                    <Button 
+                                                        onClick={handleAddAccount}
+                                                        disabled={isSavingAccount || !newAccount.email || !newAccount.smtpHost || !newAccount.imapHost}
+                                                    >
+                                                        {isSavingAccount ? 'Adding...' : 'Add Account'}
+                                                    </Button>
+                                                    <Button variant="ghost" onClick={() => setShowAddAccount(false)}>
+                                                        Cancel
+                                                    </Button>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    )}
                                 </div>
                             )}
 
-                            {activeTab === 'integrations' && (
+                            {activeTab === 'filters' && (
                                 <div className="space-y-6">
                                     <Card>
                                         <CardHeader>
                                             <CardTitle className="flex items-center gap-2">
-                                                <Globe className="w-5 h-5" />
-                                                Connected Apps & Integrations
+                                                <Filter className="w-5 h-5" />
+                                                Email Filters
                                             </CardTitle>
                                             <CardDescription>
-                                                Manage third-party integrations
+                                                Create rules to automatically organize your emails
                                             </CardDescription>
                                         </CardHeader>
                                         <CardContent className="space-y-4">
-                                            <div className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-xl">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                                                        <Smartphone className="w-6 h-6 text-blue-600" />
-                                                    </div>
-                                                    <div>
-                                                        <h3 className="font-medium">Mobile App</h3>
-                                                        <p className="text-sm text-gray-500">Connected</p>
+                                            {mailboxes.length > 0 && (
+                                                <div className="mb-4">
+                                                    <Label>Select Account</Label>
+                                                    <select
+                                                        className="w-full mt-1 px-3 py-2 border rounded-lg bg-white dark:bg-slate-800 border-gray-200 dark:border-gray-700"
+                                                        value={selectedMailboxId || ''}
+                                                        onChange={(e) => setSelectedMailboxId(e.target.value)}
+                                                    >
+                                                        <option value="">Select an account...</option>
+                                                        {mailboxes.map((mb) => (
+                                                            <option key={mb.id} value={mb.id}>{mb.email}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+
+                                            {isLoadingFilters ? (
+                                                <p className="text-gray-500">Loading filters...</p>
+                                            ) : filters.length === 0 ? (
+                                                <div className="text-center py-8">
+                                                    <Filter className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                                                    <p className="text-gray-500 mb-4">No filters created yet</p>
+                                                    {selectedMailboxId && (
+                                                        <Button onClick={() => setShowAddFilter(true)}>
+                                                            <Plus className="w-4 h-4 mr-2" />
+                                                            Create Filter
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-3">
+                                                    {filters.map((filter) => (
+                                                        <div key={filter.id} className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-xl">
+                                                            <div className="flex items-center gap-4">
+                                                                <Switch
+                                                                    checked={filter.isActive}
+                                                                    onCheckedChange={(checked) => handleToggleFilter(filter.id, checked)}
+                                                                />
+                                                                <div>
+                                                                    <h3 className="font-medium">{filter.name}</h3>
+                                                                    <p className="text-sm text-gray-500">
+                                                                        {filter.conditions.length} condition(s), {filter.actions.length} action(s)
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                            <Button variant="outline" size="sm" onClick={() => handleDeleteFilter(filter.id)}>
+                                                                <Trash2 className="w-4 h-4 text-red-500" />
+                                                            </Button>
+                                                        </div>
+                                                    ))}
+                                                    <Button onClick={() => setShowAddFilter(true)} className="mt-4">
+                                                        <Plus className="w-4 h-4 mr-2" />
+                                                        Create Filter
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+
+                                    {showAddFilter && (
+                                        <Card>
+                                            <CardHeader>
+                                                <CardTitle>Create New Filter</CardTitle>
+                                                <CardDescription>
+                                                    Define conditions and actions for your filter
+                                                </CardDescription>
+                                            </CardHeader>
+                                            <CardContent className="space-y-6">
+                                                <div>
+                                                    <Label>Filter Name</Label>
+                                                    <Input
+                                                        value={newFilter.name}
+                                                        onChange={(e) => setNewFilter({ ...newFilter, name: e.target.value })}
+                                                        placeholder="e.g., Mark newsletters as read"
+                                                        className="mt-1"
+                                                    />
+                                                </div>
+
+                                                <div>
+                                                    <Label className="mb-2 block">Conditions (all must match)</Label>
+                                                    <div className="space-y-2">
+                                                        {newFilter.conditions.map((condition, index) => (
+                                                            <div key={index} className="flex items-center gap-2">
+                                                                <select
+                                                                    className="px-3 py-2 border rounded-lg bg-white dark:bg-slate-800 border-gray-200 dark:border-gray-700"
+                                                                    value={condition.field}
+                                                                    onChange={(e) => updateCondition(index, 'field', e.target.value)}
+                                                                >
+                                                                    <option value="from">From</option>
+                                                                    <option value="to">To</option>
+                                                                    <option value="subject">Subject</option>
+                                                                    <option value="body">Body</option>
+                                                                    <option value="hasAttachment">Has Attachment</option>
+                                                                </select>
+                                                                <select
+                                                                    className="px-3 py-2 border rounded-lg bg-white dark:bg-slate-800 border-gray-200 dark:border-gray-700"
+                                                                    value={condition.operator}
+                                                                    onChange={(e) => updateCondition(index, 'operator', e.target.value)}
+                                                                >
+                                                                    <option value="contains">contains</option>
+                                                                    <option value="notContains">does not contain</option>
+                                                                    <option value="equals">equals</option>
+                                                                    <option value="startsWith">starts with</option>
+                                                                    <option value="regex">matches regex</option>
+                                                                </select>
+                                                                {condition.field !== 'hasAttachment' && (
+                                                                    <Input
+                                                                        value={condition.value}
+                                                                        onChange={(e) => updateCondition(index, 'value', e.target.value)}
+                                                                        placeholder="Value"
+                                                                        className="flex-1"
+                                                                    />
+                                                                )}
+                                                                {condition.field === 'hasAttachment' && (
+                                                                    <select
+                                                                        className="px-3 py-2 border rounded-lg bg-white dark:bg-slate-800 border-gray-200 dark:border-gray-700"
+                                                                        value={condition.value}
+                                                                        onChange={(e) => updateCondition(index, 'value', e.target.value)}
+                                                                    >
+                                                                        <option value="yes">Yes</option>
+                                                                        <option value="no">No</option>
+                                                                    </select>
+                                                                )}
+                                                                <Button variant="ghost" size="sm" onClick={() => removeCondition(index)} disabled={newFilter.conditions.length === 1}>
+                                                                    <Trash className="w-4 h-4" />
+                                                                </Button>
+                                                            </div>
+                                                        ))}
+                                                        <Button variant="outline" size="sm" onClick={addCondition}>
+                                                            <Plus className="w-4 h-4 mr-1" /> Add Condition
+                                                        </Button>
                                                     </div>
                                                 </div>
-                                                <Button variant="outline" size="sm">Manage</Button>
-                                            </div>
-                                            <div className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-xl">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-12 h-12 rounded-xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                                                        <Globe className="w-6 h-6 text-purple-600" />
-                                                    </div>
-                                                    <div>
-                                                        <h3 className="font-medium">Calendar</h3>
-                                                        <p className="text-sm text-gray-500">Not connected</p>
+
+                                                <div>
+                                                    <Label className="mb-2 block">Actions</Label>
+                                                    <div className="space-y-2">
+                                                        {newFilter.actions.map((action, index) => (
+                                                            <div key={index} className="flex items-center gap-2">
+                                                                <select
+                                                                    className="px-3 py-2 border rounded-lg bg-white dark:bg-slate-800 border-gray-200 dark:border-gray-700"
+                                                                    value={action.action}
+                                                                    onChange={(e) => updateAction(index, 'action', e.target.value)}
+                                                                >
+                                                                    <option value="markRead">Mark as read</option>
+                                                                    <option value="markUnread">Mark as unread</option>
+                                                                    <option value="markStarred">Star</option>
+                                                                    <option value="unmarkStarred">Unstar</option>
+                                                                    <option value="archive">Archive</option>
+                                                                    <option value="markSpam">Mark as spam</option>
+                                                                    <option value="markNotSpam">Mark as not spam</option>
+                                                                </select>
+                                                                <Button variant="ghost" size="sm" onClick={() => removeAction(index)} disabled={newFilter.actions.length === 1}>
+                                                                    <Trash className="w-4 h-4" />
+                                                                </Button>
+                                                            </div>
+                                                        ))}
+                                                        <Button variant="outline" size="sm" onClick={addAction}>
+                                                            <Plus className="w-4 h-4 mr-1" /> Add Action
+                                                        </Button>
                                                     </div>
                                                 </div>
-                                                <Button variant="outline" size="sm">Connect</Button>
-                                            </div>
-                                            <div className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-xl">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-12 h-12 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                                                        <Clock className="w-6 h-6 text-green-600" />
-                                                    </div>
-                                                    <div>
-                                                        <h3 className="font-medium">Slack</h3>
-                                                        <p className="text-sm text-gray-500">Not connected</p>
-                                                    </div>
+
+                                                <div className="flex gap-3">
+                                                    <Button 
+                                                        onClick={handleAddFilter}
+                                                        disabled={isSavingFilter || !newFilter.name || newFilter.conditions.every(c => !c.value)}
+                                                    >
+                                                        {isSavingFilter ? 'Creating...' : 'Create Filter'}
+                                                    </Button>
+                                                    <Button variant="ghost" onClick={() => setShowAddFilter(false)}>
+                                                        Cancel
+                                                    </Button>
                                                 </div>
-                                                <Button variant="outline" size="sm">Connect</Button>
-                                            </div>
+                                            </CardContent>
+                                        </Card>
+                                    )}
+                                </div>
+                            )}
+
+                            {activeTab !== 'accounts' && activeTab !== 'filters' && (
+                                <div className="space-y-6">
+                                    <Card>
+                                        <CardHeader>
+                                            <CardTitle>Settings</CardTitle>
+                                            <CardDescription>
+                                                This section is under development
+                                            </CardDescription>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <p className="text-gray-500">More settings coming soon...</p>
                                         </CardContent>
                                     </Card>
                                 </div>

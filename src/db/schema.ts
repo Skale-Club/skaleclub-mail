@@ -1101,6 +1101,21 @@ export const mailMessages = pgTable('mail_messages', {
     mailboxUidUnique: uniqueIndex('mail_message_mailbox_uid_unique').on(table.mailboxId, table.remoteUid),
 }))
 
+// Email Filters
+export const mailFilters = pgTable('mail_filters', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    mailboxId: uuid('mailbox_id').references(() => mailboxes.id).notNull(),
+    name: text('name').notNull(),
+    // Conditions (JSON)
+    conditions: jsonb('conditions').notNull(), // { field: 'from'|'to'|'subject'|'body', operator: 'contains'|'equals'|'startsWith'|'regex', value: string }
+    // Actions
+    actions: jsonb('actions').notNull(), // { action: 'markRead'|'markStarred'|'moveToFolder'|'addLabel'|'markSpam'|'archive', value?: string }
+    isActive: boolean('is_active').default(true).notNull(),
+    priority: integer('priority').default(0).notNull(), // Higher = runs first
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
 // Mailbox Relations
 export const mailboxesRelations = relations(mailboxes, ({ one, many }) => ({
     user: one(users, {
@@ -1130,6 +1145,13 @@ export const mailMessagesRelations = relations(mailMessages, ({ one }) => ({
     }),
 }))
 
+export const mailFiltersRelations = relations(mailFilters, ({ one }) => ({
+    mailbox: one(mailboxes, {
+        fields: [mailFilters.mailboxId],
+        references: [mailboxes.id],
+    }),
+}))
+
 // Types
 export type Mailbox = typeof mailboxes.$inferSelect
 export type NewMailbox = typeof mailboxes.$inferInsert
@@ -1139,3 +1161,6 @@ export type NewMailFolder = typeof mailFolders.$inferInsert
 
 export type MailMessage = typeof mailMessages.$inferSelect
 export type NewMailMessage = typeof mailMessages.$inferInsert
+
+export type MailFilter = typeof mailFilters.$inferSelect
+export type NewMailFilter = typeof mailFilters.$inferInsert

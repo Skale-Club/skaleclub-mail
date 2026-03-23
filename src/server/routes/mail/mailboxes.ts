@@ -261,4 +261,85 @@ router.delete('/:id', async (req: Request, res: Response) => {
     }
 })
 
+router.post('/test-connection', async (req: Request, res: Response) => {
+    try {
+        const schema = z.object({
+            smtpHost: z.string(),
+            smtpPort: z.number().int().min(1).max(65535),
+            smtpSecure: z.boolean(),
+            smtpUsername: z.string(),
+            smtpPassword: z.string(),
+            imapHost: z.string(),
+            imapPort: z.number().int().min(1).max(65535),
+            imapSecure: z.boolean(),
+            imapUsername: z.string(),
+            imapPassword: z.string(),
+        })
+
+        const data = schema.parse(req.body)
+
+        const nodemailer = await import('nodemailer')
+        
+        let smtpSuccess = false
+        let imapSuccess = false
+        const errors: string[] = []
+
+        try {
+            const smtpTransporter = nodemailer.createTransport({
+                host: data.smtpHost,
+                port: data.smtpPort,
+                secure: data.smtpSecure,
+                auth: {
+                    user: data.smtpUsername,
+                    pass: data.smtpPassword,
+                },
+            })
+            await smtpTransporter.verify()
+            smtpSuccess = true
+        } catch (err) {
+            errors.push(`SMTP: ${err instanceof Error ? err.message : String(err)}`)
+        }
+
+        try {
+            const Imap = (await import('imap')).default
+            const imap = new Imap({
+                user: data.imapUsername,
+                password: data.imapPassword,
+                host: data.imapHost,
+                port: data.imapPort,
+                tls: data.imapSecure,
+                tlsOptions: { rejectUnauthorized: false },
+            })
+
+            await new Promise<void>((resolve, reject) => {
+                imap.once('ready', () => {
+                    imap.end()
+                    resolve()
+                })
+                imap.once('error', (err) => {
+                    reject(err)
+                })
+                imap.connect()
+            })
+            imapSuccess = true
+        } catch (err) {
+            errors.push(`IMAP: ${err instanceof Error ? err.message : String(err)}`)
+        }
+
+        res.json({
+            data: {
+                smtp: smtpSuccess,
+                imap: imapSuccess,
+                errors: errors.length > 0 ? errors : undefined,
+            },
+        })
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({ error: error.errors })
+        }
+        console.error('Error testing connection:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
 export default router

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import nodemailer from 'nodemailer'
+import Imap from 'imap'
 import { v4 as uuidv4 } from 'uuid'
 import { db } from '../../../db'
 import { mailFolders, mailMessages } from '../../../db/schema'
@@ -9,6 +10,41 @@ import { decrypt } from '../../../lib/crypto'
 import { checkUserMailboxAccess } from './mailboxes'
 
 const router = Router()
+
+async function appendToSentFolder(
+    mailbox: any,
+    rawEmail: string
+): Promise<{ success: boolean; error?: string }> {
+    return new Promise((resolve) => {
+        const imapConfig = {
+            user: mailbox.imapUsername,
+            password: decrypt(mailbox.imapPasswordEncrypted),
+            host: mailbox.imapHost,
+            port: mailbox.imapPort,
+            tls: mailbox.imapSecure,
+            tlsOptions: { rejectUnauthorized: process.env.NODE_ENV === 'production' },
+        }
+
+        const imap = new Imap(imapConfig)
+
+        imap.once('ready', () => {
+            imap.append(rawEmail, { mailbox: 'Sent' }, (err: any) => {
+                imap.end()
+                if (err) {
+                    resolve({ success: false, error: err.message })
+                } else {
+                    resolve({ success: true })
+                }
+            })
+        })
+
+        imap.once('error', (err: any) => {
+            resolve({ success: false, error: err.message })
+        })
+
+        imap.connect()
+    })
+}
 
 router.post('/:mailboxId/send', async (req: Request, res: Response) => {
     try {
@@ -100,6 +136,21 @@ router.post('/:mailboxId/send', async (req: Request, res: Response) => {
                 ),
             })
 
+            const rawEmail = [
+                `From: ${mailbox.displayName ? `${mailbox.displayName} <${mailbox.email}>` : mailbox.email}`,
+                `To: ${data.to.map(t => t.name ? `${t.name} <${t.address}>` : t.address).join(', ')}`,
+                data.cc ? `Cc: ${data.cc.map(c => c.name ? `${c.name} <${c.address}>` : c.address).join(', ')}` : '',
+                `Subject: ${data.subject}`,
+                `Date: ${new Date().toUTCString()}`,
+                `Message-ID: ${messageId}`,
+                data.inReplyTo ? `In-Reply-To: ${data.inReplyTo}` : '',
+                data.references ? `References: ${data.references}` : '',
+                `MIME-Version: 1.0`,
+                `Content-Type: text/plain; charset=UTF-8`,
+                '',
+                data.plainBody || '',
+            ].filter(Boolean).join('\r\n')
+
             if (sentFolder) {
                 await db.insert(mailMessages).values({
                     mailboxId,
@@ -126,6 +177,11 @@ router.post('/:mailboxId/send', async (req: Request, res: Response) => {
                     remoteDate: new Date(),
                     receivedAt: new Date(),
                 })
+            }
+
+            const appendResult = await appendToSentFolder(mailbox, rawEmail)
+            if (!appendResult.success) {
+                console.warn('Failed to append to IMAP Sent folder:', appendResult.error)
             }
         }
 
