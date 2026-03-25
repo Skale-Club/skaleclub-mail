@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
 import { Label } from '../../ui/label'
-import { getAccessToken, timezoneOptions } from './shared'
+import { fetchWithAuth, timezoneOptions } from './shared'
 
 interface Organization {
     id: string
@@ -35,13 +35,9 @@ export default function SettingsTab({ org, isAdmin, onRefresh }: SettingsTabProp
     async function handleUpdateOrg() {
         setIsSaving(true)
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/organizations/${org.id}`, {
+            const response = await fetchWithAuth(`/api/organizations/${org.id}`, {
                 method: 'PATCH',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(form),
             })
 

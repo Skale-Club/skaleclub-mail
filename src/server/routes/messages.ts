@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { eq, and, desc, like, sql } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 import { db } from '../../db'
-import { messages, servers, organizationUsers, deliveries, templates } from '../../db/schema'
+import {  messages, organizationUsers, deliveries, templates , organizations } from '../../db/schema'
 import { isPlatformAdmin } from '../lib/admin'
 import { injectTracking, incrementStat, fireWebhooks } from '../lib/tracking'
 import { resolveOutlookMailboxForServer, sendMessageWithOutlook } from '../lib/outlook'
@@ -20,7 +20,7 @@ function escapeHtml(str: string): string {
 }
 
 const sendMessageSchema = z.object({
-    serverId: z.string().uuid(),
+    organizationId: z.string().uuid(),
     outlookMailboxId: z.string().uuid().optional(),
     from: z.string().email(),
     to: z.array(z.string().email()).min(1),
@@ -49,49 +49,49 @@ const searchMessagesSchema = z.object({
     limit: z.coerce.number().int().min(1).max(100).default(50),
 })
 
-async function checkMessageAccess(userId: string, serverId: string) {
-    const server = await db.query.servers.findFirst({
-        where: eq(servers.id, serverId),
+async function checkMessageAccess(userId: string, organizationId: string) {
+    const organization = await db.query.organizations.findFirst({
+        where: eq(organizations.id, organizationId),
     })
 
-    if (!server) return { server: null, membership: null }
+    if (!organization) return { organization: null, membership: null }
 
     if (await isPlatformAdmin(userId)) {
-        return { server, membership: { role: 'admin' as const } }
+        return { organization, membership: { role: "admin" as const } }
     }
 
     const membership = await db.query.organizationUsers.findFirst({
         where: and(
-            eq(organizationUsers.organizationId, server.organizationId),
+            eq(organizationUsers.organizationId, organization.id),
             eq(organizationUsers.userId, userId)
         ),
     })
 
-    return { server, membership }
+    return { organization, membership }
 }
 
 router.get('/', async (req: Request, res: Response) => {
     try {
         const userId = req.headers['x-user-id'] as string
-        const serverId = req.query.serverId as string
+        const organizationId = req.query.organizationId as string
 
         if (!userId) {
             return res.status(401).json({ error: 'Unauthorized' })
         }
 
-        if (!serverId) {
-            return res.status(400).json({ error: 'Server ID required' })
+        if (!organizationId) {
+            return res.status(400).json({ error: 'Organization ID required' })
         }
 
-        const { server, membership } = await checkMessageAccess(userId, serverId)
+        const { organization, membership } = await checkMessageAccess(userId, organizationId)
 
-        if (!server || !membership) {
+        if (!organization || !membership) {
             return res.status(403).json({ error: 'Access denied' })
         }
 
         const { query, status, direction, from, to, page, limit } = searchMessagesSchema.parse(req.query)
         const offset = (page - 1) * limit
-        const conditions = [eq(messages.serverId, serverId)]
+        const conditions = [eq(messages.organizationId, organizationId)]
 
         if (status) {
             conditions.push(eq(messages.status, status))
@@ -172,9 +172,9 @@ router.get('/:id', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Message not found' })
         }
 
-        const { server, membership } = await checkMessageAccess(userId, message.serverId)
+        const { organization, membership } = await checkMessageAccess(userId, message.organizationId)
 
-        if (!server || !membership) {
+        if (!organization || !membership) {
             return res.status(403).json({ error: 'Access denied' })
         }
 
@@ -194,15 +194,13 @@ router.post('/', async (req: Request, res: Response) => {
         }
 
         const data = sendMessageSchema.parse(req.body)
-        const { server, membership } = await checkMessageAccess(userId, data.serverId)
+        const { organization, membership } = await checkMessageAccess(userId, data.organizationId)
 
-        if (!server || !membership) {
+        if (!organization || !membership) {
             return res.status(403).json({ error: 'Access denied' })
         }
 
-        if (server.suspended) {
-            return res.status(400).json({ error: 'Server is suspended' })
-        }
+
 
         let subject = data.subject
         let plainBody = data.plainBody
@@ -217,8 +215,8 @@ router.post('/', async (req: Request, res: Response) => {
                 return res.status(404).json({ error: 'Template not found' })
             }
 
-            if (template.serverId !== data.serverId) {
-                return res.status(403).json({ error: 'Template does not belong to this server' })
+            if (template.organizationId !== data.organizationId) {
+                return res.status(403).json({ error: 'Template does not belong to this organization' })
             }
 
             const variables = data.templateVariables || {}
@@ -235,18 +233,18 @@ router.post('/', async (req: Request, res: Response) => {
             htmlBody = render(template.htmlBody, true) || htmlBody
         }
 
-        const outlookMailbox = server.sendMode === 'outlook'
-            ? await resolveOutlookMailboxForServer(data.serverId, data.outlookMailboxId)
+        const outlookMailbox = false
+            ? await resolveOutlookMailboxForServer(data.organizationId, data.outlookMailboxId)
             : null
 
-        if (server.sendMode === 'outlook') {
+        if (false) {
             if (!outlookMailbox) {
-                return res.status(400).json({ error: 'No active Outlook mailbox configured for this server' })
+                return res.status(400).json({ error: 'No active Outlook mailbox configured for this organization' })
             }
 
-            if (data.from.toLowerCase() !== outlookMailbox.email.toLowerCase()) {
+            if (data.from.toLowerCase() !== outlookMailbox!.email.toLowerCase()) {
                 return res.status(400).json({
-                    error: `Outlook send mode requires the from address to match the connected mailbox (${outlookMailbox.email})`,
+                    error: `Outlook send mode requires the from address to match the connected mailbox (${outlookMailbox!.email})`,
                 })
             }
         }
@@ -257,14 +255,14 @@ router.post('/', async (req: Request, res: Response) => {
 
         const messageToken = uuidv4()
 
-        if (htmlBody && !server.privacyMode && (server.trackOpens || server.trackClicks)) {
+        if (htmlBody) {
             const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 9001}`
-            htmlBody = injectTracking(htmlBody, messageToken, baseUrl, server.trackOpens, server.trackClicks)
+            htmlBody = injectTracking(htmlBody, messageToken, baseUrl, true, true)
         }
 
         const [message] = await db.insert(messages).values({
-            serverId: data.serverId,
-            messageId: `<${uuidv4()}@${server.defaultFromAddress?.split('@')[1] || 'mail.local'}>`,
+            organizationId: data.organizationId,
+            messageId: `<${uuidv4()}@${'mail.local'}>`,
             token: messageToken,
             direction: 'outgoing',
             fromAddress: data.from,
@@ -284,17 +282,17 @@ router.post('/', async (req: Request, res: Response) => {
         for (const recipient of allRecipients) {
             await db.insert(deliveries).values({
                 messageId: message.id,
-                serverId: data.serverId,
+                organizationId: data.organizationId,
                 rcptTo: recipient,
                 status: 'pending',
             })
         }
 
-        if (server.sendMode === 'outlook' && outlookMailbox) {
+        if (false) {
             try {
                 await sendMessageWithOutlook({
-                    serverId: data.serverId,
-                    mailboxId: outlookMailbox.id,
+                    organizationId: data.organizationId,
+                    mailboxId: outlookMailbox!.id,
                     fromAddress: data.from,
                     to: data.to,
                     cc: data.cc,
@@ -327,7 +325,7 @@ router.post('/', async (req: Request, res: Response) => {
                 message.status = 'sent'
                 message.sentAt = sentAt
             } catch (error) {
-                const details = error instanceof Error ? error.message : 'Outlook send failed'
+                const details = error instanceof Error ? (error as Error).message : 'Outlook send failed'
                 const failedAt = new Date()
 
                 await db
@@ -357,8 +355,8 @@ router.post('/', async (req: Request, res: Response) => {
         }
 
         Promise.allSettled([
-            incrementStat(data.serverId, 'messagesSent'),
-            fireWebhooks(data.serverId, 'message_sent', {
+            incrementStat(data.organizationId, 'messagesSent'),
+            fireWebhooks(data.organizationId, 'message_sent', {
                 messageId: message.id,
                 subject: message.subject,
                 from: message.fromAddress,
@@ -397,9 +395,9 @@ router.post('/:id/release', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Message not found' })
         }
 
-        const { server, membership } = await checkMessageAccess(userId, message.serverId)
+        const { organization, membership } = await checkMessageAccess(userId, message.organizationId)
 
-        if (!server || !membership || membership.role !== 'admin') {
+        if (!organization || !membership || membership.role !== 'admin') {
             return res.status(403).json({ error: 'Only admins can release held messages' })
         }
 
@@ -443,9 +441,9 @@ router.delete('/:id', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Message not found' })
         }
 
-        const { server, membership } = await checkMessageAccess(userId, message.serverId)
+        const { organization, membership } = await checkMessageAccess(userId, message.organizationId)
 
-        if (!server || !membership || membership.role !== 'admin') {
+        if (!organization || !membership || membership.role !== 'admin') {
             return res.status(403).json({ error: 'Only admins can delete messages' })
         }
 
@@ -472,7 +470,7 @@ router.get('/:id/attachments', async (req: Request, res: Response) => {
             where: eq(messages.id, messageId),
             columns: {
                 id: true,
-                serverId: true,
+                organizationId: true,
                 attachments: true,
             },
         })
@@ -481,9 +479,9 @@ router.get('/:id/attachments', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Message not found' })
         }
 
-        const { server, membership } = await checkMessageAccess(userId, message.serverId)
+        const { organization, membership } = await checkMessageAccess(userId, message.organizationId)
 
-        if (!server || !membership) {
+        if (!organization || !membership) {
             return res.status(403).json({ error: 'Access denied' })
         }
 

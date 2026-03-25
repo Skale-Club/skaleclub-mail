@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { db } from '../../db'
-import { templates, servers, organizationUsers } from '../../db/schema'
+import {  templates, organizationUsers , organizations } from '../../db/schema'
 import { eq, and, desc, like } from 'drizzle-orm'
 import { isPlatformAdmin } from '../lib/admin'
 
@@ -18,7 +18,7 @@ function escapeHtml(str: string): string {
 
 // Validation schemas
 const createTemplateSchema = z.object({
-    serverId: z.string().uuid(),
+    organizationId: z.string().uuid(),
     name: z.string().min(1, 'Name is required'),
     slug: z.string().min(1).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with hyphens'),
     subject: z.string().min(1, 'Subject is required'),
@@ -36,51 +36,51 @@ const updateTemplateSchema = z.object({
     variables: z.array(z.string()).optional(),
 })
 
-// Helper to check server access
-async function checkServerAccess(userId: string, serverId: string) {
-    const server = await db.query.servers.findFirst({
-        where: eq(servers.id, serverId),
+// Helper to check organization access
+async function checkOrganizationAccess(userId: string, organizationId: string) {
+    const organization = await db.query.organizations.findFirst({
+        where: eq(organizations.id, organizationId),
     })
 
-    if (!server) return { server: null, membership: null }
+    if (!organization) return { organization: null, membership: null }
 
     if (await isPlatformAdmin(userId)) {
-        return { server, membership: { role: 'admin' as const } }
+        return { organization, membership: { role: 'admin' as const } }
     }
 
     const membership = await db.query.organizationUsers.findFirst({
         where: and(
-            eq(organizationUsers.organizationId, server.organizationId),
+            eq(organizationUsers.organizationId, organization.id),
             eq(organizationUsers.userId, userId)
         ),
     })
 
-    return { server, membership }
+    return { organization, membership }
 }
 
-// List templates for a server
+// List templates for an organization
 router.get('/', async (req: Request, res: Response) => {
     try {
         const userId = req.headers['x-user-id'] as string
-        const serverId = req.query.serverId as string
+        const organizationId = req.query.organizationId as string
 
         if (!userId) {
             return res.status(401).json({ error: 'Unauthorized' })
         }
 
-        if (!serverId) {
-            return res.status(400).json({ error: 'Server ID required' })
+        if (!organizationId) {
+            return res.status(400).json({ error: 'Organization ID required' })
         }
 
-        const { server, membership } = await checkServerAccess(userId, serverId)
+        const { organization, membership } = await checkOrganizationAccess(userId, organizationId)
 
-        if (!server || !membership) {
+        if (!organization || !membership) {
             return res.status(403).json({ error: 'Access denied' })
         }
 
         const search = req.query.search as string | undefined
 
-        const conditions = [eq(templates.serverId, serverId)]
+        const conditions = [eq(templates.organizationId, organizationId)]
 
         if (search) {
             conditions.push(like(templates.name, `%${search}%`))
@@ -116,9 +116,9 @@ router.get('/:id', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Template not found' })
         }
 
-        const { server, membership } = await checkServerAccess(userId, template.serverId)
+        const { organization, membership } = await checkOrganizationAccess(userId, template.organizationId)
 
-        if (!server || !membership) {
+        if (!organization || !membership) {
             return res.status(403).json({ error: 'Access denied' })
         }
 
@@ -140,26 +140,26 @@ router.post('/', async (req: Request, res: Response) => {
 
         const data = createTemplateSchema.parse(req.body)
 
-        const { server, membership } = await checkServerAccess(userId, data.serverId)
+        const { organization, membership } = await checkOrganizationAccess(userId, data.organizationId)
 
-        if (!server || !membership) {
+        if (!organization || !membership) {
             return res.status(403).json({ error: 'Access denied' })
         }
 
-        // Check slug uniqueness within server
+        // Check slug uniqueness within organization
         const existing = await db.query.templates.findFirst({
             where: and(
-                eq(templates.serverId, data.serverId),
+                eq(templates.organizationId, data.organizationId),
                 eq(templates.slug, data.slug)
             ),
         })
 
         if (existing) {
-            return res.status(409).json({ error: 'Template with this slug already exists for this server' })
+            return res.status(409).json({ error: 'Template with this slug already exists for this organization' })
         }
 
         const [template] = await db.insert(templates).values({
-            serverId: data.serverId,
+            organizationId: data.organizationId,
             name: data.name,
             slug: data.slug,
             subject: data.subject,
@@ -196,9 +196,9 @@ router.put('/:id', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Template not found' })
         }
 
-        const { server, membership } = await checkServerAccess(userId, existingTemplate.serverId)
+        const { organization, membership } = await checkOrganizationAccess(userId, existingTemplate.organizationId)
 
-        if (!server || !membership || membership.role === 'viewer') {
+        if (!organization || !membership || membership.role === 'viewer') {
             return res.status(403).json({ error: 'Access denied' })
         }
 
@@ -208,13 +208,13 @@ router.put('/:id', async (req: Request, res: Response) => {
         if (data.slug && data.slug !== existingTemplate.slug) {
             const slugExists = await db.query.templates.findFirst({
                 where: and(
-                    eq(templates.serverId, existingTemplate.serverId),
+                    eq(templates.organizationId, existingTemplate.organizationId),
                     eq(templates.slug, data.slug)
                 ),
             })
 
             if (slugExists) {
-                return res.status(409).json({ error: 'Template with this slug already exists for this server' })
+                return res.status(409).json({ error: 'Template with this slug already exists for this organization' })
             }
         }
 
@@ -255,9 +255,9 @@ router.delete('/:id', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Template not found' })
         }
 
-        const { server, membership } = await checkServerAccess(userId, template.serverId)
+        const { organization, membership } = await checkOrganizationAccess(userId, template.organizationId)
 
-        if (!server || !membership || membership.role === 'viewer') {
+        if (!organization || !membership || membership.role === 'viewer') {
             return res.status(403).json({ error: 'Access denied' })
         }
 
@@ -288,9 +288,9 @@ router.post('/:id/render', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Template not found' })
         }
 
-        const { server, membership } = await checkServerAccess(userId, template.serverId)
+        const { organization, membership } = await checkOrganizationAccess(userId, template.organizationId)
 
-        if (!server || !membership) {
+        if (!organization || !membership) {
             return res.status(403).json({ error: 'Access denied' })
         }
 

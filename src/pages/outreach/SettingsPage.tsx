@@ -37,13 +37,14 @@ interface OutreachSettings {
 }
 
 async function fetchSettings(): Promise<OutreachSettings> {
-    const response = await fetch('/api/outreach/settings')
+    const response = await fetch('/api/outreach/settings', { cache: 'no-store' })
     if (!response.ok) throw new Error('Failed to fetch settings')
     return response.json()
 }
 
 async function updateSettings(settings: Partial<OutreachSettings>): Promise<void> {
     const response = await fetch('/api/outreach/settings', {
+        cache: 'no-store',
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)

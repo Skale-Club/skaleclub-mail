@@ -10,7 +10,6 @@ import { users } from '../db/schema'
 import authRoutes from './routes/auth'
 import userRoutes from './routes/users'
 import organizationRoutes from './routes/organizations'
-import serverRoutes from './routes/servers'
 import domainRoutes from './routes/domains'
 import messageRoutes from './routes/messages'
 import webhookRoutes from './routes/webhooks'
@@ -24,7 +23,7 @@ import outlookRoutes from './routes/outlook'
 import mailRoutes from './routes/mail'
 import nativeMailboxRoutes from './routes/native-mailboxes'
 import { createSMTPServer } from './smtp-server'
-import { createIMAPServer } from './imap-server'
+import { createIMAPServer, loadImapBranding } from './imap-server'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -62,6 +61,13 @@ app.use('/t/', trackingLimiter)
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
+// Prevent browsers from caching API responses
+app.use('/api/', (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+    res.setHeader('Pragma', 'no-cache')
+    next()
+})
+
 app.get('/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
@@ -76,10 +82,11 @@ const PUBLIC_PATHS = [
     '/api/auth/register',
     '/api/auth/reset-password',
     '/api/auth/refresh',
+    '/api/system/branding',
 ]
 
 app.use('/api', async (req, res, next) => {
-    const path = req.path
+    const path = req.originalUrl.split('?')[0]
 
     if (PUBLIC_PATHS.some(p => path === p)) {
         return next()
@@ -120,7 +127,6 @@ app.use('/api', async (req, res, next) => {
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/organizations', organizationRoutes)
-app.use('/api/servers', serverRoutes)
 app.use('/api/domains', domainRoutes)
 app.use('/api/messages', messageRoutes)
 app.use('/api/webhooks', webhookRoutes)
@@ -150,17 +156,24 @@ app.use((_req: express.Request, res: express.Response) => {
 })
 
 if (!process.env.VERCEL) {
-    app.listen(PORT, () => {
+    app.listen(PORT, async () => {
         console.log(`Server running on port ${PORT}`)
-        console.log('SkaleClub Mail API ready')
 
-        import('./jobs').then(({ startSyncWorker }) => startSyncWorker())
+        // Warn if no platform admin exists
+        try {
+            const adminUser = await db.query.users.findFirst({ where: eq(users.isAdmin, true) })
+            if (!adminUser) {
+                console.warn('⚠️  No platform admin found. Run: npx tsx scripts/set-admin.ts <email>')
+            }
+        } catch { /* ignore */ }
+
+        import('./jobs/index').then((jobs) => jobs.startJobs())
 
         // Start native SMTP + IMAP servers
         const smtpServer = createSMTPServer()
         const imapServer = createIMAPServer()
         smtpServer.start()
-        imapServer.start()
+        loadImapBranding().then(() => imapServer.start())
     })
 }
 

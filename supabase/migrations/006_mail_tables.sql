@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS mail_messages (
     folder_id uuid NOT NULL REFERENCES mail_folders(id) ON DELETE CASCADE,
     message_id text,
     in_reply_to text,
-    references text,
+    "references" text,
     subject text,
     from_address text,
     from_name text,

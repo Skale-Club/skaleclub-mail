@@ -4,11 +4,11 @@ import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
 import { Plus, Search, Trash2, Edit, RefreshCw } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
+import { apiFetch } from './helpers'
 
 interface WebhookConfig {
     id: string
-    serverId: string
+    organizationId: string
     name: string
     url: string
     secret: string | null
@@ -33,7 +33,7 @@ export default function WebhooksPage() {
         events: [] as string[],
     })
     const [newWebhook, setNewWebhook] = useState({
-        serverId: '',
+        organizationId: '',
         name: '',
         url: '',
         secret: '',
@@ -62,19 +62,8 @@ export default function WebhooksPage() {
 
     async function fetchWebhooks() {
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-
-            const response = await fetch(`/api/webhooks?serverId=${selectedServer}`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                },
-            })
-
-            if (response.ok) {
-                const data = await response.json()
-                setWebhooks(data.webhooks || [])
-            }
+            const data = await apiFetch<{ webhooks: WebhookConfig[] }>(`/api/webhooks?organizationId=${selectedServer}`)
+            setWebhooks(data.webhooks || [])
         } catch (error) {
             console.error('Error fetching webhooks:', error)
         } finally {
@@ -89,58 +78,36 @@ export default function WebhooksPage() {
 
     const handleCreateWebhook = async () => {
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-
-            const response = await fetch('/api/webhooks', {
+            const data = await apiFetch<{ webhook: WebhookConfig }>('/api/webhooks', {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ ...newWebhook, serverId: selectedServer }),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...newWebhook, organizationId: selectedServer }),
             })
-
-            if (response.ok) {
-                const data = await response.json()
-                setWebhooks([...webhooks, data.webhook])
-                setShowCreateModal(false)
-                setNewWebhook({
-                    serverId: '',
-                    name: '',
-                    url: '',
-                    secret: '',
-                    events: [],
-                })
-            } else {
-                const errorData = await response.json()
-                alert(errorData.error || 'Failed to create webhook')
-            }
+            setWebhooks([...webhooks, data.webhook])
+            setShowCreateModal(false)
+            setNewWebhook({
+                organizationId: '',
+                name: '',
+                url: '',
+                secret: '',
+                events: [],
+            })
         } catch (error) {
             console.error('Error creating webhook:', error)
+            alert(error instanceof Error ? error.message : 'Failed to create webhook')
         }
     }
 
     const handleUpdateWebhook = async (id: string, updates: Partial<WebhookConfig>) => {
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-
-            const response = await fetch(`/api/webhooks/${id}`, {
+            const data = await apiFetch<{ webhook: WebhookConfig }>(`/api/webhooks/${id}`, {
                 method: 'PUT',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(updates),
             })
-
-            if (response.ok) {
-                const data = await response.json()
-                setWebhooks(webhooks.map(w => w.id === id ? data.webhook : w))
-                setShowEditModal(false)
-                setSelectedWebhook(null)
-            }
+            setWebhooks(webhooks.map(w => w.id === id ? data.webhook : w))
+            setShowEditModal(false)
+            setSelectedWebhook(null)
         } catch (error) {
             console.error('Error updating webhook:', error)
         }
@@ -152,19 +119,8 @@ export default function WebhooksPage() {
         }
 
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-
-            const response = await fetch(`/api/webhooks/${id}`, {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                },
-            })
-
-            if (response.ok) {
-                setWebhooks(webhooks.filter(w => w.id !== id))
-            }
+            await apiFetch(`/api/webhooks/${id}`, { method: 'DELETE' })
+            setWebhooks(webhooks.filter(w => w.id !== id))
         } catch (error) {
             console.error('Error deleting webhook:', error)
         }
@@ -172,20 +128,8 @@ export default function WebhooksPage() {
 
     const handleTestWebhook = async (id: string) => {
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-
-            const response = await fetch(`/api/webhooks/${id}/test`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                },
-            })
-
-            if (response.ok) {
-                const data = await response.json()
-                alert(data.success ? 'Webhook test successful!' : 'Webhook test failed. Check the URL and try again.')
-            }
+            const data = await apiFetch<{ success: boolean }>(`/api/webhooks/${id}/test`, { method: 'POST' })
+            alert(data.success ? 'Webhook test successful!' : 'Webhook test failed. Check the URL and try again.')
         } catch (error) {
             console.error('Error testing webhook:', error)
             alert('Failed to test webhook')
@@ -208,10 +152,10 @@ export default function WebhooksPage() {
                 </Button>
             </div>
 
-            {/* Server Selector */}
+            {/* Organization Selector */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Select Server</CardTitle>
+                    <CardTitle>Select Organization</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <select
@@ -219,7 +163,7 @@ export default function WebhooksPage() {
                         value={selectedServer}
                         onChange={(e) => setSelectedServer(e.target.value)}
                     >
-                        <option value="">Select a server...</option>
+                        <option value="">Select an organization...</option>
                     </select>
                 </CardContent>
             </Card>

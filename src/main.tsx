@@ -5,6 +5,7 @@ import { Route, Switch } from 'wouter'
 import { Toaster } from './components/ui/toaster'
 import { ThemeProvider } from './components/theme-provider'
 import { useAuth } from './hooks/useAuth'
+import { useBranding } from './lib/branding'
 import AdminLayout from './components/admin/AdminLayout'
 import './index.css'
 
@@ -13,9 +14,8 @@ import Login from './pages/Login'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import OrganizationsPage from './pages/admin/OrganizationsPage'
 import OrganizationDetailPage from './pages/admin/OrganizationDetailPage'
-import ServersPage from './pages/admin/ServersPage'
-import DomainsPage from './pages/admin/DomainsPage'
-import UsersPage from './pages/admin/UsersPage'
+import AdminsPage from './pages/admin/AdminsPage'
+import BrandingPage from './pages/admin/BrandingPage'
 import CredentialsPage from './pages/admin/CredentialsPage'
 import RoutesPage from './pages/admin/RoutesPage'
 import WebhooksPage from './pages/admin/WebhooksPage'
@@ -39,17 +39,19 @@ import SearchPage from './pages/mail/SearchPage'
 
 const queryClient = new QueryClient()
 
+function Spinner() {
+    return (
+        <div className="flex min-h-screen items-center justify-center">
+            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
+        </div>
+    )
+}
+
 function AuthCheck({ children }: { children: React.ReactNode }) {
     const { user, isLoading } = useAuth()
     const pathname = window.location.pathname
 
-    if (isLoading) {
-        return (
-            <div className="flex min-h-screen items-center justify-center">
-                <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
-            </div>
-        )
-    }
+    if (isLoading) return <Spinner />
 
     if (!user && pathname !== '/login') {
         window.location.href = '/login'
@@ -59,10 +61,65 @@ function AuthCheck({ children }: { children: React.ReactNode }) {
     return <>{children}</>
 }
 
+// Guards /admin/* routes — non-admins are redirected to webmail
+function AdminCheck({ children }: { children: React.ReactNode }) {
+    const { user, isAdmin, isLoading } = useAuth()
+
+    if (isLoading) return <Spinner />
+
+    if (!user) {
+        window.location.href = '/login'
+        return null
+    }
+
+    if (!isAdmin) {
+        window.location.href = '/mail/inbox'
+        return null
+    }
+
+    return <>{children}</>
+}
+
+// Root redirect: admins → /admin, members → /mail/inbox
+function RootRedirect() {
+    const { user, isAdmin, isLoading } = useAuth()
+
+    if (isLoading) return <Spinner />
+
+    if (!user) {
+        window.location.href = '/login'
+        return null
+    }
+
+    window.location.href = isAdmin ? '/admin' : '/mail/inbox'
+    return null
+}
+
+function BrandingHead() {
+    const { branding } = useBranding()
+
+    React.useEffect(() => {
+        document.title = branding.applicationName
+
+        let favicon = document.querySelector("link[rel='icon']") as HTMLLinkElement | null
+
+        if (!favicon) {
+            favicon = document.createElement('link')
+            favicon.rel = 'icon'
+            document.head.appendChild(favicon)
+        }
+
+        favicon.href = branding.faviconUrl
+    }, [branding.applicationName, branding.faviconUrl])
+
+    return null
+}
+
 function App() {
     return (
         <ThemeProvider defaultTheme="system">
             <QueryClientProvider client={queryClient}>
+                <BrandingHead />
                 <div className="min-h-screen bg-background">
                     <Switch>
                         <Route path="/login">
@@ -70,74 +127,67 @@ function App() {
                         </Route>
 
                         <Route path="/admin">
-                            <AuthCheck>
+                            <AdminCheck>
                                 <AdminLayout>
                                     <AdminDashboard />
                                 </AdminLayout>
-                            </AuthCheck>
+                            </AdminCheck>
                         </Route>
                         <Route path="/admin/organizations">
-                            <AuthCheck>
+                            <AdminCheck>
                                 <AdminLayout>
                                     <OrganizationsPage />
                                 </AdminLayout>
-                            </AuthCheck>
+                            </AdminCheck>
                         </Route>
                         <Route path="/admin/organizations/:id">
-                            <AuthCheck>
+                            <AdminCheck>
                                 <AdminLayout>
                                     <OrganizationDetailPage />
                                 </AdminLayout>
-                            </AuthCheck>
+                            </AdminCheck>
                         </Route>
-                        <Route path="/admin/servers">
-                            <AuthCheck>
+                        <Route path="/admin/admins">
+                            <AdminCheck>
                                 <AdminLayout>
-                                    <ServersPage />
+                                    <AdminsPage />
                                 </AdminLayout>
-                            </AuthCheck>
+                            </AdminCheck>
                         </Route>
-                        <Route path="/admin/domains">
-                            <AuthCheck>
+                        <Route path="/admin/branding">
+                            <AdminCheck>
                                 <AdminLayout>
-                                    <DomainsPage />
+                                    <BrandingPage />
                                 </AdminLayout>
-                            </AuthCheck>
-                        </Route>
-                        <Route path="/admin/users">
-                            <AuthCheck>
-                                <AdminLayout>
-                                    <UsersPage />
-                                </AdminLayout>
-                            </AuthCheck>
+                            </AdminCheck>
                         </Route>
                         <Route path="/admin/credentials">
-                            <AuthCheck>
+                            <AdminCheck>
                                 <AdminLayout>
                                     <CredentialsPage />
                                 </AdminLayout>
-                            </AuthCheck>
+                            </AdminCheck>
                         </Route>
                         <Route path="/admin/routes">
-                            <AuthCheck>
+                            <AdminCheck>
                                 <AdminLayout>
                                     <RoutesPage />
                                 </AdminLayout>
-                            </AuthCheck>
+                            </AdminCheck>
                         </Route>
                         <Route path="/admin/webhooks">
-                            <AuthCheck>
+                            <AdminCheck>
                                 <AdminLayout>
                                     <WebhooksPage />
                                 </AdminLayout>
-                            </AuthCheck>
+                            </AdminCheck>
                         </Route>
                         <Route path="/admin/messages">
-                            <AuthCheck>
+                            <AdminCheck>
                                 <AdminLayout>
                                     <MessagesPage />
                                 </AdminLayout>
-                            </AuthCheck>
+                            </AdminCheck>
                         </Route>
 
                         <Route path="/outreach">
@@ -218,11 +268,7 @@ function App() {
                         </Route>
 
                         <Route path="/">
-                            <AuthCheck>
-                                <AdminLayout>
-                                    <AdminDashboard />
-                                </AdminLayout>
-                            </AuthCheck>
+                            <RootRedirect />
                         </Route>
                     </Switch>
                     <Toaster />

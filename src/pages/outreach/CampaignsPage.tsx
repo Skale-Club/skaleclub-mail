@@ -41,13 +41,14 @@ async function fetchCampaigns(params: { status?: string; search?: string }): Pro
     if (params.status && params.status !== 'all') query.set('status', params.status)
     if (params.search) query.set('search', params.search)
 
-    const response = await fetch(`/api/outreach/campaigns?${query.toString()}`)
+    const response = await fetch(`/api/outreach/campaigns?${query.toString()}`, { cache: 'no-store' })
     if (!response.ok) throw new Error('Failed to fetch campaigns')
     return response.json()
 }
 
 async function updateCampaignStatus(id: string, status: string): Promise<void> {
     const response = await fetch(`/api/outreach/campaigns/${id}/status`, {
+        cache: 'no-store',
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
@@ -57,6 +58,7 @@ async function updateCampaignStatus(id: string, status: string): Promise<void> {
 
 async function deleteCampaign(id: string): Promise<void> {
     const response = await fetch(`/api/outreach/campaigns/${id}`, {
+        cache: 'no-store',
         method: 'DELETE',
     })
     if (!response.ok) throw new Error('Failed to delete campaign')

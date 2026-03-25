@@ -52,19 +52,20 @@ async function fetchLeads(params: { status?: string; listId?: string; search?: s
     if (params.listId && params.listId !== 'all') query.set('listId', params.listId)
     if (params.search) query.set('search', params.search)
 
-    const response = await fetch(`/api/outreach/leads?${query.toString()}`)
+    const response = await fetch(`/api/outreach/leads?${query.toString()}`, { cache: 'no-store' })
     if (!response.ok) throw new Error('Failed to fetch leads')
     return response.json()
 }
 
 async function fetchLeadLists(): Promise<LeadList[]> {
-    const response = await fetch('/api/outreach/leads/lists')
+    const response = await fetch('/api/outreach/leads/lists', { cache: 'no-store' })
     if (!response.ok) throw new Error('Failed to fetch lead lists')
     return response.json()
 }
 
 async function deleteLead(id: string): Promise<void> {
     const response = await fetch(`/api/outreach/leads/${id}`, {
+        cache: 'no-store',
         method: 'DELETE',
     })
     if (!response.ok) throw new Error('Failed to delete lead')

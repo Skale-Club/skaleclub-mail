@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
-import { supabase } from '../../lib/supabase'
+import { apiFetch } from './helpers'
 
 interface Organization {
     id: string
@@ -30,19 +30,8 @@ export default function OrganizationsPage() {
 
     async function fetchOrganizations() {
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-
-            const response = await fetch('/api/organizations', {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            })
-
-            if (response.ok) {
-                const data = await response.json()
-                setOrganizations(data.organizations || [])
-            }
+            const data = await apiFetch<{ organizations: Organization[] }>('/api/organizations')
+            setOrganizations(data.organizations || [])
         } catch (error) {
             console.error('Error fetching organizations:', error)
         } finally {
@@ -57,29 +46,17 @@ export default function OrganizationsPage() {
 
     const handleCreateOrg = async () => {
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-
-            const response = await fetch('/api/organizations', {
+            const data = await apiFetch<{ organization: Organization }>('/api/organizations', {
                 method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newOrg),
             })
-
-            if (response.ok) {
-                const data = await response.json()
-                setOrganizations([...organizations, data.organization])
-                setShowCreateModal(false)
-                setNewOrg({ name: '', slug: '', timezone: 'UTC' })
-            } else {
-                const error = await response.json()
-                alert(error.error || 'Failed to create organization')
-            }
+            setOrganizations([...organizations, data.organization])
+            setShowCreateModal(false)
+            setNewOrg({ name: '', slug: '', timezone: 'UTC' })
         } catch (error) {
             console.error('Error creating organization:', error)
+            alert(error instanceof Error ? error.message : 'Failed to create organization')
         }
     }
 
@@ -89,19 +66,8 @@ export default function OrganizationsPage() {
         }
 
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-
-            const response = await fetch(`/api/organizations/${id}`, {
-                method: 'DELETE',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            })
-
-            if (response.ok) {
-                setOrganizations(organizations.filter((org) => org.id !== id))
-            }
+            await apiFetch(`/api/organizations/${id}`, { method: 'DELETE' })
+            setOrganizations(organizations.filter((org) => org.id !== id))
         } catch (error) {
             console.error('Error deleting organization:', error)
         }
@@ -139,7 +105,7 @@ export default function OrganizationsPage() {
                 </div>
             ) : filteredOrganizations.length === 0 ? (
                 <Card>
-                    <CardContent className="flex flex-col items-center justify-center py-12">
+                    <CardContent className="flex flex-col items-center justify-center py-12 pt-12">
                         <Building2 className="mb-4 h-12 w-12 text-muted-foreground" />
                         <p className="text-muted-foreground">No organizations found</p>
                         <Button className="mt-4" onClick={() => setShowCreateModal(true)}>
@@ -197,7 +163,7 @@ export default function OrganizationsPage() {
                         <CardHeader>
                             <CardTitle>Create Organization</CardTitle>
                             <CardDescription>
-                                Create a new organization to manage your mail servers
+                                Create a new organization to manage your email
                             </CardDescription>
                         </CardHeader>
                         <CardContent>

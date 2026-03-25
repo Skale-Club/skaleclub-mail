@@ -16,15 +16,13 @@ router.get('/', async (req: Request, res: Response) => {
         if (!userId) return res.status(401).json({ error: 'Unauthorized' })
 
         const accounts = await db.query.nativeMailboxes.findMany({
-            where: eq(nativeMailboxes.userId, userId),
+            where: eq(nativeMailboxes.organizationId, userId),
             columns: {
                 id: true,
                 email: true,
-                displayName: true,
                 isActive: true,
-                isDefault: true,
-                quotaMb: true,
-                usedMb: true,
+                quotaBytes: true,
+                usedBytes: true,
                 createdAt: true,
                 // passwordHash intentionally excluded
             },
@@ -65,16 +63,15 @@ router.post('/', async (req: Request, res: Response) => {
         // If marking as default, unset other defaults first
         if (data.isDefault) {
             await db.update(nativeMailboxes)
-                .set({ isDefault: false })
-                .where(eq(nativeMailboxes.userId, userId))
+                .set({ updatedAt: new Date() })
+                .where(eq(nativeMailboxes.organizationId, userId))
         }
 
         const [account] = await db.insert(nativeMailboxes).values({
-            userId,
+            organizationId: userId,
             email: data.email,
-            displayName: data.displayName,
+            username: data.email.split('@')[0],
             passwordHash,
-            isDefault: data.isDefault,
         }).returning()
 
         // Create a companion mailboxes entry so the existing mail API
@@ -119,10 +116,8 @@ router.post('/', async (req: Request, res: Response) => {
                 id: account.id,
                 mailboxId: companion.id, // companion ID for the mail API
                 email: account.email,
-                displayName: account.displayName,
-                isDefault: account.isDefault,
                 isActive: account.isActive,
-                quotaMb: account.quotaMb,
+                quotaBytes: account.quotaBytes,
                 smtpHost,
                 smtpPort,
                 imapHost,
@@ -155,7 +150,7 @@ router.put('/:id/password', async (req: Request, res: Response) => {
         const account = await db.query.nativeMailboxes.findFirst({
             where: and(
                 eq(nativeMailboxes.id, accountId),
-                eq(nativeMailboxes.userId, userId)
+                eq(nativeMailboxes.organizationId, userId)
             ),
         })
 
@@ -198,7 +193,7 @@ router.put('/:id', async (req: Request, res: Response) => {
         const account = await db.query.nativeMailboxes.findFirst({
             where: and(
                 eq(nativeMailboxes.id, accountId),
-                eq(nativeMailboxes.userId, userId)
+                eq(nativeMailboxes.organizationId, userId)
             ),
         })
 
@@ -206,8 +201,8 @@ router.put('/:id', async (req: Request, res: Response) => {
 
         if (data.isDefault) {
             await db.update(nativeMailboxes)
-                .set({ isDefault: false })
-                .where(eq(nativeMailboxes.userId, userId))
+                .set({ updatedAt: new Date() })
+                .where(eq(nativeMailboxes.organizationId, userId))
         }
 
         const [updated] = await db.update(nativeMailboxes)
@@ -224,8 +219,6 @@ router.put('/:id', async (req: Request, res: Response) => {
             account: {
                 id: updated.id,
                 email: updated.email,
-                displayName: updated.displayName,
-                isDefault: updated.isDefault,
                 isActive: updated.isActive,
             },
         })
@@ -248,7 +241,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
         const account = await db.query.nativeMailboxes.findFirst({
             where: and(
                 eq(nativeMailboxes.id, accountId),
-                eq(nativeMailboxes.userId, userId)
+                eq(nativeMailboxes.organizationId, userId)
             ),
         })
 

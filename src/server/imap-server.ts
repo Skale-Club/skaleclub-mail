@@ -15,6 +15,14 @@ import bcrypt from 'bcrypt'
 import { db } from '../db'
 import { nativeMailboxes, mailboxes, mailFolders, mailMessages } from '../db/schema'
 import { eq, and, asc } from 'drizzle-orm'
+import { getCachedBranding } from './lib/serverBranding'
+
+let _imapAppName = process.env.APP_APPLICATION_NAME ?? ''
+
+export async function loadImapBranding() {
+    const { applicationName } = await getCachedBranding()
+    _imapAppName = applicationName
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -326,7 +334,7 @@ async function handleCommand(session: IMAPSession, tag: string, command: string,
             return
         }
         session.state = 'authenticated'
-        session.userId = account.userId
+        session.userId = account.id
         session.userEmail = account.email
         console.log(`[IMAP] Login: ${email}`)
         sendLine(socket, `${tag} OK LOGIN completed`)
@@ -786,7 +794,7 @@ function handleConnection(socket: net.Socket) {
     }
 
     socket.setEncoding('utf8')
-    sendLine(socket, '* OK [CAPABILITY IMAP4rev1 AUTH=PLAIN AUTH=LOGIN] Skale Club Mail IMAP server ready')
+    sendLine(socket, `* OK [CAPABILITY IMAP4rev1 AUTH=PLAIN AUTH=LOGIN] ${_imapAppName} IMAP server ready`)
 
     socket.on('data', (data: string) => {
         session.buffer += data

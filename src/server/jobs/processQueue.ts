@@ -1,6 +1,6 @@
 import { createTransport } from 'nodemailer'
 import { db } from '../../db'
-import { deliveries, messages, servers } from '../../db/schema'
+import { deliveries, messages, organizations } from '../../db/schema'
 import { eq, and } from 'drizzle-orm'
 import { incrementStat, fireWebhooks } from '../lib/tracking'
 
@@ -41,11 +41,11 @@ async function processDelivery(delivery: typeof deliveries.$inferSelect): Promis
 
         if (message.held) return // skip held messages
 
-        const server = await db.query.servers.findFirst({
-            where: eq(servers.id, message.serverId),
+        const organization = await db.query.organizations.findFirst({
+            where: eq(organizations.id, message.organizationId),
         })
 
-        if (!server || server.suspended) {
+        if (!organization) {
             await db.update(deliveries)
                 .set({ status: 'failed', details: 'Server not available' })
                 .where(eq(deliveries.id, delivery.id))
@@ -70,8 +70,8 @@ async function processDelivery(delivery: typeof deliveries.$inferSelect): Promis
             auth: user && pass ? { user, pass } : undefined,
         })
 
-        const fromAddress = message.fromAddress || process.env.SMTP_FROM || server.defaultFromAddress || ''
-        const fromName = message.fromName || server.defaultFromName || ''
+        const fromAddress = message.fromAddress || process.env.SMTP_FROM || ''
+        const fromName = message.fromName || ''
 
         const attachments = (message.attachments as any[] || []).map((att) => ({
             filename: att.filename,
@@ -115,8 +115,8 @@ async function processDelivery(delivery: typeof deliveries.$inferSelect): Promis
                 .where(eq(messages.id, message.id))
 
             await Promise.allSettled([
-                incrementStat(message.serverId, 'messagesSent'),
-                fireWebhooks(message.serverId, 'message_sent', {
+                incrementStat(message.organizationId, 'messagesSent'),
+                fireWebhooks(message.organizationId, 'message_sent', {
                     messageId: message.id,
                     subject: message.subject,
                     from: message.fromAddress,

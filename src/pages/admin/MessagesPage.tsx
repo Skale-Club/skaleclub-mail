@@ -7,14 +7,13 @@ import { Label } from '../../components/ui/label'
 import {
     apiFetch,
     loadOrganizations,
-    loadServersForOrganizations,
     matchesSearch,
-    type ServerOption,
+    type OrganizationOption,
 } from './helpers'
 
 type MessageRecord = {
     id: string
-    serverId: string
+    organizationId: string
     messageId: string | null
     token: string
     direction: 'incoming' | 'outgoing'
@@ -34,8 +33,8 @@ type MessageRecord = {
 }
 
 export default function MessagesPage() {
-    const [servers, setServers] = useState<ServerOption[]>([])
-    const [selectedServerId, setSelectedServerId] = useState('')
+    const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
+    const [selectedOrgId, setSelectedOrgId] = useState('')
     const [messages, setMessages] = useState<MessageRecord[]>([])
     const [searchQuery, setSearchQuery] = useState('')
     const [statusFilter, setStatusFilter] = useState('all')
@@ -48,32 +47,31 @@ export default function MessagesPage() {
     }, [])
 
     useEffect(() => {
-        if (selectedServerId) {
-            void fetchMessages(selectedServerId)
+        if (selectedOrgId) {
+            void fetchMessages(selectedOrgId)
         }
-    }, [selectedServerId])
+    }, [selectedOrgId])
 
     async function bootstrap() {
         try {
-            const organizations = await loadOrganizations()
-            const serverOptions = await loadServersForOrganizations(organizations)
-            setServers(serverOptions)
-            if (serverOptions.length > 0) {
-                setSelectedServerId(serverOptions[0].id)
+            const orgOptions = await loadOrganizations()
+            setOrganizations(orgOptions)
+            if (orgOptions.length > 0) {
+                setSelectedOrgId(orgOptions[0].id)
             } else {
                 setIsLoading(false)
             }
         } catch (error) {
-            console.error('Error loading servers:', error)
+            console.error('Error loading organizations:', error)
             setIsLoading(false)
         }
     }
 
-    async function fetchMessages(serverId: string) {
+    async function fetchMessages(organizationId: string) {
         setIsLoading(true)
         try {
             const params = new URLSearchParams({
-                serverId,
+                organizationId,
                 limit: '100',
             })
             const data = await apiFetch<{ messages: MessageRecord[] }>(`/api/messages?${params.toString()}`)
@@ -137,7 +135,7 @@ export default function MessagesPage() {
                     <h2 className="text-2xl font-bold tracking-tight">Messages</h2>
                     <p className="text-muted-foreground">Inspect recent inbound and outbound traffic.</p>
                 </div>
-                <Button variant="outline" onClick={() => selectedServerId && fetchMessages(selectedServerId)}>
+                <Button variant="outline" onClick={() => selectedOrgId && fetchMessages(selectedOrgId)}>
                     <RefreshCw className="mr-2 h-4 w-4" />
                     Refresh
                 </Button>
@@ -145,16 +143,16 @@ export default function MessagesPage() {
 
             <Card>
                 <CardContent className="grid gap-4 pt-6 lg:grid-cols-[240px_minmax(0,1fr)_180px_180px]">
-                    <Field label="Server">
+                    <Field label="Organization">
                         <select
                             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                            value={selectedServerId}
-                            onChange={(event) => setSelectedServerId(event.target.value)}
+                            value={selectedOrgId}
+                            onChange={(event) => setSelectedOrgId(event.target.value)}
                         >
-                            {servers.length === 0 && <option value="">No servers</option>}
-                            {servers.map((server) => (
-                                <option key={server.id} value={server.id}>
-                                    {server.organizationName} / {server.name}
+                            {organizations.length === 0 && <option value="">No organizations</option>}
+                            {organizations.map((org) => (
+                                <option key={org.id} value={org.id}>
+                                    {org.name}
                                 </option>
                             ))}
                         </select>
@@ -204,7 +202,7 @@ export default function MessagesPage() {
                 <Card>
                     <CardHeader>
                         <CardTitle>Recent messages</CardTitle>
-                        <CardDescription>Up to the latest 100 messages for the selected server.</CardDescription>
+                        <CardDescription>Up to the latest 100 messages for the selected organization.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">
                         {isLoading ? (

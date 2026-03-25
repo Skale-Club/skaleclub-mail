@@ -11,7 +11,6 @@ import {
     Bell,
     Shield,
     Palette,
-    Key,
     Mail,
     Plus,
     Trash2,
@@ -21,15 +20,21 @@ import {
     ExternalLink,
     Server,
     Filter,
-    Trash,
-    ArrowLeft,
-    ArrowRight,
-    Star,
-    Archive,
-    AlertTriangle,
-    MoreHorizontal
+    Trash
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+
+async function mailFetch(url: string, init: RequestInit = {}): Promise<Response> {
+    const { data: { session } } = await supabase.auth.getSession()
+    return fetch(url, {
+        cache: 'no-store',
+        ...init,
+        headers: {
+            Authorization: `Bearer ${session?.access_token}`,
+            ...(init.headers || {}),
+        },
+    })
+}
 
 type TabId = 'profile' | 'notifications' | 'security' | 'appearance' | 'accounts' | 'filters'
 
@@ -119,11 +124,7 @@ export default function MailSettingsPage() {
     const fetchMailboxes = React.useCallback(async () => {
         setIsLoadingMailboxes(true)
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-            const response = await fetch('/api/mail/mailboxes', {
-                headers: { Authorization: `Bearer ${token}` },
-            })
+            const response = await mailFetch('/api/mail/mailboxes')
             if (response.ok) {
                 const data = await response.json()
                 setMailboxes(data.mailboxes || [])
@@ -142,11 +143,7 @@ export default function MailSettingsPage() {
         if (!selectedMailboxId) return
         setIsLoadingFilters(true)
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-            const response = await fetch(`/api/mail/mailboxes/${selectedMailboxId}/filters`, {
-                headers: { Authorization: `Bearer ${token}` },
-            })
+            const response = await mailFetch(`/api/mail/mailboxes/${selectedMailboxId}/filters`)
             if (response.ok) {
                 const data = await response.json()
                 setFilters(data.filters || [])
@@ -171,14 +168,9 @@ export default function MailSettingsPage() {
     const handleTestConnection = async () => {
         setIsTesting(true)
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-            const response = await fetch('/api/mail/mailboxes/test-connection', {
+            const response = await mailFetch('/api/mail/mailboxes/test-connection', {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     smtpHost: newAccount.smtpHost,
                     smtpPort: parseInt(newAccount.smtpPort),
@@ -212,14 +204,9 @@ export default function MailSettingsPage() {
     const handleAddAccount = async () => {
         setIsSavingAccount(true)
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-            const response = await fetch('/api/mail/mailboxes', {
+            const response = await mailFetch('/api/mail/mailboxes', {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ...newAccount,
                     smtpPort: parseInt(newAccount.smtpPort),
@@ -260,12 +247,7 @@ export default function MailSettingsPage() {
 
     const handleDeleteMailbox = async (id: string) => {
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-            const response = await fetch(`/api/mail/mailboxes/${id}`, {
-                method: 'DELETE',
-                headers: { Authorization: `Bearer ${token}` },
-            })
+            const response = await mailFetch(`/api/mail/mailboxes/${id}`, { method: 'DELETE' })
             if (response.ok) {
                 fetchMailboxes()
                 toast({ title: 'Account removed successfully', variant: 'success' })
@@ -279,14 +261,9 @@ export default function MailSettingsPage() {
         if (!selectedMailboxId) return
         setIsSavingFilter(true)
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-            const response = await fetch(`/api/mail/mailboxes/${selectedMailboxId}/filters`, {
+            const response = await mailFetch(`/api/mail/mailboxes/${selectedMailboxId}/filters`, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     name: newFilter.name,
                     conditions: newFilter.conditions.filter(c => c.value),
@@ -318,12 +295,7 @@ export default function MailSettingsPage() {
     const handleDeleteFilter = async (id: string) => {
         if (!selectedMailboxId) return
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-            const response = await fetch(`/api/mail/mailboxes/${selectedMailboxId}/filters/${id}`, {
-                method: 'DELETE',
-                headers: { Authorization: `Bearer ${token}` },
-            })
+            const response = await mailFetch(`/api/mail/mailboxes/${selectedMailboxId}/filters/${id}`, { method: 'DELETE' })
             if (response.ok) {
                 fetchFilters()
                 toast({ title: 'Filter deleted successfully', variant: 'success' })
@@ -336,14 +308,9 @@ export default function MailSettingsPage() {
     const handleToggleFilter = async (id: string, isActive: boolean) => {
         if (!selectedMailboxId) return
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-            await fetch(`/api/mail/mailboxes/${selectedMailboxId}/filters/${id}`, {
+            await mailFetch(`/api/mail/mailboxes/${selectedMailboxId}/filters/${id}`, {
                 method: 'PUT',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ isActive }),
             })
             fetchFilters()
@@ -351,38 +318,6 @@ export default function MailSettingsPage() {
             toast({ title: 'Failed to update filter', variant: 'destructive' })
         }
     }
-
-    const [profile, setProfile] = React.useState({
-        firstName: 'John',
-        lastName: 'Doe',
-        email: 'user@skaleclub.com',
-        displayName: 'John Doe',
-        bio: 'Product developer and email enthusiast',
-        timezone: 'America/New_York',
-    })
-
-    const [notifications, setNotifications] = React.useState({
-        emailNotifications: true,
-        pushNotifications: false,
-        dailyDigest: true,
-        weeklyReport: true,
-        marketingEmails: false,
-        soundEnabled: true,
-        desktopNotifications: true,
-    })
-
-    const [security, setSecurity] = React.useState({
-        twoFactorEnabled: false,
-        sessionTimeout: '30',
-        loginAlerts: true,
-    })
-
-    const [appearance, setAppearance] = React.useState({
-        theme: 'system',
-        compactMode: false,
-        showLineNumbers: false,
-        conversationView: true,
-    })
 
     const handleSave = async () => {
         setIsSaving(true)

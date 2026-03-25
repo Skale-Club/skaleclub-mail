@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { db } from '../../db'
-import { messages, servers } from '../../db/schema'
+import { messages, organizations, } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import { fireWebhooks, incrementStat } from '../lib/tracking'
 
@@ -50,11 +50,11 @@ router.get('/open/:token', async (req: Request, res: Response) => {
 
         if (!message || message.openedAt) return   // already recorded
 
-        const server = await db.query.servers.findFirst({
-            where: eq(servers.id, message.serverId),
+        const server = await db.query.organizations.findFirst({
+            where: eq(organizations.id, message.organizationId),
         })
 
-        if (!server || !server.trackOpens || server.privacyMode) return
+        if (!server) return
 
         const now = new Date()
 
@@ -64,8 +64,8 @@ router.get('/open/:token', async (req: Request, res: Response) => {
             .where(eq(messages.token, token))
 
         await Promise.allSettled([
-            incrementStat(message.serverId, 'messagesOpened'),
-            fireWebhooks(message.serverId, 'message_opened', {
+            incrementStat(message.organizationId, 'messagesOpened'),
+            fireWebhooks(message.organizationId, 'message_opened', {
                 messageId: message.id,
                 subject: message.subject,
                 from: message.fromAddress,
@@ -113,15 +113,15 @@ router.get('/click/:token', async (req: Request, res: Response) => {
 
         if (!message) return
 
-        const server = await db.query.servers.findFirst({
-            where: eq(servers.id, message.serverId),
+        const server = await db.query.organizations.findFirst({
+            where: eq(organizations.id, message.organizationId),
         })
 
-        if (!server || !server.trackClicks || server.privacyMode) return
+        if (!server) return
 
         await Promise.allSettled([
-            incrementStat(message.serverId, 'linksClicked'),
-            fireWebhooks(message.serverId, 'link_clicked', {
+            incrementStat(message.organizationId, 'linksClicked'),
+            fireWebhooks(message.organizationId, 'link_clicked', {
                 messageId: message.id,
                 subject: message.subject,
                 url: targetUrl,

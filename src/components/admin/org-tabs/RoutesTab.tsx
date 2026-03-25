@@ -4,11 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
 import { Label } from '../../ui/label'
-import { getAccessToken } from './shared'
+import { fetchWithAuth } from './shared'
 
 interface RouteConfig {
     id: string
-    serverId: string
+    orgId: string
     name: string
     address: string
     mode: 'endpoint' | 'hold' | 'reject'
@@ -18,7 +18,6 @@ interface RouteConfig {
 }
 
 interface RoutesTabProps {
-    serverId: string
     orgId: string
 }
 
@@ -30,7 +29,7 @@ const emptyRoute = {
     spamThreshold: 5,
 }
 
-export default function RoutesTab({ serverId }: RoutesTabProps) {
+export default function RoutesTab({ orgId }: RoutesTabProps) {
     const [routes, setRoutes] = useState<RouteConfig[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
@@ -42,17 +41,12 @@ export default function RoutesTab({ serverId }: RoutesTabProps) {
 
     useEffect(() => {
         void fetchRoutes()
-    }, [serverId])
+    }, [orgId])
 
     async function fetchRoutes() {
         setIsLoading(true)
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/routes?serverId=${serverId}`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            })
+            const response = await fetchWithAuth(`/api/routes?organizationId=${orgId}`)
 
             if (response.ok) {
                 const data = await response.json()
@@ -74,14 +68,10 @@ export default function RoutesTab({ serverId }: RoutesTabProps) {
 
     async function handleCreateRoute() {
         try {
-            const token = await getAccessToken()
-            const response = await fetch('/api/routes', {
+            const response = await fetchWithAuth('/api/routes', {
                 method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ ...newRoute, serverId }),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...newRoute, organizationId: orgId }),
             })
 
             if (response.ok) {
@@ -102,13 +92,9 @@ export default function RoutesTab({ serverId }: RoutesTabProps) {
         if (!selectedRoute) return
 
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/routes/${selectedRoute.id}`, {
+            const response = await fetchWithAuth(`/api/routes/${selectedRoute.id}`, {
                 method: 'PUT',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(editData),
             })
 
@@ -127,12 +113,8 @@ export default function RoutesTab({ serverId }: RoutesTabProps) {
         if (!confirm('Are you sure you want to delete this route? This action cannot be undone.')) return
 
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/routes/${routeId}`, {
+            const response = await fetchWithAuth(`/api/routes/${routeId}`, {
                 method: 'DELETE',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
             })
 
             if (response.ok) {

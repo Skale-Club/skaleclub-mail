@@ -7,14 +7,13 @@ import { Label } from '../../components/ui/label'
 import {
     apiFetch,
     loadOrganizations,
-    loadServersForOrganizations,
     matchesSearch,
-    type ServerOption,
+    type OrganizationOption,
 } from './helpers'
 
 type CredentialRecord = {
     id: string
-    serverId: string
+    organizationId: string
     name: string
     type: 'smtp' | 'api'
     key: string
@@ -38,8 +37,8 @@ const initialForm: CredentialForm = {
 }
 
 export default function CredentialsPage() {
-    const [servers, setServers] = useState<ServerOption[]>([])
-    const [selectedServerId, setSelectedServerId] = useState('')
+    const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
+    const [selectedOrgId, setSelectedOrgId] = useState('')
     const [credentials, setCredentials] = useState<CredentialRecord[]>([])
     const [searchQuery, setSearchQuery] = useState('')
     const [form, setForm] = useState<CredentialForm>(initialForm)
@@ -51,31 +50,30 @@ export default function CredentialsPage() {
     }, [])
 
     useEffect(() => {
-        if (selectedServerId) {
-            void fetchCredentials(selectedServerId)
+        if (selectedOrgId) {
+            void fetchCredentials(selectedOrgId)
         }
-    }, [selectedServerId])
+    }, [selectedOrgId])
 
     async function bootstrap() {
         try {
-            const organizations = await loadOrganizations()
-            const serverOptions = await loadServersForOrganizations(organizations)
-            setServers(serverOptions)
-            if (serverOptions.length > 0) {
-                setSelectedServerId(serverOptions[0].id)
+            const orgOptions = await loadOrganizations()
+            setOrganizations(orgOptions)
+            if (orgOptions.length > 0) {
+                setSelectedOrgId(orgOptions[0].id)
             } else {
                 setIsLoading(false)
             }
         } catch (error) {
-            console.error('Error loading servers:', error)
+            console.error('Error loading organizations:', error)
             setIsLoading(false)
         }
     }
 
-    async function fetchCredentials(serverId: string) {
+    async function fetchCredentials(organizationId: string) {
         setIsLoading(true)
         try {
-            const data = await apiFetch<{ credentials: CredentialRecord[] }>(`/api/credentials?serverId=${serverId}`)
+            const data = await apiFetch<{ credentials: CredentialRecord[] }>(`/api/credentials?organizationId=${organizationId}`)
             setCredentials(data.credentials || [])
         } catch (error) {
             console.error('Error fetching credentials:', error)
@@ -91,7 +89,7 @@ export default function CredentialsPage() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    serverId: selectedServerId,
+                    organizationId: selectedOrgId,
                     name: form.name,
                     type: form.type,
                     key: form.key,
@@ -151,22 +149,22 @@ export default function CredentialsPage() {
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h2 className="text-2xl font-bold tracking-tight">Credentials</h2>
-                    <p className="text-muted-foreground">Generate SMTP or API credentials for each server.</p>
+                    <p className="text-muted-foreground">Generate SMTP or API credentials for each organization.</p>
                 </div>
             </div>
 
             <Card>
                 <CardContent className="grid gap-4 pt-6 lg:grid-cols-[240px_minmax(0,1fr)]">
-                    <Field label="Server">
+                    <Field label="Organization">
                         <select
                             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                            value={selectedServerId}
-                            onChange={(event) => setSelectedServerId(event.target.value)}
+                            value={selectedOrgId}
+                            onChange={(event) => setSelectedOrgId(event.target.value)}
                         >
-                            {servers.length === 0 && <option value="">No servers</option>}
-                            {servers.map((server) => (
-                                <option key={server.id} value={server.id}>
-                                    {server.organizationName} / {server.name}
+                            {organizations.length === 0 && <option value="">No organizations</option>}
+                            {organizations.map((org) => (
+                                <option key={org.id} value={org.id}>
+                                    {org.name}
                                 </option>
                             ))}
                         </select>
@@ -213,7 +211,7 @@ export default function CredentialsPage() {
                         <Field label="Secret (optional)">
                             <Input value={form.secret} onChange={(event) => setForm((current) => ({ ...current, secret: event.target.value }))} />
                         </Field>
-                        <Button className="w-full" onClick={handleCreateCredential} disabled={!selectedServerId || !form.name || !form.key}>
+                        <Button className="w-full" onClick={handleCreateCredential} disabled={!selectedOrgId || !form.name || !form.key}>
                             <Plus className="mr-2 h-4 w-4" />
                             Create credential
                         </Button>

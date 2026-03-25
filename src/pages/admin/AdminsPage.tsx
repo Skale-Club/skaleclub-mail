@@ -6,7 +6,7 @@ import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
 import { apiFetch, matchesSearch } from './helpers'
 
-type UserRecord = {
+type AdminRecord = {
     id: string
     email: string
     firstName: string | null
@@ -22,120 +22,122 @@ const emptyCreate = {
     password: '',
     firstName: '',
     lastName: '',
-    isAdmin: false,
     sendInvite: true,
 }
 
 const emptyEdit = {
     firstName: '',
     lastName: '',
-    isAdmin: false,
     emailVerified: false,
 }
 
-export default function UsersPage() {
-    const [users, setUsers] = useState<UserRecord[]>([])
+export default function AdminsPage() {
+    const [admins, setAdmins] = useState<AdminRecord[]>([])
     const [searchQuery, setSearchQuery] = useState('')
     const [isLoading, setIsLoading] = useState(true)
     const [showCreateModal, setShowCreateModal] = useState(false)
-    const [editingUser, setEditingUser] = useState<UserRecord | null>(null)
+    const [editingAdmin, setEditingAdmin] = useState<AdminRecord | null>(null)
     const [createForm, setCreateForm] = useState(emptyCreate)
     const [editForm, setEditForm] = useState(emptyEdit)
 
     useEffect(() => {
-        void fetchUsers()
+        void fetchAdmins()
     }, [])
 
-    async function fetchUsers() {
+    async function fetchAdmins() {
         setIsLoading(true)
         try {
-            const data = await apiFetch<{ users: UserRecord[] }>('/api/users')
-            setUsers(data.users || [])
+            const data = await apiFetch<{ users: AdminRecord[] }>('/api/users')
+            setAdmins((data.users || []).filter((u) => u.isAdmin))
         } catch (error) {
-            console.error('Error fetching users:', error)
-            setUsers([])
+            console.error('Error fetching admins:', error)
+            setAdmins([])
         } finally {
             setIsLoading(false)
         }
     }
 
-    async function handleCreateUser() {
+    async function handleCreateAdmin() {
         try {
-            const data = await apiFetch<{ user: UserRecord }>('/api/users', {
+            const data = await apiFetch<{ user: AdminRecord }>('/api/users', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(createForm),
+                body: JSON.stringify({
+                    email: createForm.email,
+                    password: createForm.sendInvite ? undefined : createForm.password,
+                    firstName: createForm.firstName || undefined,
+                    lastName: createForm.lastName || undefined,
+                    isAdmin: true,
+                    sendInvite: createForm.sendInvite,
+                }),
             })
-            setUsers((current) => [data.user, ...current])
+            setAdmins((current) => [data.user, ...current])
             setCreateForm(emptyCreate)
             setShowCreateModal(false)
         } catch (error) {
-            window.alert(error instanceof Error ? error.message : 'Failed to create user')
+            window.alert(error instanceof Error ? error.message : 'Failed to create admin')
         }
     }
 
-    function openEditModal(user: UserRecord) {
-        setEditingUser(user)
+    function openEditModal(admin: AdminRecord) {
+        setEditingAdmin(admin)
         setEditForm({
-            firstName: user.firstName || '',
-            lastName: user.lastName || '',
-            isAdmin: user.isAdmin,
-            emailVerified: user.emailVerified,
+            firstName: admin.firstName || '',
+            lastName: admin.lastName || '',
+            emailVerified: admin.emailVerified,
         })
     }
 
-    async function handleUpdateUser() {
-        if (!editingUser) {
-            return
-        }
+    async function handleUpdateAdmin() {
+        if (!editingAdmin) return
 
         try {
-            const data = await apiFetch<{ user: UserRecord }>(`/api/users/${editingUser.id}`, {
+            const data = await apiFetch<{ user: AdminRecord }>(`/api/users/${editingAdmin.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(editForm),
             })
-            setUsers((current) => current.map((user) => user.id === editingUser.id ? data.user : user))
-            setEditingUser(null)
+            setAdmins((current) => current.map((a) => a.id === editingAdmin.id ? data.user : a))
+            setEditingAdmin(null)
         } catch (error) {
-            window.alert(error instanceof Error ? error.message : 'Failed to update user')
+            window.alert(error instanceof Error ? error.message : 'Failed to update admin')
         }
     }
 
-    async function handleResendInvite(userId: string) {
+    async function handleResendInvite(adminId: string) {
         try {
-            await apiFetch(`/api/users/${userId}/resend-invite`, { method: 'POST' })
+            await apiFetch(`/api/users/${adminId}/resend-invite`, { method: 'POST' })
             window.alert('Invitation sent.')
         } catch (error) {
             window.alert(error instanceof Error ? error.message : 'Failed to resend invitation')
         }
     }
 
-    async function handleDeleteUser(userId: string) {
-        if (!window.confirm('Delete this user?')) {
-            return
-        }
+    async function handleDeleteAdmin(adminId: string) {
+        if (!window.confirm('Delete this admin?')) return
 
         try {
-            await apiFetch(`/api/users/${userId}`, { method: 'DELETE' })
-            setUsers((current) => current.filter((user) => user.id !== userId))
-            if (editingUser?.id === userId) {
-                setEditingUser(null)
+            await apiFetch(`/api/users/${adminId}`, { method: 'DELETE' })
+            setAdmins((current) => current.filter((a) => a.id !== adminId))
+            if (editingAdmin?.id === adminId) {
+                setEditingAdmin(null)
             }
         } catch (error) {
-            window.alert(error instanceof Error ? error.message : 'Failed to delete user')
+            window.alert(error instanceof Error ? error.message : 'Failed to delete admin')
         }
     }
 
-    const filteredUsers = useMemo(
+    const filteredAdmins = useMemo(
         () =>
-            users.filter((user) =>
-                matchesSearch(user.email, searchQuery) ||
-                matchesSearch(user.firstName || '', searchQuery) ||
-                matchesSearch(user.lastName || '', searchQuery)
+            admins.filter((admin) =>
+                matchesSearch(admin.email, searchQuery) ||
+                matchesSearch(admin.firstName || '', searchQuery) ||
+                matchesSearch(admin.lastName || '', searchQuery)
             ),
-        [users, searchQuery]
+        [admins, searchQuery]
     )
+
+    const canCreate = createForm.email && (createForm.sendInvite || createForm.password)
 
     return (
         <div className="space-y-6">
@@ -151,52 +153,50 @@ export default function UsersPage() {
                 </div>
                 <Button className="shadow-sm-soft" onClick={() => setShowCreateModal(true)}>
                     <Plus className="mr-2 h-4 w-4" />
-                    New User
+                    New Admin
                 </Button>
             </div>
 
             <Card className="shadow-sm-soft">
                 <CardHeader>
-                    <CardTitle>User directory</CardTitle>
-                    <CardDescription>{filteredUsers.length} users registered in the system</CardDescription>
+                    <CardTitle>Platform administrators</CardTitle>
+                    <CardDescription>{filteredAdmins.length} admin{filteredAdmins.length !== 1 ? 's' : ''} with platform access</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                     {isLoading ? (
-                        <p className="py-8 text-center text-muted-foreground">Loading users...</p>
-                    ) : filteredUsers.length === 0 ? (
-                        <p className="py-8 text-center text-muted-foreground">No users found.</p>
+                        <p className="py-8 text-center text-muted-foreground">Loading admins...</p>
+                    ) : filteredAdmins.length === 0 ? (
+                        <p className="py-8 text-center text-muted-foreground">No admins found.</p>
                     ) : (
-                        filteredUsers.map((user) => (
-                            <div key={user.id} className="rounded-lg border p-4">
-                                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        filteredAdmins.map((admin) => (
+                            <div key={admin.id} className="rounded-lg border p-4">
+                                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                                     <div className="space-y-1">
                                         <div className="flex items-center gap-2">
-                                            <Mail className="h-4 w-4 text-primary" />
-                                            <span className="font-medium">{user.email}</span>
-                                            {user.isAdmin && (
-                                                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                                                    Admin
-                                                </span>
-                                            )}
+                                            <Shield className="h-4 w-4 text-primary" />
+                                            <span className="font-medium">{admin.email}</span>
+                                            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                                                Admin
+                                            </span>
                                         </div>
                                         <p className="text-sm text-muted-foreground">
-                                            {[user.firstName, user.lastName].filter(Boolean).join(' ') || 'No profile name'}
+                                            {[admin.firstName, admin.lastName].filter(Boolean).join(' ') || 'No profile name'}
                                         </p>
                                         <p className="text-xs text-muted-foreground">
-                                            Created {new Date(user.createdAt).toLocaleDateString()}
-                                            {user.lastLoginAt ? ` - Last login ${new Date(user.lastLoginAt).toLocaleString()}` : ''}
+                                            Created {new Date(admin.createdAt).toLocaleDateString()}
+                                            {admin.lastLoginAt ? ` - Last login ${new Date(admin.lastLoginAt).toLocaleString()}` : ''}
                                         </p>
                                     </div>
                                     <div className="flex flex-wrap gap-2">
-                                        <Button variant="outline" size="sm" onClick={() => openEditModal(user)}>
+                                        <Button variant="outline" size="sm" onClick={() => openEditModal(admin)}>
                                             <UserCog className="mr-2 h-4 w-4" />
                                             Edit
                                         </Button>
-                                        <Button variant="outline" size="sm" onClick={() => handleResendInvite(user.id)}>
-                                            <Shield className="mr-2 h-4 w-4" />
+                                        <Button variant="outline" size="sm" onClick={() => handleResendInvite(admin.id)}>
+                                            <Mail className="mr-2 h-4 w-4" />
                                             Resend invite
                                         </Button>
-                                        <Button variant="outline" size="sm" onClick={() => handleDeleteUser(user.id)}>
+                                        <Button variant="outline" size="sm" onClick={() => handleDeleteAdmin(admin.id)}>
                                             <Trash2 className="h-4 w-4 text-destructive" />
                                         </Button>
                                     </div>
@@ -208,27 +208,22 @@ export default function UsersPage() {
             </Card>
 
             {showCreateModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <Card className="w-full max-w-lg">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowCreateModal(false)}>
+                    <Card className="w-full max-w-lg max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
                         <CardHeader>
-                            <CardTitle>Create user</CardTitle>
-                            <CardDescription>Create a user directly or send an invitation.</CardDescription>
+                            <CardTitle>Create administrator</CardTitle>
+                            <CardDescription>Admins have full access to the platform.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <Field label="Email">
                                 <Input
                                     type="email"
+                                    placeholder="admin@example.com"
                                     value={createForm.email}
                                     onChange={(event) => setCreateForm((current) => ({ ...current, email: event.target.value }))}
                                 />
                             </Field>
-                            <Field label="Password">
-                                <Input
-                                    type="password"
-                                    value={createForm.password}
-                                    onChange={(event) => setCreateForm((current) => ({ ...current, password: event.target.value }))}
-                                />
-                            </Field>
+
                             <div className="grid gap-4 md:grid-cols-2">
                                 <Field label="First name">
                                     <Input
@@ -243,22 +238,30 @@ export default function UsersPage() {
                                     />
                                 </Field>
                             </div>
+
                             <Toggle
-                                label="Administrator"
-                                checked={createForm.isAdmin}
-                                onChange={(checked) => setCreateForm((current) => ({ ...current, isAdmin: checked }))}
-                            />
-                            <Toggle
-                                label="Send invite instead of keeping password"
+                                label="Send invite email instead of setting password"
                                 checked={createForm.sendInvite}
                                 onChange={(checked) => setCreateForm((current) => ({ ...current, sendInvite: checked }))}
                             />
+
+                            {!createForm.sendInvite && (
+                                <Field label="Password">
+                                    <Input
+                                        type="password"
+                                        placeholder="Minimum 8 characters"
+                                        value={createForm.password}
+                                        onChange={(event) => setCreateForm((current) => ({ ...current, password: event.target.value }))}
+                                    />
+                                </Field>
+                            )}
+
                             <div className="flex justify-end gap-2">
                                 <Button variant="outline" onClick={() => setShowCreateModal(false)}>
                                     Cancel
                                 </Button>
-                                <Button onClick={handleCreateUser} disabled={!createForm.email || !createForm.password}>
-                                    Create user
+                                <Button onClick={handleCreateAdmin} disabled={!canCreate}>
+                                    Create admin
                                 </Button>
                             </div>
                         </CardContent>
@@ -266,12 +269,12 @@ export default function UsersPage() {
                 </div>
             )}
 
-            {editingUser && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <Card className="w-full max-w-lg">
+            {editingAdmin && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setEditingAdmin(null)}>
+                    <Card className="w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
                         <CardHeader>
-                            <CardTitle>Edit user</CardTitle>
-                            <CardDescription>{editingUser.email}</CardDescription>
+                            <CardTitle>Edit admin</CardTitle>
+                            <CardDescription>{editingAdmin.email}</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="grid gap-4 md:grid-cols-2">
@@ -289,20 +292,15 @@ export default function UsersPage() {
                                 </Field>
                             </div>
                             <Toggle
-                                label="Administrator"
-                                checked={editForm.isAdmin}
-                                onChange={(checked) => setEditForm((current) => ({ ...current, isAdmin: checked }))}
-                            />
-                            <Toggle
                                 label="Email verified"
                                 checked={editForm.emailVerified}
                                 onChange={(checked) => setEditForm((current) => ({ ...current, emailVerified: checked }))}
                             />
                             <div className="flex justify-end gap-2">
-                                <Button variant="outline" onClick={() => setEditingUser(null)}>
+                                <Button variant="outline" onClick={() => setEditingAdmin(null)}>
                                     Cancel
                                 </Button>
-                                <Button onClick={handleUpdateUser}>Save changes</Button>
+                                <Button onClick={handleUpdateAdmin}>Save changes</Button>
                             </div>
                         </CardContent>
                     </Card>

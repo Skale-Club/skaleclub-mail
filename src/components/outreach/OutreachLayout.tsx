@@ -1,7 +1,9 @@
 import React from 'react'
 import { Link, useLocation } from 'wouter'
 import { useAuth } from '../../hooks/useAuth'
+import { useBranding } from '../../lib/branding'
 import { supabase } from '../../lib/supabase'
+import { AppLogo } from '../AppLogo'
 import {
     LayoutDashboard,
     Mail,
@@ -13,7 +15,6 @@ import {
     LogOut,
     Menu,
     X,
-    Zap
 } from 'lucide-react'
 
 import { ModeToggle } from '../mode-toggle'
@@ -40,6 +41,7 @@ const navItems: NavItem[] = [
 
 export function OutreachLayout({ children }: OutreachLayoutProps) {
     const { user } = useAuth()
+    const { branding } = useBranding()
     const [location] = useLocation()
     const [sidebarOpen, setSidebarOpen] = React.useState(false)
 
@@ -74,9 +76,12 @@ export function OutreachLayout({ children }: OutreachLayoutProps) {
       `}>
                 {/* Logo */}
                 <div className="flex items-center justify-between h-16 px-4 border-b border-border">
-                    <Link href="/outreach" className="flex items-center gap-2">
-                        <Zap className="w-8 h-8 text-primary" />
-                        <span className="text-xl font-bold text-foreground">Outreach</span>
+                    <Link href="/outreach" className="flex items-center gap-3">
+                        <AppLogo className="h-9 w-9 shrink-0" />
+                        <div>
+                            <span className="block text-base font-bold leading-tight text-foreground">{branding.applicationName}</span>
+                            <span className="block text-xs text-muted-foreground">Outreach</span>
+                        </div>
                     </Link>
                     <button
                         className="lg:hidden p-2 rounded-md hover:bg-accent text-muted-foreground transition-colors"

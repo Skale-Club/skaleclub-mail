@@ -1,11 +1,11 @@
-import { useState } from 'react'
-import { Trash2, UserPlus, Users, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Trash2, UserPlus, Users, X, KeyRound } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card'
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
 import { Label } from '../../ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../ui/Table'
-import { getAccessToken } from './shared'
+import { fetchWithAuth } from './shared'
 
 interface Member {
     id: string
@@ -17,6 +17,11 @@ interface Member {
         firstName: string | null
         lastName: string | null
     }
+}
+
+interface Domain {
+    id: string
+    name: string
 }
 
 interface MembersTabProps {
@@ -41,24 +46,54 @@ function getRoleBadgeColor(role: string): string {
 
 export default function MembersTab({ orgId, members, isAdmin, ownerId, onRefresh }: MembersTabProps) {
     const [showAddMember, setShowAddMember] = useState(false)
-    const [newMember, setNewMember] = useState({ email: '', role: 'member' })
+    const [localPart, setLocalPart] = useState('')
+    const [password, setPassword] = useState('')
+    const [selectedDomain, setSelectedDomain] = useState('')
+    const [domains, setDomains] = useState<Domain[]>([])
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [editingMember, setEditingMember] = useState<Member | null>(null)
+    const [newPassword, setNewPassword] = useState('')
+    const [isSavingPassword, setIsSavingPassword] = useState(false)
+
+    useEffect(() => {
+        async function fetchDomains() {
+            try {
+                const response = await fetchWithAuth(`/api/domains?organizationId=${orgId}`)
+                if (response.ok) {
+                    const data = await response.json()
+                    const list: Domain[] = (data.domains || []).map((d: { id: string; name: string }) => ({ id: d.id, name: d.name }))
+                    setDomains(list)
+                    if (list.length > 0) setSelectedDomain(list[0].name)
+                }
+            } catch (error) {
+                console.error('Error fetching domains:', error)
+            }
+        }
+        void fetchDomains()
+    }, [orgId])
+
+    function openModal() {
+        setLocalPart('')
+        setPassword('')
+        if (domains.length > 0) setSelectedDomain(domains[0].name)
+        setShowAddMember(true)
+    }
 
     async function handleAddMember() {
+        const email = domains.length > 0
+            ? `${localPart.trim()}@${selectedDomain}`
+            : localPart.trim()
         setIsSubmitting(true)
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/organizations/${orgId}/members`, {
+            const response = await fetchWithAuth(`/api/organizations/${orgId}/members`, {
                 method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(newMember),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password: password || undefined, role: 'member' }),
             })
 
             if (response.ok) {
-                setNewMember({ email: '', role: 'member' })
+                setLocalPart('')
+                setPassword('')
                 setShowAddMember(false)
                 await onRefresh()
             } else {
@@ -76,12 +111,8 @@ export default function MembersTab({ orgId, members, isAdmin, ownerId, onRefresh
         if (!confirm('Remove this member from the organization?')) return
 
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/organizations/${orgId}/members/${userId}`, {
+            const response = await fetchWithAuth(`/api/organizations/${orgId}/members/${userId}`, {
                 method: 'DELETE',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
             })
 
             if (response.ok) {
@@ -89,6 +120,29 @@ export default function MembersTab({ orgId, members, isAdmin, ownerId, onRefresh
             }
         } catch (error) {
             console.error('Error removing member:', error)
+        }
+    }
+
+    async function handleUpdatePassword() {
+        if (!editingMember || !newPassword.trim()) return
+        setIsSavingPassword(true)
+        try {
+            const response = await fetchWithAuth(`/api/users/${editingMember.userId}/password`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: newPassword }),
+            })
+            if (response.ok) {
+                setEditingMember(null)
+                setNewPassword('')
+            } else {
+                const error = await response.json()
+                alert(error.error || 'Failed to update password')
+            }
+        } catch (error) {
+            console.error('Error updating password:', error)
+        } finally {
+            setIsSavingPassword(false)
         }
     }
 
@@ -100,7 +154,7 @@ export default function MembersTab({ orgId, members, isAdmin, ownerId, onRefresh
                     <p className="text-sm text-muted-foreground">Manage organization access and roles.</p>
                 </div>
                 {isAdmin && (
-                    <Button onClick={() => setShowAddMember(true)}>
+                    <Button onClick={openModal}>
                         <UserPlus className="mr-2 h-4 w-4" />
                         Add Member
                     </Button>
@@ -122,6 +176,7 @@ export default function MembersTab({ orgId, members, isAdmin, ownerId, onRefresh
                                 <TableHead>User</TableHead>
                                 <TableHead>Role</TableHead>
                                 {isAdmin && <TableHead className="text-right">Actions</TableHead>}
+
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -133,10 +188,14 @@ export default function MembersTab({ orgId, members, isAdmin, ownerId, onRefresh
                                                 {(member.user.firstName?.[0] || member.user.email[0]).toUpperCase()}
                                             </div>
                                             <div>
-                                                <div className="font-medium">
-                                                    {[member.user.firstName, member.user.lastName].filter(Boolean).join(' ') || member.user.email}
+                                                {(member.user.firstName || member.user.lastName) && (
+                                                    <div className="font-medium">
+                                                        {[member.user.firstName, member.user.lastName].filter(Boolean).join(' ')}
+                                                    </div>
+                                                )}
+                                                <div className={`text-sm ${(member.user.firstName || member.user.lastName) ? 'text-muted-foreground' : 'font-medium'}`}>
+                                                    {member.user.email}
                                                 </div>
-                                                <div className="text-sm text-muted-foreground">{member.user.email}</div>
                                             </div>
                                         </div>
                                     </TableCell>
@@ -147,21 +206,67 @@ export default function MembersTab({ orgId, members, isAdmin, ownerId, onRefresh
                                     </TableCell>
                                     {isAdmin && (
                                         <TableCell className="text-right">
-                                            {member.userId !== ownerId && (
+                                            <div className="flex items-center justify-end gap-1">
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    onClick={() => void handleRemoveMember(member.userId)}
+                                                    title="Change password"
+                                                    onClick={() => { setEditingMember(member); setNewPassword('') }}
                                                 >
-                                                    <Trash2 className="h-4 w-4 text-red-500" />
+                                                    <KeyRound className="h-4 w-4 text-muted-foreground" />
                                                 </Button>
-                                            )}
+                                                {member.userId !== ownerId && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => void handleRemoveMember(member.userId)}
+                                                    >
+                                                        <Trash2 className="h-4 w-4 text-red-500" />
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </TableCell>
                                     )}
                                 </TableRow>
                             ))}
                         </TableBody>
                     </Table>
+                </div>
+            )}
+
+            {/* Edit Password Modal */}
+            {editingMember && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <Card className="w-full max-w-md">
+                        <CardHeader>
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <CardTitle>Change Password</CardTitle>
+                                    <CardDescription>{editingMember.user.email}</CardDescription>
+                                </div>
+                                <Button variant="ghost" size="icon" className="focus-visible:ring-0 focus-visible:ring-offset-0" onClick={() => setEditingMember(null)}>
+                                    <X className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="space-y-2">
+                                <Label>New Password</Label>
+                                <Input
+                                    type="password"
+                                    placeholder="Enter new password"
+                                    value={newPassword}
+                                    onChange={(e) => setNewPassword(e.target.value)}
+                                />
+                            </div>
+                            <div className="flex justify-end gap-2 pt-2">
+                                <Button variant="outline" onClick={() => setEditingMember(null)}>Cancel</Button>
+                                <Button onClick={() => void handleUpdatePassword()} disabled={!newPassword.trim() || isSavingPassword}>
+                                    {isSavingPassword ? 'Saving...' : 'Save Password'}
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
                 </div>
             )}
 
@@ -174,40 +279,76 @@ export default function MembersTab({ orgId, members, isAdmin, ownerId, onRefresh
                                     <CardTitle>Add Member</CardTitle>
                                     <CardDescription>Add a user to this organization.</CardDescription>
                                 </div>
-                                <Button variant="ghost" size="icon" onClick={() => setShowAddMember(false)}>
+                                <Button variant="ghost" size="icon" className="focus-visible:ring-0 focus-visible:ring-offset-0" onClick={() => setShowAddMember(false)}>
                                     <X className="h-4 w-4" />
                                 </Button>
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="space-y-2">
-                                <Label htmlFor="memberEmail">Email</Label>
+                                <Label>Email</Label>
+                                {domains.length === 0 ? (
+                                    /* No domains registered — free input */
+                                    <Input
+                                        type="email"
+                                        placeholder="user@example.com"
+                                        value={localPart}
+                                        onChange={(e) => setLocalPart(e.target.value)}
+                                    />
+                                ) : domains.length === 1 ? (
+                                    /* Single domain — show suffix as static text */
+                                    <div className="flex items-center rounded-md border border-input bg-background ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+                                        <input
+                                            className="flex-1 bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground"
+                                            placeholder="username"
+                                            value={localPart}
+                                            onChange={(e) => setLocalPart(e.target.value)}
+                                        />
+                                        <span className="select-none border-l border-input px-3 py-2 text-sm text-muted-foreground">
+                                            @{domains[0].name}
+                                        </span>
+                                    </div>
+                                ) : (
+                                    /* Multiple domains — show dropdown for domain part */
+                                    <div className="flex items-center rounded-md border border-input bg-background ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+                                        <input
+                                            className="flex-1 bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground"
+                                            placeholder="username"
+                                            value={localPart}
+                                            onChange={(e) => setLocalPart(e.target.value)}
+                                        />
+                                        <span className="select-none px-1 text-sm text-muted-foreground">@</span>
+                                        <select
+                                            className="border-l border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-0"
+                                            value={selectedDomain}
+                                            onChange={(e) => setSelectedDomain(e.target.value)}
+                                        >
+                                            {domains.map((d) => (
+                                                <option key={d.id} value={d.name}>{d.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Password</Label>
                                 <Input
-                                    id="memberEmail"
-                                    type="email"
-                                    placeholder="user@example.com"
-                                    value={newMember.email}
-                                    onChange={(event) => setNewMember((current) => ({ ...current, email: event.target.value }))}
+                                    type="password"
+                                    placeholder="Set a password for this member"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="memberRole">Role</Label>
-                                <select
-                                    id="memberRole"
-                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                                    value={newMember.role}
-                                    onChange={(event) => setNewMember((current) => ({ ...current, role: event.target.value }))}
-                                >
-                                    <option value="admin">Admin</option>
-                                    <option value="member">Member</option>
-                                    <option value="viewer">Viewer</option>
-                                </select>
-                            </div>
+
                             <div className="flex justify-end gap-2 pt-4">
                                 <Button variant="outline" onClick={() => setShowAddMember(false)}>
                                     Cancel
                                 </Button>
-                                <Button onClick={() => void handleAddMember()} disabled={!newMember.email || isSubmitting}>
+                                <Button
+                                    onClick={() => void handleAddMember()}
+                                    disabled={!localPart.trim() || !password.trim() || (domains.length > 0 && !selectedDomain) || isSubmitting}
+                                >
                                     {isSubmitting ? 'Adding...' : 'Add Member'}
                                 </Button>
                             </div>

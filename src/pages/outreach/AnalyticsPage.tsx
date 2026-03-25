@@ -31,13 +31,13 @@ type DailyStat = {
 type StatColor = 'blue' | 'green' | 'purple' | 'orange' | 'red'
 
 async function fetchAnalytics(): Promise<AnalyticsData> {
-    const response = await fetch('/api/outreach/campaigns/analytics')
+    const response = await fetch('/api/outreach/campaigns/analytics', { cache: 'no-store' })
     if (!response.ok) throw new Error('Failed to fetch analytics')
     return response.json()
 }
 
 async function fetchDailyStats(): Promise<DailyStat[]> {
-    const response = await fetch('/api/outreach/campaigns/analytics/daily')
+    const response = await fetch('/api/outreach/campaigns/analytics/daily', { cache: 'no-store' })
     if (!response.ok) throw new Error('Failed to fetch daily stats')
     return response.json()
 }

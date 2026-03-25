@@ -132,7 +132,7 @@ async function isLocalAddress(email: string): Promise<string | null> {
             eq(nativeMailboxes.isActive, true)
         ),
     })
-    return account ? account.userId : null
+    return account ? account.organizationId : null
 }
 
 export function createSMTPServer() {
@@ -161,7 +161,7 @@ export function createSMTPServer() {
                     }
                     console.log(`[SMTP] Auth success: ${username}`)
                     // Return user object; this becomes session.user
-                    callback(null, { user: JSON.stringify({ email: account.email, userId: account.userId }) })
+                    callback(null, { user: JSON.stringify({ email: account.email, userId: account.organizationId }) })
                 })
                 .catch(err => {
                     console.error('[SMTP] Auth error:', err)

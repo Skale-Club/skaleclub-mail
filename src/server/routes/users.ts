@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { db } from '../../db'
 import { users, organizationUsers, organizations } from '../../db/schema'
 import { eq, and } from 'drizzle-orm'
+import { isPlatformAdmin } from '../lib/admin'
 
 const router = Router()
 
@@ -451,6 +452,60 @@ router.post('/:id/resend-invite', async (req: Request, res: Response) => {
         res.json({ message: 'Invitation email sent successfully' })
     } catch (error) {
         console.error('Error resending invite:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+// Admin: Update user password
+router.put('/:id/password', async (req: Request, res: Response) => {
+    try {
+        const requestingUserId = req.headers['x-user-id'] as string
+        const targetUserId = req.params.id
+
+        if (!requestingUserId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        // Allow platform admins OR org admins who share an org with the target user
+        const isPlatAdmin = await isPlatformAdmin(requestingUserId)
+        if (!isPlatAdmin) {
+            const sharedOrg = await db.query.organizationUsers.findFirst({
+                where: and(
+                    eq(organizationUsers.userId, requestingUserId),
+                    eq(organizationUsers.role, 'admin')
+                ),
+            })
+            if (!sharedOrg) {
+                return res.status(403).json({ error: 'Forbidden' })
+            }
+            // Verify target user is in same org
+            const targetInOrg = await db.query.organizationUsers.findFirst({
+                where: and(
+                    eq(organizationUsers.userId, targetUserId),
+                    eq(organizationUsers.organizationId, sharedOrg.organizationId)
+                ),
+            })
+            if (!targetInOrg) {
+                return res.status(403).json({ error: 'Forbidden' })
+            }
+        }
+
+        const { password } = z.object({
+            password: z.string().min(6, 'Password must be at least 6 characters'),
+        }).parse(req.body)
+
+        const { error } = await supabaseAdmin.auth.admin.updateUserById(targetUserId, { password })
+
+        if (error) {
+            return res.status(400).json({ error: error.message })
+        }
+
+        res.json({ message: 'Password updated successfully' })
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({ error: error.errors })
+        }
+        console.error('Error updating password:', error)
         res.status(500).json({ error: 'Internal server error' })
     }
 })

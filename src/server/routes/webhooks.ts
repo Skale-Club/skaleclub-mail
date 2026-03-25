@@ -1,15 +1,16 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { db } from '../../db'
-import { webhooks, webhookRequests, servers, organizationUsers } from '../../db/schema'
+import {  webhooks, webhookRequests, organizationUsers , organizations } from '../../db/schema'
 import { eq, and, desc } from 'drizzle-orm'
 import { isPlatformAdmin } from '../lib/admin'
+import { getCachedBranding } from '../lib/serverBranding'
 
 const router = Router()
 
 // Validation schemas
 const createWebhookSchema = z.object({
-    serverId: z.string().uuid(),
+    organizationId: z.string().uuid(),
     name: z.string().min(1).max(100),
     url: z.string().url(),
     secret: z.string().optional(),
@@ -35,49 +36,49 @@ const updateWebhookSchema = z.object({
 })
 
 // Helper to check access
-async function checkWebhookAccess(userId: string, serverId: string) {
-    const server = await db.query.servers.findFirst({
-        where: eq(servers.id, serverId),
+async function checkWebhookAccess(userId: string, organizationId: string) {
+    const organization = await db.query.organizations.findFirst({
+        where: eq(organizations.id, organizationId),
     })
 
-    if (!server) return { server: null, membership: null }
+    if (!organization) return { organization: null, membership: null }
 
     if (await isPlatformAdmin(userId)) {
-        return { server, membership: { role: 'admin' as const } }
+        return { organization, membership: { role: "admin" as const } }
     }
 
     const membership = await db.query.organizationUsers.findFirst({
         where: and(
-            eq(organizationUsers.organizationId, server.organizationId),
+            eq(organizationUsers.organizationId, organization.id),
             eq(organizationUsers.userId, userId)
         ),
     })
 
-    return { server, membership }
+    return { organization, membership }
 }
 
-// List webhooks for server
+// List webhooks for organization
 router.get('/', async (req: Request, res: Response) => {
     try {
         const userId = req.headers['x-user-id'] as string
-        const serverId = req.query.serverId as string
+        const organizationId = req.query.organizationId as string
 
         if (!userId) {
             return res.status(401).json({ error: 'Unauthorized' })
         }
 
-        if (!serverId) {
-            return res.status(400).json({ error: 'Server ID required' })
+        if (!organizationId) {
+            return res.status(400).json({ error: 'Organization ID required' })
         }
 
-        const { server, membership } = await checkWebhookAccess(userId, serverId)
+        const { organization, membership } = await checkWebhookAccess(userId, organizationId)
 
-        if (!server || !membership) {
+        if (!organization || !membership) {
             return res.status(403).json({ error: 'Access denied' })
         }
 
         const webhooksList = await db.query.webhooks.findMany({
-            where: eq(webhooks.serverId, serverId),
+            where: eq(webhooks.organizationId, organizationId),
             orderBy: [desc(webhooks.createdAt)],
         })
 
@@ -101,7 +102,7 @@ router.get('/:id', async (req: Request, res: Response) => {
         const webhook = await db.query.webhooks.findFirst({
             where: eq(webhooks.id, webhookId),
             with: {
-                server: true,
+                organization: true,
             },
         })
 
@@ -109,9 +110,9 @@ router.get('/:id', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Webhook not found' })
         }
 
-        const { server, membership } = await checkWebhookAccess(userId, webhook.serverId)
+        const { organization, membership } = await checkWebhookAccess(userId, webhook.organizationId)
 
-        if (!server || !membership) {
+        if (!organization || !membership) {
             return res.status(403).json({ error: 'Access denied' })
         }
 
@@ -133,14 +134,14 @@ router.post('/', async (req: Request, res: Response) => {
 
         const data = createWebhookSchema.parse(req.body)
 
-        const { server, membership } = await checkWebhookAccess(userId, data.serverId)
+        const { organization, membership } = await checkWebhookAccess(userId, data.organizationId)
 
-        if (!server || !membership || membership.role !== 'admin') {
+        if (!organization || !membership || membership.role !== 'admin') {
             return res.status(403).json({ error: 'Only admins can create webhooks' })
         }
 
         const [webhook] = await db.insert(webhooks).values({
-            serverId: data.serverId,
+            organizationId: data.organizationId,
             name: data.name,
             url: data.url,
             secret: data.secret,
@@ -178,9 +179,9 @@ router.patch('/:id', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Webhook not found' })
         }
 
-        const { server, membership } = await checkWebhookAccess(userId, webhook.serverId)
+        const { organization, membership } = await checkWebhookAccess(userId, webhook.organizationId)
 
-        if (!server || !membership || membership.role !== 'admin') {
+        if (!organization || !membership || membership.role !== 'admin') {
             return res.status(403).json({ error: 'Only admins can update webhooks' })
         }
 
@@ -221,9 +222,9 @@ router.delete('/:id', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Webhook not found' })
         }
 
-        const { server, membership } = await checkWebhookAccess(userId, webhook.serverId)
+        const { organization, membership } = await checkWebhookAccess(userId, webhook.organizationId)
 
-        if (!server || !membership || membership.role !== 'admin') {
+        if (!organization || !membership || membership.role !== 'admin') {
             return res.status(403).json({ error: 'Only admins can delete webhooks' })
         }
 
@@ -258,9 +259,9 @@ router.get('/:id/requests', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Webhook not found' })
         }
 
-        const { server, membership } = await checkWebhookAccess(userId, webhook.serverId)
+        const { organization, membership } = await checkWebhookAccess(userId, webhook.organizationId)
 
-        if (!server || !membership) {
+        if (!organization || !membership) {
             return res.status(403).json({ error: 'Access denied' })
         }
 
@@ -295,22 +296,23 @@ router.post('/:id/test', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Webhook not found' })
         }
 
-        const { server, membership } = await checkWebhookAccess(userId, webhook.serverId)
+        const { organization, membership } = await checkWebhookAccess(userId, webhook.organizationId)
 
-        if (!server || !membership || membership.role !== 'admin') {
+        if (!organization || !membership || membership.role !== 'admin') {
             return res.status(403).json({ error: 'Only admins can test webhooks' })
         }
 
         // Create a test payload
+        const { applicationName } = await getCachedBranding()
         const testPayload = {
             event: 'test',
             timestamp: new Date().toISOString(),
-            server: {
-                id: server.id,
-                name: server.name,
+            organization: {
+                id: organization.id,
+                name: organization.name,
             },
             data: {
-                message: 'This is a test webhook from SkaleClub Mail',
+                message: `This is a test webhook from ${applicationName}`,
             },
         }
 

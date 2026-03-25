@@ -38,13 +38,14 @@ interface EmailAccountsResponse {
 }
 
 async function fetchEmailAccounts(): Promise<EmailAccountsResponse> {
-    const response = await fetch('/api/outreach/email-accounts')
+    const response = await fetch('/api/outreach/email-accounts', { cache: 'no-store' })
     if (!response.ok) throw new Error('Failed to fetch email accounts')
     return response.json()
 }
 
 async function verifyEmailAccount(id: string): Promise<void> {
     const response = await fetch(`/api/outreach/email-accounts/${id}/verify`, {
+        cache: 'no-store',
         method: 'POST',
     })
     if (!response.ok) throw new Error('Failed to verify email account')
@@ -52,6 +53,7 @@ async function verifyEmailAccount(id: string): Promise<void> {
 
 async function deleteEmailAccount(id: string): Promise<void> {
     const response = await fetch(`/api/outreach/email-accounts/${id}`, {
+        cache: 'no-store',
         method: 'DELETE',
     })
     if (!response.ok) throw new Error('Failed to delete email account')

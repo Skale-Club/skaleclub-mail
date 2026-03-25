@@ -60,6 +60,7 @@
         "express-rate-limit": "^7.2.0",
         "helmet": "^7.1.0",
         "imap": "^0.8.19",
+        "imapflow": "^1.2.16",
         "jsonwebtoken": "^9.0.2",
         "lodash": "^4.17.21",
         "lucide-react": "^0.358.0",

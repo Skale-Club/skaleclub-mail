@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react'
+import { useBranding } from '../lib/branding'
 import { supabase } from '../lib/supabase'
+import { AppLogo } from '../components/AppLogo'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card'
 
 export default function Login() {
+    const { branding } = useBranding()
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [isLoading, setIsLoading] = useState(false)
@@ -24,7 +27,22 @@ export default function Login() {
             if (error) {
                 setError(error.message)
             } else {
-                window.location.href = '/admin'
+                // Fetch profile to determine role, then redirect
+                try {
+                    const { data: { session } } = await supabase.auth.getSession()
+                    if (session) {
+                        const profileRes = await fetch('/api/users/profile', {
+                            cache: 'no-store',
+                            headers: { Authorization: `Bearer ${session.access_token}` },
+                        })
+                        const profileData = profileRes.ok ? await profileRes.json() : null
+                        window.location.href = profileData?.user?.isAdmin ? '/admin' : '/mail/inbox'
+                    } else {
+                        window.location.href = '/mail/inbox'
+                    }
+                } catch {
+                    window.location.href = '/mail/inbox'
+                }
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An unexpected error occurred')
@@ -38,10 +56,8 @@ export default function Login() {
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-secondary via-background to-background -z-10" />
             <div className="w-full max-w-md z-10">
                 <div className="mb-8 flex flex-col items-center justify-center gap-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary shadow-sm-soft">
-                        <Mail className="h-6 w-6 text-primary-foreground" />
-                    </div>
-                    <span className="text-2xl font-semibold tracking-tight text-foreground">SkaleClub Mail</span>
+                    <AppLogo className="h-16 w-16 shadow-sm-soft" />
+                    <span className="text-2xl font-semibold tracking-tight text-foreground">{branding.applicationName}</span>
                 </div>
 
                 <Card className="shadow-lg-soft border-border/40">

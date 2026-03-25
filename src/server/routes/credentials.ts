@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { db } from '../../db';
-import { credentials, servers, organizationUsers } from '../../db/schema';
+import {  credentials, organizationUsers , organizations } from '../../db/schema';
 import { eq, desc, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { isPlatformAdmin } from '../lib/admin'
@@ -10,7 +10,7 @@ const router = Router();
 
 // Validation schemas
 const createCredentialSchema = z.object({
-    serverId: z.string().uuid(),
+    organizationId: z.string().uuid(),
     name: z.string().min(1).max(100),
     type: z.enum(['smtp', 'api']),
     key: z.string().min(1),
@@ -23,9 +23,9 @@ const updateCredentialSchema = z.object({
 });
 
 // Helper to check access
-async function checkCredentialAccess(userId: string, serverId: string) {
-    const server = await db.query.servers.findFirst({
-        where: eq(servers.id, serverId),
+async function checkCredentialAccess(userId: string, organizationId: string) {
+    const server = await db.query.organizations.findFirst({
+        where: eq(organizations.id, organizationId),
     });
 
     if (!server) return { server: null, membership: null }
@@ -36,7 +36,7 @@ async function checkCredentialAccess(userId: string, serverId: string) {
 
     const membership = await db.query.organizationUsers.findFirst({
         where: and(
-            eq(organizationUsers.organizationId, server.organizationId),
+            eq(organizationUsers.organizationId, server.id),
             eq(organizationUsers.userId, userId)
         ),
     })
@@ -44,28 +44,28 @@ async function checkCredentialAccess(userId: string, serverId: string) {
     return { server, membership }
 }
 
-// List credentials for server
+// List credentials for organization
 router.get('/', async (req: Request, res: Response) => {
     try {
         const userId = req.headers['x-user-id'] as string
-        const serverId = req.query.serverId as string
+        const organizationId = req.query.organizationId as string
 
         if (!userId) {
             return res.status(401).json({ error: 'Unauthorized' })
         }
 
-        if (!serverId) {
-            return res.status(400).json({ error: 'Server ID required' })
+        if (!organizationId) {
+            return res.status(400).json({ error: 'Organization ID required' })
         }
 
-        const { server, membership } = await checkCredentialAccess(userId, serverId)
+        const { server, membership } = await checkCredentialAccess(userId, organizationId)
 
         if (!server || !membership) {
             return res.status(403).json({ error: 'Access denied' })
         }
 
         const credentialsList = await db.query.credentials.findMany({
-            where: eq(credentials.serverId, serverId),
+            where: eq(credentials.organizationId, organizationId),
             orderBy: [desc(credentials.createdAt)],
         })
 
@@ -87,7 +87,7 @@ router.post('/', async (req: Request, res: Response) => {
 
         const data = createCredentialSchema.parse(req.body)
 
-        const { server, membership } = await checkCredentialAccess(userId, data.serverId)
+        const { server, membership } = await checkCredentialAccess(userId, data.organizationId)
 
         if (!server || !membership || membership.role !== 'admin') {
             return res.status(403).json({ error: 'Only admins can create credentials' })
@@ -103,7 +103,7 @@ router.post('/', async (req: Request, res: Response) => {
         }
 
         const [credential] = await db.insert(credentials).values({
-            serverId: data.serverId,
+            organizationId: data.organizationId,
             name: data.name,
             type: data.type,
             key: data.key || key,
@@ -138,7 +138,7 @@ router.post('/:id/regenerate', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Credential not found' })
         }
 
-        const { server, membership } = await checkCredentialAccess(userId, credential.serverId)
+        const { server, membership } = await checkCredentialAccess(userId, credential.organizationId)
 
         if (!server || !membership || membership.role !== 'admin') {
             return res.status(403).json({ error: 'Only admins can regenerate credentials' })
@@ -187,7 +187,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Credential not found' })
         }
 
-        const { server, membership } = await checkCredentialAccess(userId, credential.serverId)
+        const { server, membership } = await checkCredentialAccess(userId, credential.organizationId)
 
         if (!server || !membership || membership.role !== 'admin') {
             return res.status(403).json({ error: 'Only admins can delete credentials' })

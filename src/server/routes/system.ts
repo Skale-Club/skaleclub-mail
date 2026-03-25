@@ -1,28 +1,311 @@
 import { Router, Request, Response } from 'express'
+import { createClient } from '@supabase/supabase-js'
 import { db } from '../../db'
-import { users } from '../../db/schema'
-import { eq, sql } from 'drizzle-orm'
+import { sql } from 'drizzle-orm'
+import { systemBranding, users } from '../../db/schema'
+import { eq } from 'drizzle-orm'
+import { z } from 'zod'
+import { readBranding as readBrandingFromDB, clearBrandingCache } from '../lib/serverBranding'
 
 const router = Router()
+
+const brandingId = 'default'
+const BUCKET_NAME = 'branding-assets'
+
+const brandingSchema = z.object({
+    companyName: z.string().trim().min(1).max(120).optional(),
+    applicationName: z.string().trim().min(1).max(160).optional(),
+    mailHost: z.string().trim().min(1).max(253).optional(),
+})
+
+const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
+function getRequestingUser(req: Request) {
+    const requestingUserId = req.headers['x-user-id'] as string | undefined
+
+    if (!requestingUserId) {
+        return null
+    }
+
+    return db.query.users.findFirst({
+        where: eq(users.id, requestingUserId),
+    })
+}
+
+async function readBranding() {
+    const b = await readBrandingFromDB()
+    return {
+        id: brandingId,
+        companyName: b.companyName,
+        applicationName: b.applicationName,
+        logoStorage: b.logoStorage,
+        faviconStorage: b.faviconStorage,
+        mailHost: b.mailHost,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+    }
+}
+
+function getPublicUrl(storage: string | null): string {
+    if (!storage) {
+        return '/brand-mark.svg'
+    }
+
+    const [bucket, path] = storage.split('/')
+    return `${process.env.SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`
+}
+
+function getFaviconPublicUrl(storage: string | null): string {
+    if (!storage) {
+        return '/favicon.svg'
+    }
+
+    const [bucket, path] = storage.split('/')
+    return `${process.env.SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`
+}
+
+router.get('/branding', async (_req: Request, res: Response) => {
+    try {
+        const branding = await readBranding()
+
+        res.json({
+            companyName: branding.companyName,
+            applicationName: branding.applicationName,
+            logoUrl: getPublicUrl(branding.logoStorage),
+            faviconUrl: getFaviconPublicUrl(branding.faviconStorage),
+            mailHost: branding.mailHost,
+        })
+    } catch (error) {
+        console.error('Error fetching branding settings:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+const ALLOWED_MIME_TYPES = [
+    'image/svg+xml',
+    'image/png',
+    'image/x-icon',
+    'image/vnd.microsoft.icon',
+    'image/webp',
+]
+
+const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
+
+router.post('/branding/upload', async (req: Request, res: Response) => {
+    try {
+        const requestingUser = await getRequestingUser(req)
+
+        if (!requestingUser) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        if (!requestingUser.isAdmin) {
+            return res.status(403).json({ error: 'Forbidden' })
+        }
+
+        if (!req.is('multipart/form-data')) {
+            return res.status(400).json({ error: 'Content-Type must be multipart/form-data' })
+        }
+
+        const chunks: Buffer[] = []
+        let totalSize = 0
+        let fileType = ''
+        let fieldName = ''
+
+        await new Promise<void>((resolve, reject) => {
+            req.on('data', (chunk: Buffer) => {
+                totalSize += chunk.length
+                if (totalSize > MAX_FILE_SIZE) {
+                    req.destroy()
+                    return reject(new Error('File size exceeds 5MB limit'))
+                }
+                chunks.push(chunk)
+            })
+
+            req.on('end', () => {
+                resolve()
+            })
+
+            req.on('error', (error: Error) => {
+                reject(error)
+            })
+        })
+
+        const buffer = Buffer.concat(chunks)
+        const contentType = req.headers['content-type'] || ''
+
+        const boundaryMatch = contentType.match(/boundary=(.+)/)
+        if (!boundaryMatch) {
+            return res.status(400).json({ error: 'Invalid multipart data' })
+        }
+
+        const boundary = boundaryMatch[1]
+        const parts = buffer.toString('binary').split(`--${boundary}`)
+
+        let fileBuffer: Buffer | null = null
+        let filename = ''
+
+        for (const part of parts) {
+            if (part.includes('Content-Disposition')) {
+                const headerEnd = part.indexOf('\r\n\r\n')
+                if (headerEnd !== -1) {
+                    const headers = part.substring(0, headerEnd)
+                    const body = part.substring(headerEnd + 4)
+
+                    const fieldMatch = headers.match(/name="(\w+)"/)
+                    if (fieldMatch) {
+                        fieldName = fieldMatch[1]
+                    }
+
+                    const filenameMatch = headers.match(/filename="([^"]+)"/)
+                    if (filenameMatch) {
+                        filename = filenameMatch[1]
+                    }
+
+                    if (fieldName === 'logo' || fieldName === 'favicon') {
+                        const bodyEnd = body.lastIndexOf('\r\n')
+                        const fileData = bodyEnd !== -1 ? body.substring(0, bodyEnd) : body.trim()
+                        fileBuffer = Buffer.from(fileData, 'binary')
+
+                        const mimeMatch = headers.match(/Content-Type:\s*(.+)/i)
+                        if (mimeMatch) {
+                            fileType = mimeMatch[1].trim()
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!fileBuffer || !fieldName) {
+            return res.status(400).json({ error: 'No file uploaded' })
+        }
+
+        if (!ALLOWED_MIME_TYPES.includes(fileType)) {
+            return res.status(400).json({ 
+                error: `Invalid file type. Allowed types: ${ALLOWED_MIME_TYPES.join(', ')}` 
+            })
+        }
+
+        const timestamp = Date.now()
+        const storagePath = `${fieldName}-${timestamp}-${filename}`
+        const storageKey = `${BUCKET_NAME}/${storagePath}`
+
+        const { data: uploadData, error: uploadError } = await supabaseAdmin
+            .storage
+            .from(BUCKET_NAME)
+            .upload(storagePath, fileBuffer, {
+                contentType: fileType,
+                upsert: true,
+            })
+
+        if (uploadError) {
+            console.error('Upload error:', uploadError)
+            return res.status(500).json({ error: 'Failed to upload file' })
+        }
+
+        const field = fieldName === 'logo' ? 'logoStorage' : 'faviconStorage'
+
+        const currentBranding = await readBranding()
+        await db.insert(systemBranding)
+            .values({
+                id: brandingId,
+                companyName: currentBranding.companyName,
+                applicationName: currentBranding.applicationName,
+            })
+            .onConflictDoNothing()
+
+        const [branding] = await db.update(systemBranding)
+            .set({
+                [field]: storageKey,
+                updatedAt: new Date(),
+            })
+            .where(eq(systemBranding.id, brandingId))
+            .returning()
+
+        clearBrandingCache()
+
+        res.json({
+            companyName: branding.companyName,
+            applicationName: branding.applicationName,
+            logoUrl: getPublicUrl(branding.logoStorage),
+            faviconUrl: getPublicUrl(branding.faviconStorage),
+        })
+    } catch (error) {
+        console.error('Error uploading branding file:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+router.patch('/branding', async (req: Request, res: Response) => {
+    try {
+        const requestingUser = await getRequestingUser(req)
+
+        if (!requestingUser) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        if (!requestingUser.isAdmin) {
+            return res.status(403).json({ error: 'Forbidden' })
+        }
+
+        const updates = brandingSchema.parse(req.body)
+        const currentBranding = await readBranding()
+
+        const payload = {
+            companyName: updates.companyName ?? currentBranding.companyName,
+            applicationName: updates.applicationName ?? currentBranding.applicationName,
+            mailHost: updates.mailHost ?? currentBranding.mailHost,
+            updatedAt: new Date(),
+        }
+
+        await db.insert(systemBranding)
+            .values({
+                id: brandingId,
+                companyName: currentBranding.companyName,
+                applicationName: currentBranding.applicationName,
+            })
+            .onConflictDoNothing()
+
+        const [branding] = await db.update(systemBranding)
+            .set(payload)
+            .where(eq(systemBranding.id, brandingId))
+            .returning()
+
+        clearBrandingCache()
+
+        res.json({
+            companyName: branding.companyName,
+            applicationName: branding.applicationName,
+            logoUrl: getPublicUrl(branding.logoStorage),
+            faviconUrl: getPublicUrl(branding.faviconStorage),
+            mailHost: branding.mailHost,
+        })
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({ error: error.errors })
+        }
+
+        console.error('Error updating branding settings:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
 
 // GET /api/system/usage - Admin only
 router.get('/usage', async (req: Request, res: Response) => {
     try {
-        const requestingUserId = req.headers['x-user-id'] as string
+        const requestingUser = await getRequestingUser(req)
 
-        if (!requestingUserId) {
+        if (!requestingUser) {
             return res.status(401).json({ error: 'Unauthorized' })
         }
-
-        const requestingUser = await db.query.users.findFirst({
-            where: eq(users.id, requestingUserId),
-        })
 
         if (!requestingUser?.isAdmin) {
             return res.status(403).json({ error: 'Forbidden' })
         }
 
-        // System storage from Supabase storage schema (direct Postgres access)
         const storageResult = await db.execute(sql`
             SELECT COALESCE(SUM((metadata->>'size')::bigint), 0)::bigint AS total_bytes
             FROM storage.objects
@@ -31,8 +314,6 @@ router.get('/usage', async (req: Request, res: Response) => {
         const totalStorageBytes = Number((storageResult as any)[0]?.total_bytes ?? 0)
         const storageLimitBytes = Number(process.env.STORAGE_LIMIT_BYTES) || 10 * 1024 * 1024 * 1024
 
-        // Per-user usage: message count + estimated attachment size from base64 content in DB
-        // Exclude admin users (they manage the system, not part of organizations/plans)
         const userUsageResult = await db.execute(sql`
             SELECT
                 u.id,
@@ -52,12 +333,12 @@ router.get('/usage', async (req: Request, res: Response) => {
                             ELSE 0
                         END
                     )
-                , 0)::bigint AS attachment_bytes
+                , 1)::bigint AS attachment_bytes
             FROM users u
             LEFT JOIN organization_users ou ON ou.user_id = u.id
             LEFT JOIN organizations org ON org.id = ou.organization_id
-            LEFT JOIN servers s ON s.organization_id = org.id
-            LEFT JOIN messages m ON m.server_id = s.id
+            LEFT JOIN organizations org ON org.id = ou.organization_id
+            LEFT JOIN messages m ON m.organization_id = s.id
             WHERE u.is_admin = false
             GROUP BY u.id, u.email, u.first_name, u.last_name
             ORDER BY message_count DESC

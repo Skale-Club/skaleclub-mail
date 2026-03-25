@@ -21,7 +21,7 @@ interface Sequence {
 }
 
 async function fetchSequences(): Promise<Sequence[]> {
-    const response = await fetch('/api/outreach/campaigns/sequences')
+    const response = await fetch('/api/outreach/campaigns/sequences', { cache: 'no-store' })
     if (!response.ok) throw new Error('Failed to fetch sequences')
     const data = await response.json()
     return data.sequences || []

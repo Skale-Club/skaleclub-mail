@@ -14,7 +14,7 @@ END $$;
 
 CREATE TABLE IF NOT EXISTS outlook_mailboxes (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    server_id uuid NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     email text NOT NULL,
     display_name text,
     microsoft_user_id text NOT NULL,
@@ -30,8 +30,8 @@ CREATE TABLE IF NOT EXISTS outlook_mailboxes (
     updated_at timestamp NOT NULL DEFAULT now()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS outlook_mailboxes_server_email_unique
-    ON outlook_mailboxes (server_id, email);
+CREATE UNIQUE INDEX IF NOT EXISTS outlook_mailboxes_org_email_unique
+    ON outlook_mailboxes (organization_id, email);
 
 CREATE UNIQUE INDEX IF NOT EXISTS outlook_mailboxes_microsoft_user_unique
     ON outlook_mailboxes (microsoft_user_id);

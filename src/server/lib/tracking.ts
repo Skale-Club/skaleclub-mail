@@ -95,19 +95,19 @@ const STAT_COLUMNS = {
 export type StatField = keyof typeof STAT_COLUMNS
 
 /**
- * Upserts one row per (server_id, today) and increments the given counter.
+ * Upserts one row per (organization_id, today) and increments the given counter.
  * Failures are swallowed — stats are best-effort.
  */
-export async function incrementStat(serverId: string, field: StatField): Promise<void> {
+export async function incrementStat(organizationId: string, field: StatField): Promise<void> {
     const col = STAT_COLUMNS[field]
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
     try {
         await db.execute(sql`
-            INSERT INTO statistics (id, server_id, date, ${sql.raw(col)})
-            VALUES (gen_random_uuid(), ${serverId}, ${today}, 1)
-            ON CONFLICT (server_id, date)
+            INSERT INTO statistics (id, organization_id, date, ${sql.raw(col)})
+            VALUES (gen_random_uuid(), ${organizationId}, ${today}, 1)
+            ON CONFLICT (organization_id, date)
             DO UPDATE SET ${sql.raw(col)} = statistics.${sql.raw(col)} + 1
         `)
     } catch (err) {
@@ -137,14 +137,14 @@ type WebhookEvent =
  * Errors are swallowed so tracking never blocks the response.
  */
 export async function fireWebhooks(
-    serverId: string,
+    organizationId: string,
     event: WebhookEvent,
     data: Record<string, unknown>
 ): Promise<void> {
     try {
         const allWebhooks = await db.query.webhooks.findMany({
             where: and(
-                eq(webhooks.serverId, serverId),
+                eq(webhooks.organizationId, organizationId),
                 eq(webhooks.active, true)
             ),
         })
@@ -158,7 +158,7 @@ export async function fireWebhooks(
         const payload = {
             event,
             timestamp: new Date().toISOString(),
-            serverId,
+            organizationId,
             data,
         }
 

@@ -1,10 +1,16 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
+import { createClient } from '@supabase/supabase-js'
 import { db } from '../../db'
-import { organizations, organizationUsers, users, servers } from '../../db/schema'
+import { organizations, organizationUsers, users, } from '../../db/schema'
 import { eq, and } from 'drizzle-orm'
 import { deleteOrganizationCascade } from '../lib/cascade'
 import { isPlatformAdmin } from '../lib/admin'
+
+const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 const router = Router()
 const createOrganizationSchema = z.object({
@@ -34,7 +40,7 @@ router.get('/', async (req: Request, res: Response) => {
 
         if (await isPlatformAdmin(userId)) {
             const allOrgs = await db.query.organizations.findMany({
-                with: { servers: true },
+                with: {},
             })
             return res.json({ organizations: allOrgs })
         }
@@ -43,7 +49,7 @@ router.get('/', async (req: Request, res: Response) => {
             where: eq(organizationUsers.userId, userId),
             with: {
                 organization: {
-                    with: { servers: true },
+                    with: {},
                 },
             },
         })
@@ -98,7 +104,7 @@ router.get('/:id', async (req: Request, res: Response) => {
                         },
                     },
                 },
-                servers: true,
+                
             },
         })
 
@@ -156,15 +162,7 @@ router.post('/', async (req: Request, res: Response) => {
             })
         }
 
-        const [defaultServer] = await db.insert(servers).values({
-            name: name,
-            slug: slug,
-            organizationId: organization.id,
-            mode: 'live',
-            sendMode: 'smtp',
-        }).returning()
-
-        res.status(201).json({ organization, defaultServer })
+        res.status(201).json({ organization })
     } catch (error) {
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: error.errors })
@@ -268,14 +266,34 @@ router.post('/:id/members', async (req: Request, res: Response) => {
             }
         }
 
-        const { email, role } = addMemberSchema.parse(req.body)
+        const { email, role, password } = addMemberSchema.extend({
+            password: z.string().min(6).optional(),
+        }).parse(req.body)
 
-        const userToAdd = await db.query.users.findFirst({
+        let userToAdd = await db.query.users.findFirst({
             where: eq(users.email, email),
         })
 
+        // If user doesn't exist yet, create them via Supabase Admin and sync to DB
         if (!userToAdd) {
-            return res.status(404).json({ error: 'User not found' })
+            const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+                email,
+                password: password ?? undefined,
+                email_confirm: true,
+            })
+
+            if (authError || !authData.user) {
+                return res.status(400).json({ error: authError?.message || 'Failed to create user account' })
+            }
+
+            const [created] = await db.insert(users).values({
+                id: authData.user.id,
+                email,
+                firstName: null,
+                lastName: null,
+            }).returning()
+
+            userToAdd = created
         }
 
         const existingMembership = await db.query.organizationUsers.findFirst({

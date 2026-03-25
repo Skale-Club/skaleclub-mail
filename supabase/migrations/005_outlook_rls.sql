@@ -13,17 +13,17 @@ DROP POLICY IF EXISTS outlook_mailboxes_delete ON public.outlook_mailboxes;
 
 CREATE POLICY outlook_mailboxes_select ON public.outlook_mailboxes FOR SELECT
     TO authenticated
-    USING (public.is_server_member(server_id) OR public.is_platform_admin());
+    USING (public.is_org_member(organization_id) OR public.is_platform_admin());
 
 CREATE POLICY outlook_mailboxes_insert ON public.outlook_mailboxes FOR INSERT
     TO authenticated
-    WITH CHECK (public.is_server_admin(server_id) OR public.is_platform_admin());
+    WITH CHECK (public.is_org_admin(organization_id) OR public.is_platform_admin());
 
 CREATE POLICY outlook_mailboxes_update ON public.outlook_mailboxes FOR UPDATE
     TO authenticated
-    USING (public.is_server_admin(server_id) OR public.is_platform_admin())
-    WITH CHECK (public.is_server_admin(server_id) OR public.is_platform_admin());
+    USING (public.is_org_admin(organization_id) OR public.is_platform_admin())
+    WITH CHECK (public.is_org_admin(organization_id) OR public.is_platform_admin());
 
 CREATE POLICY outlook_mailboxes_delete ON public.outlook_mailboxes FOR DELETE
     TO authenticated
-    USING (public.is_server_admin(server_id) OR public.is_platform_admin());
+    USING (public.is_org_admin(organization_id) OR public.is_platform_admin());

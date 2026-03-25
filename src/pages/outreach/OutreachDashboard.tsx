@@ -37,13 +37,13 @@ interface RecentCampaign {
 }
 
 async function fetchDashboardStats(): Promise<DashboardStats> {
-    const response = await fetch('/api/outreach/campaigns/stats')
+    const response = await fetch('/api/outreach/campaigns/stats', { cache: 'no-store' })
     if (!response.ok) throw new Error('Failed to fetch stats')
     return response.json()
 }
 
 async function fetchRecentCampaigns(): Promise<RecentCampaign[]> {
-    const response = await fetch('/api/outreach/campaigns?limit=5')
+    const response = await fetch('/api/outreach/campaigns?limit=5', { cache: 'no-store' })
     if (!response.ok) throw new Error('Failed to fetch campaigns')
     const data = await response.json()
     return data.campaigns || []

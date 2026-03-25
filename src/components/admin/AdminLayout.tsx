@@ -1,18 +1,19 @@
 import { ReactNode, useState } from 'react'
 import { useLocation } from 'wouter'
 import { useAuth } from '../../hooks/useAuth'
+import { useBranding } from '../../lib/branding'
 import { supabase } from '../../lib/supabase'
+import { AppLogo } from '../AppLogo'
 import { Button } from '../ui/button'
 import { ModeToggle } from '../mode-toggle'
 import {
     Building2,
-    Users,
-    Mail,
+    Shield,
     LogOut,
     Menu,
     X,
     Home,
-    Globe,
+    Palette,
 } from 'lucide-react'
 
 interface NavItem {
@@ -24,8 +25,8 @@ interface NavItem {
 const navItems: NavItem[] = [
     { label: 'Dashboard', href: '/admin', icon: <Home className="w-5 h-5" /> },
     { label: 'Organizations', href: '/admin/organizations', icon: <Building2 className="w-5 h-5" /> },
-    { label: 'Domains', href: '/admin/domains', icon: <Globe className="w-5 h-5" /> },
-    { label: 'Users', href: '/admin/users', icon: <Users className="w-5 h-5" /> },
+    { label: 'Admins', href: '/admin/admins', icon: <Shield className="w-5 h-5" /> },
+    { label: 'Branding', href: '/admin/branding', icon: <Palette className="w-5 h-5" /> },
 ]
 
 interface AdminLayoutProps {
@@ -35,6 +36,7 @@ interface AdminLayoutProps {
 export default function AdminLayout({ children }: AdminLayoutProps) {
     const [location, navigate] = useLocation()
     const { user } = useAuth()
+    const { branding } = useBranding()
     const [sidebarOpen, setSidebarOpen] = useState(false)
 
     const isActive = (href: string) => {
@@ -67,9 +69,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 <div className="flex h-full flex-col">
                     {/* Logo */}
                     <div className="flex h-16 items-center justify-between px-4 border-b">
-                        <div className="flex items-center gap-2">
-                            <Mail className="w-8 h-8 text-primary" />
-                            <span className="text-xl font-bold">SkaleClub</span>
+                        <div className="flex items-center gap-3">
+                            <AppLogo className="h-9 w-9 shrink-0" />
+                            <div className="min-w-0">
+                                <span className="block text-base font-bold leading-tight text-foreground">{branding.applicationName}</span>
+                                <span className="block text-xs text-muted-foreground">Admin Panel</span>
+                            </div>
                         </div>
                         <Button
                             variant="ghost"
@@ -117,7 +122,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                         </div>
                         <Button
                             variant="ghost"
-                            className="w-full justify-start text-muted-foreground"
+                            className="w-full justify-start text-muted-foreground border border-border/50"
                             onClick={handleLogout}
                         >
                             <LogOut className="w-4 h-4 mr-2" />

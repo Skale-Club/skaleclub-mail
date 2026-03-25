@@ -6,13 +6,11 @@ export interface OrganizationOption {
     slug: string
 }
 
-export interface ServerOption {
+export interface DomainOption {
     id: string
-    name: string
-    slug: string
     organizationId: string
-    organizationName: string
-    sendMode: string
+    name: string
+    verificationStatus: 'pending' | 'verified' | 'failed'
 }
 
 export async function getAccessToken() {
@@ -23,6 +21,7 @@ export async function getAccessToken() {
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
     const token = await getAccessToken()
     const response = await fetch(path, {
+        cache: 'no-store',
         ...init,
         headers: {
             Authorization: `Bearer ${token}`,
@@ -51,25 +50,10 @@ export async function loadOrganizations() {
     return data.organizations || []
 }
 
-export async function loadServersForOrganizations(orgs: OrganizationOption[]) {
-    const serverLists = await Promise.all(
-        orgs.map(async (org) => {
-            const data = await apiFetch<{ servers: Array<{
-                id: string
-                name: string
-                slug: string
-                organizationId: string
-                sendMode: string
-            }> }>(`/api/servers?organizationId=${org.id}`)
-
-            return (data.servers || []).map((server) => ({
-                ...server,
-                organizationName: org.name,
-            }))
-        })
-    )
-
-    return serverLists.flat() satisfies ServerOption[]
+export async function loadDomains(organizationId?: string) {
+    const params = organizationId ? `?organizationId=${organizationId}` : ''
+    const data = await apiFetch<{ domains: DomainOption[] }>(`/api/domains${params}`)
+    return data.domains || []
 }
 
 export function matchesSearch(value: string, query: string) {

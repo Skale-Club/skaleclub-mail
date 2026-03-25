@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CheckCircle, Copy, Globe, Plus, Search, Trash2 } from 'lucide-react'
+import { CheckCircle, XCircle, Copy, Globe, Plus, Search, Trash2, X, RefreshCw, Loader2, Building2 } from 'lucide-react'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
 import { Input } from '../../components/ui/input'
@@ -7,101 +7,370 @@ import { Label } from '../../components/ui/label'
 import {
     apiFetch,
     loadOrganizations,
-    loadServersForOrganizations,
     matchesSearch,
-    type ServerOption,
+    type OrganizationOption,
 } from './helpers'
 
 type DomainRecord = {
     id: string
-    serverId: string
+    organizationId: string
     name: string
     verificationToken: string | null
     verificationStatus: 'pending' | 'verified' | 'failed'
     dkimSelector?: string | null
     dkimPublicKey?: string | null
     spfStatus?: string | null
+    dkimStatus?: string | null
+    dmarcStatus?: string | null
     mxStatus?: string | null
+    returnPathStatus?: string | null
     createdAt: string
 }
 
+interface DnsResults {
+    verification: { found: boolean }
+    spf: { found: boolean; error: string | null }
+    dkim: { found: boolean; error: string | null }
+    dmarc: { found: boolean; error: string | null }
+    mx: { found: boolean; error: string | null }
+    returnPath: { found: boolean; error: string | null }
+}
+
+function copyToClipboard(text: string) {
+    navigator.clipboard.writeText(text)
+}
+
+function StatusBadge({ status }: { status: 'success' | 'error' | 'pending' }) {
+    if (status === 'success') {
+        return (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
+                <CheckCircle className="h-3.5 w-3.5" />
+                Verified
+            </span>
+        )
+    }
+    if (status === 'error') {
+        return (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-800 dark:bg-red-900/30 dark:text-red-400">
+                <XCircle className="h-3.5 w-3.5" />
+                Error
+            </span>
+        )
+    }
+    return (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+            Pending
+        </span>
+    )
+}
+
+function DnsRecordCard({ label, type, name, value, priority, status, onCheck, isChecking, disabled }: { label: string; type: string; name: string; value: string; priority?: string; status: 'success' | 'error' | 'pending'; onCheck: () => void; isChecking: boolean; disabled?: boolean }) {
+    return (
+        <div className="rounded-lg border bg-card p-5 space-y-4">
+            <div className="flex items-center justify-between">
+                <h4 className="text-sm font-semibold">{label}</h4>
+                <div className="flex items-center gap-2">
+                    <StatusBadge status={status} />
+                    <Button variant="ghost" size="icon" className="h-7 w-7 focus-visible:ring-0 focus-visible:ring-offset-0" onClick={onCheck} disabled={disabled || isChecking} title="Check this record">
+                        <RefreshCw className={`h-3.5 w-3.5 ${isChecking ? 'animate-spin' : ''}`} />
+                    </Button>
+                </div>
+            </div>
+
+            <div className={`grid gap-4 ${priority ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
+                <div className="space-y-1">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Type</span>
+                    <div>
+                        <code className="rounded bg-muted px-2.5 py-1.5 text-xs font-mono">{type}</code>
+                    </div>
+                </div>
+                <div className="space-y-1">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Name</span>
+                    <div className="flex items-center gap-1.5">
+                        <code className="flex-1 truncate rounded bg-muted px-2.5 py-1.5 text-xs font-mono">{name}</code>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => copyToClipboard(name)} title="Copy name">
+                            <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                    </div>
+                </div>
+                {priority && (
+                    <div className="space-y-1">
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Priority</span>
+                        <div className="flex items-center gap-1.5">
+                            <code className="flex-1 truncate rounded bg-muted px-2.5 py-1.5 text-xs font-mono">{priority}</code>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => copyToClipboard(priority)} title="Copy priority">
+                                <Copy className="h-3.5 w-3.5" />
+                            </Button>
+                        </div>
+                    </div>
+                )}
+                <div className="space-y-1">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Value</span>
+                    <div className="flex items-center gap-1.5">
+                        <code className="flex-1 truncate rounded bg-muted px-2.5 py-1.5 text-xs font-mono">{value}</code>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => copyToClipboard(value)} title="Copy value">
+                            <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                    </div>
+                </div>
+            </div>
+
+            {status === 'error' && (
+                <div className="rounded-md bg-red-50 p-3 text-xs text-red-700 dark:bg-red-950/50 dark:text-red-300">
+                    The {label} values in your platform and in your domain provider account mismatch. Add this value to your domain provider account to authenticate this domain.
+                </div>
+            )}
+            {status === 'success' && (
+                <div className="rounded-md bg-emerald-50 p-3 text-xs text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+                    The {label} values in your platform and your domain provider account match.
+                </div>
+            )}
+        </div>
+    )
+}
+
+function DnsModal({ domain, onClose, onDomainUpdate }: { domain: DomainRecord; onClose: () => void; onDomainUpdate: (d: DomainRecord) => void }) {
+    const [dnsResults, setDnsResults] = useState<DnsResults | null>(null)
+    const [checkingRecord, setCheckingRecord] = useState<string | null>(null)
+    const [verifyingAll, setVerifyingAll] = useState(false)
+
+    function statusFor(
+        dbStatus: string | null | undefined,
+        resultsKey: keyof DnsResults,
+    ): 'success' | 'error' | 'pending' {
+        if (dnsResults) {
+            return dnsResults[resultsKey].found ? 'success' : 'error'
+        }
+        if (dbStatus === 'verified') return 'success'
+        if (dbStatus === 'failed') return 'error'
+        return 'pending'
+    }
+
+    async function handleVerify(recordKey: string) {
+        setCheckingRecord(recordKey)
+        try {
+            const data = await apiFetch<{ domain: DomainRecord; dnsResults: DnsResults }>(`/api/domains/${domain.id}/verify`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ record: recordKey }),
+            })
+            onDomainUpdate(data.domain)
+            setDnsResults(data.dnsResults || null)
+        } catch (error) {
+            window.alert(error instanceof Error ? error.message : 'Verification failed')
+        } finally {
+            setCheckingRecord(null)
+        }
+    }
+
+    async function handleVerifyAll() {
+        setVerifyingAll(true)
+        try {
+            const data = await apiFetch<{ domain: DomainRecord; dnsResults: DnsResults }>(`/api/domains/${domain.id}/verify`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+            })
+            onDomainUpdate(data.domain)
+            setDnsResults(data.dnsResults || null)
+        } catch (error) {
+            window.alert(error instanceof Error ? error.message : 'Verification failed')
+        } finally {
+            setVerifyingAll(false)
+        }
+    }
+
+    const isBusy = verifyingAll || checkingRecord !== null
+
+    return (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+            <Card className="w-full max-w-3xl max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+                <CardHeader>
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <CardTitle>DNS records for domain authentication</CardTitle>
+                            <CardDescription className="mt-1.5">
+                                Add these DNS records to your domain provider to authenticate <strong>{domain.name}</strong>
+                            </CardDescription>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleVerifyAll}
+                                disabled={isBusy}
+                                className="gap-2 focus-visible:ring-0 focus-visible:ring-offset-0"
+                            >
+                                {verifyingAll
+                                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Verifying…</>
+                                    : <><RefreshCw className="h-3.5 w-3.5" /> Verify all</>
+                                }
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={onClose} className="focus-visible:ring-0 focus-visible:ring-offset-0">
+                                <X className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <DnsRecordCard label="Skale Club Verification" type="TXT" name="@"
+                        value={`skaleclub-verification:${domain.verificationToken || 'Token unavailable'}`}
+                        status={statusFor(domain.verificationStatus, 'verification')}
+                        onCheck={() => handleVerify('verification')} isChecking={checkingRecord === 'verification'} disabled={isBusy} />
+                    <DnsRecordCard label="SPF Record" type="TXT" name="@"
+                        value="v=spf1 include:spf.skaleclub.com ~all"
+                        status={statusFor(domain.spfStatus, 'spf')}
+                        onCheck={() => handleVerify('spf')} isChecking={checkingRecord === 'spf'} disabled={isBusy} />
+                    <DnsRecordCard label="DKIM Record" type="TXT"
+                        name="skaleclub._domainkey"
+                        value={domain.dkimPublicKey || '(generated after domain verification)'}
+                        status={statusFor(domain.dkimStatus, 'dkim')}
+                        onCheck={() => handleVerify('dkim')} isChecking={checkingRecord === 'dkim'} disabled={isBusy} />
+                    <DnsRecordCard label="DMARC Record" type="TXT" name="_dmarc"
+                        value={`v=DMARC1; p=quarantine; rua=mailto:dmarc@${domain.name}`}
+                        status={statusFor(domain.dmarcStatus, 'dmarc')}
+                        onCheck={() => handleVerify('dmarc')} isChecking={checkingRecord === 'dmarc'} disabled={isBusy} />
+                    <DnsRecordCard label="MX Record" type="MX" name="@"
+                        value="mx.skaleclub.com"
+                        priority="10"
+                        status={statusFor(domain.mxStatus, 'mx')}
+                        onCheck={() => handleVerify('mx')} isChecking={checkingRecord === 'mx'} disabled={isBusy} />
+                    <DnsRecordCard label="Return-Path" type="CNAME" name="rp"
+                        value="rp.skaleclub.com"
+                        status={statusFor(domain.returnPathStatus, 'returnPath')}
+                        onCheck={() => handleVerify('returnPath')} isChecking={checkingRecord === 'returnPath'} disabled={isBusy} />
+
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/50">
+                        <p className="text-sm text-blue-800 dark:text-blue-200">
+                            Need help? After adding these DNS records at your domain provider, click the refresh icon on each record to verify. DNS changes can take up to 48 hours to propagate.
+                        </p>
+                    </div>
+
+                    <div className="flex justify-end">
+                        <Button variant="outline" onClick={onClose}>Close</Button>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+    )
+}
+
+function AddDomainModal({ organizations, onClose, onCreate }: { organizations: OrganizationOption[]; onClose: () => void; onCreate: (organizationId: string, name: string) => void }) {
+    const [selectedOrgId, setSelectedOrgId] = useState(organizations.length === 1 ? organizations[0].id : '')
+    const [domainName, setDomainName] = useState('')
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+            <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+                <CardHeader>
+                    <div className="flex items-start justify-between">
+                        <div>
+                            <CardTitle>Add Domain</CardTitle>
+                            <CardDescription>Add a new sending domain to an organization.</CardDescription>
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={onClose}>
+                            <X className="h-4 w-4" />
+                        </Button>
+                    </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                        <Label>Organization</Label>
+                        <select
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            value={selectedOrgId}
+                            onChange={(e) => setSelectedOrgId(e.target.value)}
+                        >
+                            <option value="">Select organization...</option>
+                            {organizations.map((org) => (
+                                <option key={org.id} value={org.id}>
+                                    {org.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Domain Name</Label>
+                        <Input
+                            placeholder="example.com"
+                            value={domainName}
+                            onChange={(e) => setDomainName(e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            Enter the domain you want to send emails from.
+                        </p>
+                    </div>
+                    <div className="flex justify-end gap-3">
+                        <Button variant="outline" onClick={onClose}>
+                            Cancel
+                        </Button>
+                        <Button onClick={() => onCreate(selectedOrgId, domainName.trim())} disabled={!selectedOrgId || !domainName.trim()}>
+                            Add Domain
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+    )
+}
+
 export default function DomainsPage() {
-    const [servers, setServers] = useState<ServerOption[]>([])
-    const [selectedServerId, setSelectedServerId] = useState('')
     const [domains, setDomains] = useState<DomainRecord[]>([])
+    const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
     const [searchQuery, setSearchQuery] = useState('')
-    const [newDomainName, setNewDomainName] = useState('')
     const [isLoading, setIsLoading] = useState(true)
     const [selectedDomain, setSelectedDomain] = useState<DomainRecord | null>(null)
+    const [showAddModal, setShowAddModal] = useState(false)
 
     useEffect(() => {
         void bootstrap()
     }, [])
 
-    useEffect(() => {
-        if (selectedServerId) {
-            void fetchDomains(selectedServerId)
-        }
-    }, [selectedServerId])
-
     async function bootstrap() {
-        try {
-            const organizations = await loadOrganizations()
-            const serverOptions = await loadServersForOrganizations(organizations)
-            setServers(serverOptions)
-            if (serverOptions.length > 0) {
-                setSelectedServerId(serverOptions[0].id)
-            } else {
-                setIsLoading(false)
-            }
-        } catch (error) {
-            console.error('Error loading servers:', error)
-            setIsLoading(false)
-        }
-    }
-
-    async function fetchDomains(serverId: string) {
         setIsLoading(true)
         try {
-            const data = await apiFetch<{ domains: DomainRecord[] }>(`/api/domains?serverId=${serverId}`)
-            setDomains(data.domains || [])
+            const [orgs, domainsData] = await Promise.all([
+                loadOrganizations(),
+                apiFetch<{ domains: DomainRecord[] }>('/api/domains'),
+            ])
+            setOrganizations(orgs)
+            setDomains(domainsData.domains || [])
         } catch (error) {
-            console.error('Error fetching domains:', error)
+            console.error('Error loading data:', error)
             setDomains([])
         } finally {
             setIsLoading(false)
         }
     }
 
-    async function handleCreateDomain() {
+    function getOrgName(orgId: string): string {
+        const org = organizations.find((o) => o.id === orgId)
+        return org?.name || 'Unknown'
+    }
+
+    function handleDomainUpdate(updated: DomainRecord) {
+        setDomains((current) => current.map((d) => d.id === updated.id ? updated : d))
+        if (selectedDomain?.id === updated.id) {
+            setSelectedDomain(updated)
+        }
+    }
+
+    async function handleCreateDomain(organizationId: string, name: string) {
         try {
             const data = await apiFetch<{ domain: DomainRecord }>('/api/domains', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    serverId: selectedServerId,
-                    name: newDomainName,
+                    organizationId,
+                    name,
                     verificationMethod: 'dns',
                 }),
             })
             setDomains((current) => [data.domain, ...current])
-            setNewDomainName('')
+            setShowAddModal(false)
+            setSelectedDomain(data.domain)
         } catch (error) {
             window.alert(error instanceof Error ? error.message : 'Failed to create domain')
-        }
-    }
-
-    async function handleVerifyDomain(domainId: string) {
-        try {
-            const data = await apiFetch<{ domain: DomainRecord }>(`/api/domains/${domainId}/verify`, {
-                method: 'POST',
-            })
-            setDomains((current) => current.map((item) => item.id === domainId ? data.domain : item))
-            if (selectedDomain?.id === domainId) {
-                setSelectedDomain(data.domain)
-            }
-        } catch (error) {
-            window.alert(error instanceof Error ? error.message : 'Failed to verify domain')
         }
     }
 
@@ -126,27 +395,12 @@ export default function DomainsPage() {
         [domains, searchQuery]
     )
 
-    const activeServer = servers.find((server) => server.id === selectedServerId) || null
-
     return (
         <div className="space-y-6">
             <Card className="shadow-sm-soft">
-                <CardContent className="grid gap-4 pt-6 lg:grid-cols-[260px_minmax(0,1fr)_360px]">
-                    <Field label="Server">
-                        <select
-                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                            value={selectedServerId}
-                            onChange={(event) => setSelectedServerId(event.target.value)}
-                        >
-                            {servers.length === 0 && <option value="">No servers</option>}
-                            {servers.map((server) => (
-                                <option key={server.id} value={server.id}>
-                                    {server.organizationName} / {server.name}
-                                </option>
-                            ))}
-                        </select>
-                    </Field>
-                    <Field label="Search">
+                <CardContent className="grid gap-4 pt-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+                    <div className="space-y-2">
+                        <Label>Search</Label>
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
@@ -156,137 +410,107 @@ export default function DomainsPage() {
                                 onChange={(event) => setSearchQuery(event.target.value)}
                             />
                         </div>
-                    </Field>
-                    <Field label="Add domain">
-                        <div className="flex gap-2">
-                            <Input
-                                placeholder="example.com"
-                                value={newDomainName}
-                                onChange={(event) => setNewDomainName(event.target.value)}
-                            />
-                            <Button onClick={handleCreateDomain} disabled={!selectedServerId || !newDomainName}>
-                                <Plus className="mr-2 h-4 w-4" />
-                                Add
-                            </Button>
-                        </div>
-                    </Field>
+                    </div>
+                    <div className="space-y-2">
+                        <Label>&nbsp;</Label>
+                        <Button className="w-full" onClick={() => setShowAddModal(true)}>
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add Domain
+                        </Button>
+                    </div>
                 </CardContent>
             </Card>
 
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Configured domains</CardTitle>
-                        <CardDescription>
-                            {activeServer ? `Server ${activeServer.name}` : 'Select a server to continue'}
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                        {isLoading ? (
-                            <p className="py-8 text-center text-muted-foreground">Loading domains...</p>
-                        ) : filteredDomains.length === 0 ? (
-                            <p className="py-8 text-center text-muted-foreground">No domains configured yet.</p>
-                        ) : (
-                            filteredDomains.map((domain) => (
-                                <div
-                                    key={domain.id}
-                                    className="flex flex-col gap-3 rounded-lg border p-4 md:flex-row md:items-center md:justify-between"
-                                >
-                                    <div className="space-y-1">
-                                        <div className="flex items-center gap-2">
-                                            <Globe className="h-4 w-4 text-primary" />
-                                            <span className="font-medium">{domain.name}</span>
-                                            <StatusPill status={domain.verificationStatus} />
-                                        </div>
-                                        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                                            <span>SPF: {domain.spfStatus || 'pending'}</span>
-                                            <span>MX: {domain.mxStatus || 'pending'}</span>
-                                            <span>Created: {new Date(domain.createdAt).toLocaleDateString()}</span>
-                                        </div>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Configured domains</CardTitle>
+                    <CardDescription>
+                        {domains.length} domain{domains.length !== 1 ? 's' : ''} configured
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    {isLoading ? (
+                        <p className="py-8 text-center text-muted-foreground">Loading domains...</p>
+                    ) : filteredDomains.length === 0 ? (
+                        <p className="py-8 text-center text-muted-foreground">No domains configured yet.</p>
+                    ) : (
+                        filteredDomains.map((domain) => (
+                            <div
+                                key={domain.id}
+                                className="flex flex-col gap-3 rounded-lg border p-4 md:flex-row md:items-center md:justify-between cursor-pointer hover:bg-muted/50 transition-colors"
+                                onClick={() => setSelectedDomain(domain)}
+                            >
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                        <Globe className="h-4 w-4 text-primary" />
+                                        <span className="font-medium">{domain.name}</span>
+                                        <StatusPill domain={domain} />
                                     </div>
-                                    <div className="flex gap-2">
-                                        <Button variant="outline" size="sm" onClick={() => setSelectedDomain(domain)}>
-                                            <Copy className="mr-2 h-4 w-4" />
-                                            DNS
-                                        </Button>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => handleVerifyDomain(domain.id)}
-                                            disabled={domain.verificationStatus === 'verified'}
-                                        >
-                                            <CheckCircle className="mr-2 h-4 w-4" />
-                                            Verify
-                                        </Button>
-                                        <Button variant="outline" size="sm" onClick={() => handleDeleteDomain(domain.id)}>
-                                            <Trash2 className="h-4 w-4 text-destructive" />
-                                        </Button>
+                                    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                                        <span className="inline-flex items-center gap-1">
+                                            <Building2 className="h-3 w-3" />
+                                            {getOrgName(domain.organizationId)}
+                                        </span>
+                                        <span>SPF: {domain.spfStatus || 'pending'}</span>
+                                        <span>MX: {domain.mxStatus || 'pending'}</span>
+                                        <span>Created: {new Date(domain.createdAt).toLocaleDateString()}</span>
                                     </div>
                                 </div>
-                            ))
-                        )}
-                    </CardContent>
-                </Card>
+                                <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                                    <Button variant="outline" size="sm" onClick={() => handleDeleteDomain(domain.id)}>
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </CardContent>
+            </Card>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>DNS instructions</CardTitle>
-                        <CardDescription>
-                            {selectedDomain ? `Records for ${selectedDomain.name}` : 'Select a domain to inspect its records'}
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        {!selectedDomain ? (
-                            <p className="text-sm text-muted-foreground">No domain selected.</p>
-                        ) : (
-                            <>
-                                <DnsRecord
-                                    label="Verification TXT (@ record)"
-                                    value={`skaleclub-verification:${selectedDomain.verificationToken || 'Token unavailable'}`}
-                                />
-                                <DnsRecord
-                                    label="SPF TXT (@ record)"
-                                    value="v=spf1 include:spf.skaleclub.com ~all"
-                                />
-                                <DnsRecord
-                                    label="DKIM TXT record name"
-                                    value={`${selectedDomain.dkimSelector || 'skaleclub'}._domainkey.${selectedDomain.name}`}
-                                />
-                                <DnsRecord
-                                    label="DKIM TXT record value"
-                                    value={selectedDomain.dkimPublicKey || '(generated after domain verification)'}
-                                />
-                                <DnsRecord
-                                    label="DMARC TXT (_dmarc record)"
-                                    value={`v=DMARC1; p=quarantine; rua=mailto:dmarc@${selectedDomain.name}`}
-                                />
-                                <DnsRecord
-                                    label="MX Record (@ record)"
-                                    value="10 mx.skaleclub.com"
-                                />
-                                <DnsRecord
-                                    label="Return-Path CNAME (rp record)"
-                                    value="rp.skaleclub.com"
-                                />
-                            </>
-                        )}
-                    </CardContent>
-                </Card>
-            </div>
+            {showAddModal && (
+                <AddDomainModal
+                    organizations={organizations}
+                    onClose={() => setShowAddModal(false)}
+                    onCreate={handleCreateDomain}
+                />
+            )}
+
+            {selectedDomain && (
+                <DnsModal
+                    domain={selectedDomain}
+                    onClose={() => setSelectedDomain(null)}
+                    onDomainUpdate={handleDomainUpdate}
+                />
+            )}
         </div>
     )
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-    return (
-        <div className="space-y-2">
-            <Label>{label}</Label>
-            {children}
-        </div>
-    )
+function getOverallStatus(domain: DomainRecord): 'verified' | 'failed' | 'pending' {
+    const allVerified =
+        domain.verificationStatus === 'verified' &&
+        domain.spfStatus === 'verified' &&
+        domain.dkimStatus === 'verified' &&
+        domain.dmarcStatus === 'verified' &&
+        domain.mxStatus === 'verified' &&
+        domain.returnPathStatus === 'verified'
+    if (allVerified) return 'verified'
+
+    const anyFailed =
+        domain.verificationStatus === 'failed' ||
+        domain.spfStatus === 'failed' ||
+        domain.dkimStatus === 'failed' ||
+        domain.dmarcStatus === 'failed' ||
+        domain.mxStatus === 'failed' ||
+        domain.returnPathStatus === 'failed'
+    if (anyFailed) return 'failed'
+
+    return 'pending'
 }
 
-function StatusPill({ status }: { status: DomainRecord['verificationStatus'] }) {
+function StatusPill({ domain }: { domain: DomainRecord }) {
+    const status = getOverallStatus(domain)
+    const label = status === 'verified' ? 'Authenticated' : status === 'failed' ? 'Failed' : 'Pending'
     const className =
         status === 'verified'
             ? 'bg-primary/10 text-primary'
@@ -294,14 +518,5 @@ function StatusPill({ status }: { status: DomainRecord['verificationStatus'] }) 
             ? 'bg-destructive/10 text-destructive'
             : 'bg-secondary text-secondary-foreground'
 
-    return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${className}`}>{status}</span>
-}
-
-function DnsRecord({ label, value }: { label: string; value: string }) {
-    return (
-        <div className="rounded-lg border bg-muted/40 p-3">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
-            <code className="mt-2 block break-all rounded bg-background p-2 text-xs">{value}</code>
-        </div>
-    )
+    return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${className}`}>{label}</span>
 }

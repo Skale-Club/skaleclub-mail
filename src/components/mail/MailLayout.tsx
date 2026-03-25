@@ -1,6 +1,8 @@
 import React from 'react'
 import { Link, useLocation } from 'wouter'
 import { useAuth } from '../../hooks/useAuth'
+import { useBranding } from '../../lib/branding'
+import { AppLogo } from '../AppLogo'
 import { ModeToggle } from '../mode-toggle'
 import { supabase } from '../../lib/supabase'
 import {
@@ -13,7 +15,6 @@ import {
     LogOut,
     Menu,
     X,
-    Mail,
     Search,
     Plus,
     ChevronDown,
@@ -44,6 +45,7 @@ const folders: FolderItem[] = [
 
 export function MailLayout({ children }: MailLayoutProps) {
     const { user } = useAuth()
+    const { branding } = useBranding()
     const [location] = useLocation()
     const [sidebarOpen, setSidebarOpen] = React.useState(false)
     const [userMenuOpen, setUserMenuOpen] = React.useState(false)
@@ -83,11 +85,9 @@ export function MailLayout({ children }: MailLayoutProps) {
                 `}>
                     <div className="flex items-center justify-between h-16 px-5 border-b border-border">
                         <Link href="/mail/inbox" className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-sm">
-                                <Mail className="w-6 h-6 text-primary-foreground" />
-                            </div>
+                            <AppLogo className="h-10 w-10 shrink-0" />
                             <div>
-                                <span className="text-xl font-bold tracking-tight text-foreground">SkaleMail</span>
+                                <span className="text-xl font-bold tracking-tight text-foreground">{branding.applicationName}</span>
                             </div>
                         </Link>
                         <button

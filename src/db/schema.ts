@@ -15,8 +15,6 @@ import { createInsertSchema, createSelectSchema } from 'drizzle-zod'
 
 // Enums
 export const userRoleEnum = pgEnum('user_role', ['admin', 'member', 'viewer'])
-export const serverModeEnum = pgEnum('server_mode', ['live', 'development'])
-export const serverSendModeEnum = pgEnum('server_send_mode', ['smtp', 'api', 'outlook'])
 export const domainVerificationEnum = pgEnum('domain_verification', ['pending', 'verified', 'failed'])
 export const messageStatusEnum = pgEnum('message_status', ['pending', 'queued', 'sent', 'delivered', 'bounced', 'held', 'failed'])
 export const credentialTypeEnum = pgEnum('credential_type', ['smtp', 'api'])
@@ -51,6 +49,17 @@ export const users = pgTable('users', {
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
+export const systemBranding = pgTable('system_branding', {
+    id: text('id').primaryKey().default('default'),
+    companyName: text('company_name').default('').notNull(),
+    applicationName: text('application_name').default('Mail Platform').notNull(),
+    logoStorage: text('logo_storage'),
+    faviconStorage: text('favicon_storage'),
+    mailHost: text('mail_host'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
 // Organizations table
 export const organizations = pgTable('organizations', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -73,43 +82,10 @@ export const organizationUsers = pgTable('organization_users', {
     orgUserUnique: uniqueIndex('org_user_unique').on(table.organizationId, table.userId),
 }))
 
-// Servers table
-export const servers = pgTable('servers', {
-    id: uuid('id').primaryKey().defaultRandom(),
-    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
-    name: text('name').notNull(),
-    slug: text('slug').notNull(),
-    mode: serverModeEnum('mode').default('live').notNull(),
-    sendMode: serverSendModeEnum('send_mode').default('smtp').notNull(),
-    description: text('description'),
-    defaultFromAddress: text('default_from_address'),
-    defaultFromName: text('default_from_name'),
-    ipPoolId: uuid('ip_pool_id'),
-    // Limits
-    sendLimit: integer('send_limit'),
-    sendLimitPeriod: text('send_limit_period').default('day'),
-    outboundSpamThreshold: integer('outbound_spam_threshold').default(5),
-    // Settings
-    trackOpens: boolean('track_opens').default(true).notNull(),
-    trackClicks: boolean('track_clicks').default(true).notNull(),
-    logSmtpData: boolean('log_smtp_data').default(false).notNull(),
-    privacyMode: boolean('privacy_mode').default(false).notNull(),
-    // Message retention
-    retentionDays: integer('retention_days').default(30),
-    retentionDaysHeld: integer('retention_days_held').default(14),
-    // Status
-    suspended: boolean('suspended').default(false).notNull(),
-    suspendedReason: text('suspended_reason'),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
-}, (table) => ({
-    orgSlugUnique: uniqueIndex('server_org_slug_unique').on(table.organizationId, table.slug),
-}))
-
-// Native Mailboxes (for built-in SMTP/IMAP servers)
+// Native Mailboxes (for built-in SMTP/IMAP)
 export const nativeMailboxes = pgTable('native_mailboxes', {
     id: uuid('id').primaryKey().defaultRandom(),
-    serverId: uuid('server_id').references(() => servers.id).notNull(),
+    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
     email: text('email').notNull(),
     username: text('username').notNull(),
     passwordHash: text('password_hash').notNull(),
@@ -120,13 +96,13 @@ export const nativeMailboxes = pgTable('native_mailboxes', {
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
-    serverEmailUnique: uniqueIndex('native_mailbox_server_email_unique').on(table.serverId, table.email),
+    serverEmailUnique: uniqueIndex('native_mailbox_server_email_unique').on(table.organizationId, table.email),
 }))
 
 // Domains table
 export const domains = pgTable('domains', {
     id: uuid('id').primaryKey().defaultRandom(),
-    serverId: uuid('server_id').references(() => servers.id).notNull(),
+    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
     name: text('name').notNull(),
     verificationToken: text('verification_token'),
     verificationMethod: text('verification_method').default('dns'),
@@ -157,7 +133,7 @@ export const domains = pgTable('domains', {
 // Credentials table
 export const credentials = pgTable('credentials', {
     id: uuid('id').primaryKey().defaultRandom(),
-    serverId: uuid('server_id').references(() => servers.id).notNull(),
+    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
     name: text('name').notNull(),
     type: credentialTypeEnum('type').default('smtp').notNull(),
     key: text('key').notNull(),
@@ -171,7 +147,7 @@ export const credentials = pgTable('credentials', {
 // Outlook mailboxes
 export const outlookMailboxes = pgTable('outlook_mailboxes', {
     id: uuid('id').primaryKey().defaultRandom(),
-    serverId: uuid('server_id').references(() => servers.id).notNull(),
+    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
     email: text('email').notNull(),
     displayName: text('display_name'),
     microsoftUserId: text('microsoft_user_id').notNull(),
@@ -186,14 +162,14 @@ export const outlookMailboxes = pgTable('outlook_mailboxes', {
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
-    serverEmailUnique: uniqueIndex('outlook_mailboxes_server_email_unique').on(table.serverId, table.email),
+    serverEmailUnique: uniqueIndex('outlook_mailboxes_server_email_unique').on(table.organizationId, table.email),
     microsoftUserUnique: uniqueIndex('outlook_mailboxes_microsoft_user_unique').on(table.microsoftUserId),
 }))
 
 // Routes table
 export const routes = pgTable('routes', {
     id: uuid('id').primaryKey().defaultRandom(),
-    serverId: uuid('server_id').references(() => servers.id).notNull(),
+    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
     name: text('name').notNull(),
     address: text('address').notNull(),
     mode: routeModeEnum('mode').default('endpoint').notNull(),
@@ -211,7 +187,7 @@ export const routes = pgTable('routes', {
 // SMTP Endpoints
 export const smtpEndpoints = pgTable('smtp_endpoints', {
     id: uuid('id').primaryKey().defaultRandom(),
-    serverId: uuid('server_id').references(() => servers.id).notNull(),
+    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
     name: text('name').notNull(),
     hostname: text('hostname').notNull(),
     port: integer('port').default(25).notNull(),
@@ -225,7 +201,7 @@ export const smtpEndpoints = pgTable('smtp_endpoints', {
 // HTTP Endpoints
 export const httpEndpoints = pgTable('http_endpoints', {
     id: uuid('id').primaryKey().defaultRandom(),
-    serverId: uuid('server_id').references(() => servers.id).notNull(),
+    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
     name: text('name').notNull(),
     url: text('url').notNull(),
     method: text('method').default('POST').notNull(),
@@ -238,7 +214,7 @@ export const httpEndpoints = pgTable('http_endpoints', {
 // Address Endpoints
 export const addressEndpoints = pgTable('address_endpoints', {
     id: uuid('id').primaryKey().defaultRandom(),
-    serverId: uuid('server_id').references(() => servers.id).notNull(),
+    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
     name: text('name').notNull(),
     emailAddress: text('email_address').notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -248,7 +224,7 @@ export const addressEndpoints = pgTable('address_endpoints', {
 // Messages table
 export const messages = pgTable('messages', {
     id: uuid('id').primaryKey().defaultRandom(),
-    serverId: uuid('server_id').references(() => servers.id).notNull(),
+    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
     // Message identification
     messageId: text('message_id'),
     token: text('token').notNull(),
@@ -287,7 +263,7 @@ export const messages = pgTable('messages', {
 export const deliveries = pgTable('deliveries', {
     id: uuid('id').primaryKey().defaultRandom(),
     messageId: uuid('message_id').references(() => messages.id).notNull(),
-    serverId: uuid('server_id').references(() => servers.id).notNull(),
+    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
     // Recipient
     rcptTo: text('rcpt_to').notNull(),
     // Status
@@ -306,7 +282,7 @@ export const deliveries = pgTable('deliveries', {
 // Webhooks table
 export const webhooks = pgTable('webhooks', {
     id: uuid('id').primaryKey().defaultRandom(),
-    serverId: uuid('server_id').references(() => servers.id).notNull(),
+    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
     name: text('name').notNull(),
     url: text('url').notNull(),
     secret: text('secret'),
@@ -333,7 +309,7 @@ export const webhookRequests = pgTable('webhook_requests', {
 // Email templates
 export const templates = pgTable('templates', {
     id: uuid('id').primaryKey().defaultRandom(),
-    serverId: uuid('server_id').references(() => servers.id).notNull(),
+    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
     name: text('name').notNull(),
     slug: text('slug').notNull(),
     subject: text('subject').notNull(),
@@ -343,13 +319,13 @@ export const templates = pgTable('templates', {
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
-    serverSlugUnique: uniqueIndex('template_server_slug_unique').on(table.serverId, table.slug),
+    serverSlugUnique: uniqueIndex('template_server_slug_unique').on(table.organizationId, table.slug),
 }))
 
 // Track domains (for open/click tracking)
 export const trackDomains = pgTable('track_domains', {
     id: uuid('id').primaryKey().defaultRandom(),
-    serverId: uuid('server_id').references(() => servers.id).notNull(),
+    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
     domain: text('domain').notNull(),
     verificationToken: text('verification_token'),
     verificationStatus: domainVerificationEnum('verification_status').default('pending').notNull(),
@@ -361,18 +337,18 @@ export const trackDomains = pgTable('track_domains', {
 // Suppression list
 export const suppressions = pgTable('suppressions', {
     id: uuid('id').primaryKey().defaultRandom(),
-    serverId: uuid('server_id').references(() => servers.id).notNull(),
+    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
     emailAddress: text('email_address').notNull(),
     reason: text('reason').notNull(), // 'bounce', 'complaint', 'manual'
     createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
-    serverEmailUnique: uniqueIndex('suppression_server_email_unique').on(table.serverId, table.emailAddress),
+    serverEmailUnique: uniqueIndex('suppression_server_email_unique').on(table.organizationId, table.emailAddress),
 }))
 
 // Statistics (aggregated)
 export const statistics = pgTable('statistics', {
     id: uuid('id').primaryKey().defaultRandom(),
-    serverId: uuid('server_id').references(() => servers.id).notNull(),
+    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
     date: timestamp('date').notNull(),
     // Counts
     messagesSent: integer('messages_sent').default(0).notNull(),
@@ -385,7 +361,7 @@ export const statistics = pgTable('statistics', {
     messagesIncoming: integer('messages_incoming').default(0).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
-    serverDateUnique: uniqueIndex('stats_server_date_unique').on(table.serverId, table.date),
+    serverDateUnique: uniqueIndex('stats_server_date_unique').on(table.organizationId, table.date),
 }))
 
 // Relations
@@ -399,7 +375,6 @@ export const organizationsRelations = relations(organizations, ({ one, many }) =
         references: [users.id],
     }),
     members: many(organizationUsers),
-    servers: many(servers),
 }))
 
 export const organizationUsersRelations = relations(organizationUsers, ({ one }) => ({
@@ -413,59 +388,40 @@ export const organizationUsersRelations = relations(organizationUsers, ({ one })
     }),
 }))
 
-export const serversRelations = relations(servers, ({ one, many }) => ({
-    organization: one(organizations, {
-        fields: [servers.organizationId],
-        references: [organizations.id],
-    }),
-    domains: many(domains),
-    credentials: many(credentials),
-    routes: many(routes),
-    messages: many(messages),
-    webhooks: many(webhooks),
-    smtpEndpoints: many(smtpEndpoints),
-    httpEndpoints: many(httpEndpoints),
-    addressEndpoints: many(addressEndpoints),
-    outlookMailboxes: many(outlookMailboxes),
-    trackDomains: many(trackDomains),
-    suppressions: many(suppressions),
-    statistics: many(statistics),
-    templates: many(templates),
-    nativeMailboxes: many(nativeMailboxes),
-}))
+
 
 export const nativeMailboxesRelations = relations(nativeMailboxes, ({ one }) => ({
-    server: one(servers, {
-        fields: [nativeMailboxes.serverId],
-        references: [servers.id],
+    organization: one(organizations, {
+        fields: [nativeMailboxes.organizationId],
+        references: [organizations.id],
     }),
 }))
 
 export const domainsRelations = relations(domains, ({ one }) => ({
-    server: one(servers, {
-        fields: [domains.serverId],
-        references: [servers.id],
+    organization: one(organizations, {
+        fields: [domains.organizationId],
+        references: [organizations.id],
     }),
 }))
 
 export const credentialsRelations = relations(credentials, ({ one }) => ({
-    server: one(servers, {
-        fields: [credentials.serverId],
-        references: [servers.id],
+    organization: one(organizations, {
+        fields: [credentials.organizationId],
+        references: [organizations.id],
     }),
 }))
 
 export const outlookMailboxesRelations = relations(outlookMailboxes, ({ one }) => ({
-    server: one(servers, {
-        fields: [outlookMailboxes.serverId],
-        references: [servers.id],
+    organization: one(organizations, {
+        fields: [outlookMailboxes.organizationId],
+        references: [organizations.id],
     }),
 }))
 
 export const routesRelations = relations(routes, ({ one }) => ({
-    server: one(servers, {
-        fields: [routes.serverId],
-        references: [servers.id],
+    organization: one(organizations, {
+        fields: [routes.organizationId],
+        references: [organizations.id],
     }),
     smtpEndpoint: one(smtpEndpoints, {
         fields: [routes.smtpEndpointId],
@@ -482,9 +438,9 @@ export const routesRelations = relations(routes, ({ one }) => ({
 }))
 
 export const messagesRelations = relations(messages, ({ one, many }) => ({
-    server: one(servers, {
-        fields: [messages.serverId],
-        references: [servers.id],
+    organization: one(organizations, {
+        fields: [messages.organizationId],
+        references: [organizations.id],
     }),
     deliveries: many(deliveries),
 }))
@@ -494,16 +450,16 @@ export const deliveriesRelations = relations(deliveries, ({ one }) => ({
         fields: [deliveries.messageId],
         references: [messages.id],
     }),
-    server: one(servers, {
-        fields: [deliveries.serverId],
-        references: [servers.id],
+    organization: one(organizations, {
+        fields: [deliveries.organizationId],
+        references: [organizations.id],
     }),
 }))
 
 export const webhooksRelations = relations(webhooks, ({ one, many }) => ({
-    server: one(servers, {
-        fields: [webhooks.serverId],
-        references: [servers.id],
+    organization: one(organizations, {
+        fields: [webhooks.organizationId],
+        references: [organizations.id],
     }),
     requests: many(webhookRequests),
 }))
@@ -516,9 +472,9 @@ export const webhookRequestsRelations = relations(webhookRequests, ({ one }) => 
 }))
 
 export const templatesRelations = relations(templates, ({ one }) => ({
-    server: one(servers, {
-        fields: [templates.serverId],
-        references: [servers.id],
+    organization: one(organizations, {
+        fields: [templates.organizationId],
+        references: [organizations.id],
     }),
 }))
 
@@ -526,11 +482,11 @@ export const templatesRelations = relations(templates, ({ one }) => ({
 export const insertUserSchema = createInsertSchema(users)
 export const selectUserSchema = createSelectSchema(users)
 
+export const insertSystemBrandingSchema = createInsertSchema(systemBranding)
+export const selectSystemBrandingSchema = createSelectSchema(systemBranding)
+
 export const insertOrganizationSchema = createInsertSchema(organizations)
 export const selectOrganizationSchema = createSelectSchema(organizations)
-
-export const insertServerSchema = createInsertSchema(servers)
-export const selectServerSchema = createSelectSchema(servers)
 
 export const insertDomainSchema = createInsertSchema(domains)
 export const selectDomainSchema = createSelectSchema(domains)
@@ -563,8 +519,6 @@ export type NewOrganization = typeof organizations.$inferInsert
 export type OrganizationUser = typeof organizationUsers.$inferSelect
 export type NewOrganizationUser = typeof organizationUsers.$inferInsert
 
-export type Server = typeof servers.$inferSelect
-export type NewServer = typeof servers.$inferInsert
 
 export type Domain = typeof domains.$inferSelect
 export type NewDomain = typeof domains.$inferInsert
@@ -1181,6 +1135,9 @@ export const mailFiltersRelations = relations(mailFilters, ({ one }) => ({
 // Types
 export type Mailbox = typeof mailboxes.$inferSelect
 export type NewMailbox = typeof mailboxes.$inferInsert
+
+export type SystemBranding = typeof systemBranding.$inferSelect
+export type NewSystemBranding = typeof systemBranding.$inferInsert
 
 export type MailFolder = typeof mailFolders.$inferSelect
 export type NewMailFolder = typeof mailFolders.$inferInsert

@@ -310,20 +310,21 @@ export async function processBounces(): Promise<{ processed: number; bounces: nu
                     ]
                 }, { uid: true })
 
+                if (!messages) return { processed: 0, bounces: 0, errors: 0 };
                 for (const uid of messages) {
                     try {
                         const message = await client.fetchOne(uid, { source: true })
-                        if (!message?.source) continue
+                        if (!message || typeof message === "boolean" || !("source" in message)) continue
 
-                        const parsed = await simpleParser(message.source)
+                        const parsed = await simpleParser((message as any).source)
 
-                        if (!isBounceEmail(parsed.from?.text || '', parsed.subject || '')) {
+                        if (!isBounceEmail((parsed as any).from?.text || '', (parsed as any).subject || '')) {
                             continue
                         }
 
                         result.processed++
 
-                        const bounceInfo = parseBounceMessage(parsed)
+                        const bounceInfo = parseBounceMessage(parsed as any)
 
                         if (!bounceInfo.recipientEmail) {
                             console.warn(`Could not extract recipient email from bounce message`)

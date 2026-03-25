@@ -21,7 +21,7 @@ export const OUTLOOK_SCOPES = [
 
 type OutlookOauthState = {
     userId: string
-    serverId: string
+    organizationId: string
     nonce: string
     exp: number
 }
@@ -42,7 +42,7 @@ type OutlookProfile = {
 
 export type SanitizedOutlookMailbox = {
     id: string
-    serverId: string
+    organizationId: string
     email: string
     displayName: string | null
     microsoftUserId: string
@@ -57,7 +57,7 @@ export type SanitizedOutlookMailbox = {
 }
 
 export type OutlookSendInput = {
-    serverId: string
+    organizationId: string
     mailboxId?: string
     fromAddress: string
     subject: string
@@ -164,7 +164,7 @@ async function fetchOutlookProfile(accessToken: string): Promise<OutlookProfile>
 export function sanitizeOutlookMailbox(mailbox: OutlookMailbox): SanitizedOutlookMailbox {
     return {
         id: mailbox.id,
-        serverId: mailbox.serverId,
+        organizationId: mailbox.organizationId,
         email: mailbox.email,
         displayName: mailbox.displayName,
         microsoftUserId: mailbox.microsoftUserId,
@@ -179,10 +179,10 @@ export function sanitizeOutlookMailbox(mailbox: OutlookMailbox): SanitizedOutloo
     }
 }
 
-export function createOutlookOauthState(userId: string, serverId: string): string {
+export function createOutlookOauthState(userId: string, organizationId: string): string {
     const payload = Buffer.from(JSON.stringify({
         userId,
-        serverId,
+        organizationId,
         nonce: crypto.randomUUID(),
         exp: Date.now() + STATE_TTL_MS,
     } satisfies OutlookOauthState)).toString('base64url')
@@ -246,19 +246,19 @@ export async function exchangeCodeForOutlookConnection(code: string) {
     }
 }
 
-export async function resolveOutlookMailboxForServer(serverId: string, mailboxId?: string) {
+export async function resolveOutlookMailboxForServer(organizationId: string, mailboxId?: string) {
     if (mailboxId) {
         return db.query.outlookMailboxes.findFirst({
             where: and(
                 eq(outlookMailboxes.id, mailboxId),
-                eq(outlookMailboxes.serverId, serverId),
+                eq(outlookMailboxes.organizationId, organizationId),
             ),
         })
     }
 
     return db.query.outlookMailboxes.findFirst({
         where: and(
-            eq(outlookMailboxes.serverId, serverId),
+            eq(outlookMailboxes.organizationId, organizationId),
             eq(outlookMailboxes.status, 'active'),
         ),
         orderBy: [asc(outlookMailboxes.createdAt)],
@@ -322,7 +322,7 @@ export async function getValidOutlookAccessToken(mailbox: OutlookMailbox) {
 }
 
 export async function sendMessageWithOutlook(input: OutlookSendInput) {
-    const mailbox = await resolveOutlookMailboxForServer(input.serverId, input.mailboxId)
+    const mailbox = await resolveOutlookMailboxForServer(input.organizationId, input.mailboxId)
 
     if (!mailbox) {
         throw new Error('No active Outlook mailbox found for this server')

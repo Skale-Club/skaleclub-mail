@@ -1,14 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Building2, Server, Globe, Users, Mail, TrendingUp, AlertCircle, CheckCircle, HardDrive } from 'lucide-react'
+import { Building2, Globe, Users, Mail, HardDrive } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
 import { Button } from '../../components/ui/button'
 import { Progress } from '../../components/ui/progress'
-import { useAuth } from '../../hooks/useAuth'
-import { supabase } from '../../lib/supabase'
+import { apiFetch } from './helpers'
 
 interface DashboardStats {
     organizations: number
-    servers: number
     domains: number
     users: number
     messages: {
@@ -37,17 +35,15 @@ interface SystemUsage {
 }
 
 function formatBytes(bytes: number): string {
-    if (bytes === 0) return '0 B'
+    if (!bytes || bytes === 0) return '0 MB'
     const units = ['B', 'KB', 'MB', 'GB', 'TB']
     const i = Math.floor(Math.log(bytes) / Math.log(1024))
     return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
 }
 
 export default function AdminDashboard() {
-    const { user } = useAuth()
     const [stats, setStats] = useState<DashboardStats>({
         organizations: 0,
-        servers: 0,
         domains: 0,
         users: 0,
         messages: { sent: 0, delivered: 0, bounced: 0, pending: 0 },
@@ -63,26 +59,13 @@ export default function AdminDashboard() {
 
     async function fetchStats() {
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-            const headers = { Authorization: `Bearer ${token}` }
-
-            const orgResponse = await fetch('/api/organizations', { headers })
-            const userResponse = await fetch('/api/users', { headers })
-
-            const orgPayload = orgResponse.ok ? await orgResponse.json() : { organizations: [] }
-            const userPayload = userResponse.ok ? await userResponse.json() : { users: [] }
-            const organizations = orgPayload.organizations || []
-
-            const organizationsCount = organizations.length
-            const serversCount = organizations.reduce(
-                (total: number, org: { servers?: unknown[] }) => total + (org.servers?.length || 0),
-                0
-            )
+            const [orgPayload, userPayload] = await Promise.all([
+                apiFetch<{ organizations: { id: string }[] }>('/api/organizations').catch(() => ({ organizations: [] })),
+                apiFetch<{ users: unknown[] }>('/api/users').catch(() => ({ users: [] })),
+            ])
 
             setStats({
-                organizations: organizationsCount,
-                servers: serversCount,
+                organizations: (orgPayload.organizations || []).length,
                 domains: 0,
                 users: (userPayload.users || []).length,
                 messages: { sent: 0, delivered: 0, bounced: 0, pending: 0 },
@@ -96,15 +79,8 @@ export default function AdminDashboard() {
 
     async function fetchUsage() {
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-            const response = await fetch('/api/system/usage', {
-                headers: { Authorization: `Bearer ${token}` },
-            })
-            if (response.ok) {
-                const data = await response.json()
-                setSystemUsage(data)
-            }
+            const data = await apiFetch<SystemUsage>('/api/system/usage')
+            setSystemUsage(data)
         } catch (error) {
             console.error('Error fetching usage:', error)
         } finally {
@@ -144,37 +120,37 @@ export default function AdminDashboard() {
                     {/* Top Row: Primary Infrastructure Metrics */}
                     <div className="grid gap-6 md:grid-cols-3">
                         <Card className="bg-card">
-                            <CardContent className="p-6 flex items-center gap-4">
+                            <CardContent className="flex min-h-24 items-center gap-4 p-6 pt-6">
                                 <div className="p-3 rounded-xl bg-primary/10 text-primary shrink-0">
                                     <Building2 className="h-6 w-6" />
                                 </div>
-                                <div>
+                                <div className="flex min-h-12 flex-col justify-center">
                                     <p className="text-sm font-medium text-muted-foreground">Organizations</p>
-                                    <h3 className="text-2xl font-semibold tracking-tight text-foreground mt-1">{stats.organizations}</h3>
+                                    <h3 className="mt-1 text-2xl font-semibold tracking-tight text-foreground leading-none">{stats.organizations}</h3>
                                 </div>
                             </CardContent>
                         </Card>
 
                         <Card className="bg-card">
-                            <CardContent className="p-6 flex items-center gap-4">
+                            <CardContent className="flex min-h-24 items-center gap-4 p-6 pt-6">
                                 <div className="p-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 shrink-0">
                                     <Globe className="h-6 w-6" />
                                 </div>
-                                <div>
+                                <div className="flex min-h-12 flex-col justify-center">
                                     <p className="text-sm font-medium text-muted-foreground">Verified Domains</p>
-                                    <h3 className="text-2xl font-semibold tracking-tight text-foreground mt-1">{stats.domains}</h3>
+                                    <h3 className="mt-1 text-2xl font-semibold tracking-tight text-foreground leading-none">{stats.domains}</h3>
                                 </div>
                             </CardContent>
                         </Card>
 
                         <Card className="bg-card">
-                            <CardContent className="p-6 flex items-center gap-4">
+                            <CardContent className="flex min-h-24 items-center gap-4 p-6 pt-6">
                                 <div className="p-3 rounded-xl bg-secondary text-secondary-foreground shrink-0">
                                     <Users className="h-6 w-6" />
                                 </div>
-                                <div>
+                                <div className="flex min-h-12 flex-col justify-center">
                                     <p className="text-sm font-medium text-muted-foreground">Total Users</p>
-                                    <h3 className="text-2xl font-semibold tracking-tight text-foreground mt-1">{stats.users}</h3>
+                                    <h3 className="mt-1 text-2xl font-semibold tracking-tight text-foreground leading-none">{stats.users}</h3>
                                 </div>
                             </CardContent>
                         </Card>
@@ -233,10 +209,10 @@ export default function AdminDashboard() {
                                         <div className="flex items-end justify-between">
                                             <div>
                                                 <div className="text-3xl font-semibold tracking-tight">
-                                                    {systemUsage ? formatBytes(systemUsage.storage.used) : '0 B'}
+                                                    {systemUsage ? formatBytes(systemUsage.storage.used) : '0 MB'}
                                                 </div>
                                                 <p className="text-sm text-muted-foreground mt-1">
-                                                    of {systemUsage ? formatBytes(systemUsage.storage.limit) : '0 B'} limit
+                                                    of {systemUsage ? formatBytes(systemUsage.storage.limit) : '10 GB'} limit
                                                 </p>
                                             </div>
                                         </div>

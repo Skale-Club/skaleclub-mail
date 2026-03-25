@@ -54,6 +54,10 @@
         @apply border-border;
     }
 
+    *:focus:not(:focus-visible) {
+        outline: none;
+    }
+
     body {
         @apply bg-background text-foreground antialiased;
         margin: 0;

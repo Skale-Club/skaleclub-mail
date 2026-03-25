@@ -1,5 +1,6 @@
 import React from 'react'
 import { Link } from 'wouter'
+import { useBranding } from '../../lib/branding'
 import { MailLayout } from '../../components/mail/MailLayout'
 import { EmailList, EmailItem, EmailToolbar } from '../../components/mail/EmailList'
 import { toast } from '../../components/ui/toaster'
@@ -7,68 +8,72 @@ import {
     Inbox as InboxIcon
 } from 'lucide-react'
 
-const mockEmails: EmailItem[] = [
-    {
-        id: '1',
-        subject: 'Welcome to SkaleClub Mail!',
-        snippet: 'Get started with your new email account and explore all the features we have prepared for you.',
-        from: { name: 'SkaleClub Team', email: 'noreply@skaleclub.com' },
-        to: [{ name: 'User', email: 'user@skaleclub.com' }],
-        date: new Date(),
-        read: false,
-        starred: true,
-        hasAttachments: false,
-        labels: ['Welcome']
-    },
-    {
-        id: '2',
-        subject: 'Meeting Tomorrow at 10 AM',
-        snippet: 'Hi team, just a reminder about our weekly sync meeting tomorrow at 10 AM. Please come prepared with your updates.',
-        from: { name: 'John Smith', email: 'john.smith@company.com' },
-        to: [{ name: 'User', email: 'user@skaleclub.com' }],
-        date: new Date(Date.now() - 3600000),
-        read: false,
-        starred: false,
-        hasAttachments: true,
-        labels: ['Work']
-    },
-    {
-        id: '3',
-        subject: 'Your Monthly Report is Ready',
-        snippet: 'Your analytics report for January 2024 is now available. Click here to view the detailed breakdown.',
-        from: { name: 'Analytics Team', email: 'reports@analytics.com' },
-        to: [{ name: 'User', email: 'user@skaleclub.com' }],
-        date: new Date(Date.now() - 86400000),
-        read: true,
-        starred: false,
-        hasAttachments: true
-    },
-    {
-        id: '4',
-        subject: 'Re: Project Update',
-        snippet: 'Thanks for the update! I have reviewed the changes and everything looks good. Lets proceed with the deployment.',
-        from: { name: 'Sarah Johnson', email: 'sarah.j@startup.io' },
-        to: [{ name: 'User', email: 'user@skaleclub.com' }],
-        date: new Date(Date.now() - 172800000),
-        read: true,
-        starred: false,
-        hasAttachments: false
-    },
-    {
-        id: '5',
-        subject: 'New Feature Announcement',
-        snippet: 'We are excited to announce our latest feature: Email Templates! Create and manage your email templates with ease.',
-        from: { name: 'Product Team', email: 'product@skaleclub.com' },
-        to: [{ name: 'User', email: 'user@skaleclub.com' }],
-        date: new Date(Date.now() - 259200000),
-        read: true,
-        starred: false,
-        hasAttachments: false
-    },
-]
+function createMockEmails(applicationName: string, companyName: string): EmailItem[] {
+    const domain = companyName ? `${companyName.toLowerCase().replace(/\s+/g, '')}.com` : 'example.com'
+    return [
+        {
+            id: '1',
+            subject: `Welcome to ${applicationName}!`,
+            snippet: 'Get started with your new email account and explore all the features we have prepared for you.',
+            from: { name: `${companyName || 'Platform'} Team`, email: `noreply@${domain}` },
+            to: [{ name: 'User', email: `user@${domain}` }],
+            date: new Date(),
+            read: false,
+            starred: true,
+            hasAttachments: false,
+            labels: ['Welcome']
+        },
+        {
+            id: '2',
+            subject: 'Meeting Tomorrow at 10 AM',
+            snippet: 'Hi team, just a reminder about our weekly sync meeting tomorrow at 10 AM. Please come prepared with your updates.',
+            from: { name: 'John Smith', email: 'john.smith@company.com' },
+            to: [{ name: 'User', email: `user@${domain}` }],
+            date: new Date(Date.now() - 3600000),
+            read: false,
+            starred: false,
+            hasAttachments: true,
+            labels: ['Work']
+        },
+        {
+            id: '3',
+            subject: 'Your Monthly Report is Ready',
+            snippet: 'Your analytics report for January 2024 is now available. Click here to view the detailed breakdown.',
+            from: { name: 'Analytics Team', email: 'reports@analytics.com' },
+            to: [{ name: 'User', email: `user@${domain}` }],
+            date: new Date(Date.now() - 86400000),
+            read: true,
+            starred: false,
+            hasAttachments: true
+        },
+        {
+            id: '4',
+            subject: 'Re: Project Update',
+            snippet: 'Thanks for the update! I have reviewed the changes and everything looks good. Lets proceed with the deployment.',
+            from: { name: 'Sarah Johnson', email: 'sarah.j@startup.io' },
+            to: [{ name: 'User', email: `user@${domain}` }],
+            date: new Date(Date.now() - 172800000),
+            read: true,
+            starred: false,
+            hasAttachments: false
+        },
+        {
+            id: '5',
+            subject: 'New Feature Announcement',
+            snippet: 'We are excited to announce our latest feature: Email Templates! Create and manage your email templates with ease.',
+            from: { name: 'Product Team', email: `product@${domain}` },
+            to: [{ name: 'User', email: `user@${domain}` }],
+            date: new Date(Date.now() - 259200000),
+            read: true,
+            starred: false,
+            hasAttachments: false
+        },
+    ]
+}
 
 export default function InboxPage() {
-    const [emails, setEmails] = React.useState<EmailItem[]>(mockEmails)
+    const { branding } = useBranding()
+    const [emails, setEmails] = React.useState<EmailItem[]>(() => createMockEmails(branding.applicationName, branding.companyName))
     const [selectedEmail, setSelectedEmail] = React.useState<string | null>(null)
     const [selectedEmails, setSelectedEmails] = React.useState<Set<string>>(new Set())
     const [isRefreshing, setIsRefreshing] = React.useState(false)
@@ -78,6 +83,20 @@ export default function InboxPage() {
         const timer = setTimeout(() => setIsLoading(false), 500)
         return () => clearTimeout(timer)
     }, [])
+
+    React.useEffect(() => {
+        const brandedWelcomeEmail = createMockEmails(branding.applicationName, branding.companyName)[0]
+
+        setEmails((current) => {
+            if (current.some((email) => email.id !== '1')) {
+                return current.map((email) => email.id === '1'
+                    ? brandedWelcomeEmail
+                    : email)
+            }
+
+            return createMockEmails(branding.applicationName, branding.companyName)
+        })
+    }, [branding.applicationName, branding.companyName])
 
     const handleRefresh = async () => {
         setIsRefreshing(true)
@@ -203,7 +222,11 @@ export default function InboxPage() {
 
                 <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col bg-gray-50 dark:bg-slate-900/50">
                     {selectedEmail ? (
-                        <EmailDetail email={emails.find(e => e.id === selectedEmail)!} />
+                        <EmailDetail
+                            email={emails.find(e => e.id === selectedEmail)!}
+                            applicationName={branding.applicationName}
+                            companyName={branding.companyName}
+                        />
                     ) : (
                         <div className="flex-1 flex items-center justify-center text-gray-500 dark:text-gray-400">
                             <div className="text-center">
@@ -221,12 +244,22 @@ export default function InboxPage() {
     )
 }
 
-function EmailDetail({ email }: { email: EmailItem }) {
+function EmailDetail({
+    email,
+    applicationName,
+    companyName,
+}: {
+    email: EmailItem
+    applicationName: string
+    companyName: string
+}) {
     const [showFullContent, setShowFullContent] = React.useState(false)
+
+    const domain = companyName ? `${companyName.toLowerCase().replace(/\s+/g, '')}.com` : 'example.com'
 
     const fullContent = `Dear User,
 
-Thank you for using SkaleClub Mail! We are thrilled to have you as part of our growing community.
+Thank you for using ${applicationName}! We are thrilled to have you as part of our growing community.
 
 Here's what you can do with your new email account:
 
@@ -239,12 +272,12 @@ Here's what you can do with your new email account:
 If you have any questions or need assistance, don't hesitate to reach out to our support team.
 
 Best regards,
-The SkaleClub Team
+The ${companyName || 'Platform'} Team
 
 ---
-SkaleClub Mail - Professional Email Made Simple
-Website: https://skaleclub.com
-Support: support@skaleclub.com`
+${applicationName} - Professional Email Made Simple
+Website: https://${domain}
+Support: support@${domain}`
 
     return (
         <div className="flex-1 overflow-y-auto">

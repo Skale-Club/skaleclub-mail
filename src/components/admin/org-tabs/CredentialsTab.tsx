@@ -4,11 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
 import { Label } from '../../ui/label'
-import { getAccessToken } from './shared'
+import { fetchWithAuth } from './shared'
 
 interface Credential {
     id: string
-    serverId: string
+    orgId: string
     name: string
     type: 'smtp' | 'api'
     key: string
@@ -18,11 +18,10 @@ interface Credential {
 }
 
 interface CredentialsTabProps {
-    serverId: string
     orgId: string
 }
 
-export default function CredentialsTab({ serverId }: CredentialsTabProps) {
+export default function CredentialsTab({ orgId }: CredentialsTabProps) {
     const [credentials, setCredentials] = useState<Credential[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
@@ -35,17 +34,12 @@ export default function CredentialsTab({ serverId }: CredentialsTabProps) {
 
     useEffect(() => {
         void fetchCredentials()
-    }, [serverId])
+    }, [orgId])
 
     async function fetchCredentials() {
         setIsLoading(true)
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/credentials?serverId=${serverId}`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            })
+            const response = await fetchWithAuth(`/api/credentials?organizationId=${orgId}`)
 
             if (response.ok) {
                 const data = await response.json()
@@ -69,15 +63,11 @@ export default function CredentialsTab({ serverId }: CredentialsTabProps) {
         if (!newCredential.name.trim()) return
 
         try {
-            const token = await getAccessToken()
-            const response = await fetch('/api/credentials', {
+            const response = await fetchWithAuth('/api/credentials', {
                 method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    serverId,
+                    organizationId: orgId,
                     name: newCredential.name.trim(),
                     type: newCredential.type,
                     key: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
@@ -103,12 +93,8 @@ export default function CredentialsTab({ serverId }: CredentialsTabProps) {
         if (!confirm('Are you sure you want to delete this credential? This action cannot be undone.')) return
 
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/credentials/${credentialId}`, {
+            const response = await fetchWithAuth(`/api/credentials/${credentialId}`, {
                 method: 'DELETE',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
             })
 
             if (response.ok) {

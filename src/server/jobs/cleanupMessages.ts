@@ -1,5 +1,5 @@
 import { db } from '../../db'
-import { messages, deliveries, servers } from '../../db/schema'
+import { messages, deliveries, } from '../../db/schema'
 import { eq, lt, and, isNotNull } from 'drizzle-orm'
 
 let running = false
@@ -9,24 +9,24 @@ export async function cleanupOldMessages(): Promise<void> {
     running = true
 
     try {
-        const allServers = await db.query.servers.findMany({
+        const allServers = await db.query.organizations.findMany({
             columns: {
                 id: true,
-                retentionDays: true,
+                
             },
         })
 
         let totalDeleted = 0
 
         for (const server of allServers) {
-            const retentionDays = server.retentionDays ?? 30
+            const retentionDays = 30
             const cutoff = new Date()
             cutoff.setDate(cutoff.getDate() - retentionDays)
 
             // Delete deliveries for old messages first
             const oldMessages = await db.query.messages.findMany({
                 where: and(
-                    eq(messages.serverId, server.id),
+                    eq(messages.organizationId, server.id),
                     lt(messages.createdAt, cutoff)
                 ),
                 columns: { id: true },

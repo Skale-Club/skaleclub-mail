@@ -4,11 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
 import { Label } from '../../ui/label'
-import { getAccessToken } from './shared'
+import { fetchWithAuth } from './shared'
 
 interface WebhookConfig {
     id: string
-    serverId: string
+    orgId: string
     name: string
     url: string
     secret: string | null
@@ -18,7 +18,6 @@ interface WebhookConfig {
 }
 
 interface WebhooksTabProps {
-    serverId: string
     orgId: string
 }
 
@@ -41,7 +40,7 @@ const emptyWebhook = {
     events: [] as string[],
 }
 
-export default function WebhooksTab({ serverId }: WebhooksTabProps) {
+export default function WebhooksTab({ orgId }: WebhooksTabProps) {
     const [webhooks, setWebhooks] = useState<WebhookConfig[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
@@ -53,17 +52,12 @@ export default function WebhooksTab({ serverId }: WebhooksTabProps) {
 
     useEffect(() => {
         void fetchWebhooks()
-    }, [serverId])
+    }, [orgId])
 
     async function fetchWebhooks() {
         setIsLoading(true)
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/webhooks?serverId=${serverId}`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            })
+            const response = await fetchWithAuth(`/api/webhooks?organizationId=${orgId}`)
 
             if (response.ok) {
                 const data = await response.json()
@@ -85,16 +79,12 @@ export default function WebhooksTab({ serverId }: WebhooksTabProps) {
 
     async function handleCreateWebhook() {
         try {
-            const token = await getAccessToken()
-            const response = await fetch('/api/webhooks', {
+            const response = await fetchWithAuth('/api/webhooks', {
                 method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ...newWebhook,
-                    serverId,
+                    organizationId: orgId,
                 }),
             })
 
@@ -116,13 +106,9 @@ export default function WebhooksTab({ serverId }: WebhooksTabProps) {
         if (!selectedWebhook) return
 
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/webhooks/${selectedWebhook.id}`, {
+            const response = await fetchWithAuth(`/api/webhooks/${selectedWebhook.id}`, {
                 method: 'PATCH',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(editData),
             })
 
@@ -144,12 +130,8 @@ export default function WebhooksTab({ serverId }: WebhooksTabProps) {
         if (!confirm('Are you sure you want to delete this webhook?')) return
 
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/webhooks/${webhookId}`, {
+            const response = await fetchWithAuth(`/api/webhooks/${webhookId}`, {
                 method: 'DELETE',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
             })
 
             if (response.ok) {
@@ -162,12 +144,8 @@ export default function WebhooksTab({ serverId }: WebhooksTabProps) {
 
     async function handleTestWebhook(webhookId: string) {
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/webhooks/${webhookId}/test`, {
+            const response = await fetchWithAuth(`/api/webhooks/${webhookId}/test`, {
                 method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
             })
 
             const data = await response.json()

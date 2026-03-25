@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express'
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '../../db'
-import { organizationUsers, outlookMailboxes, servers } from '../../db/schema'
+import { organizationUsers, outlookMailboxes, organizations } from '../../db/schema'
 import { isPlatformAdmin } from '../lib/admin'
 import {
     buildOutlookOauthUrl,
@@ -18,41 +18,41 @@ import { encryptSecret } from '../lib/crypto'
 const router = Router()
 
 const startSchema = z.object({
-    serverId: z.string().uuid(),
+    organizationId: z.string().uuid(),
     loginHint: z.string().email().optional(),
 })
 
 const sendTestSchema = z.object({
     to: z.string().email(),
-    subject: z.string().min(1).default('SkaleClub Mail Outlook test'),
+    subject: z.string().min(1).default('Mail Platform Outlook test'),
     body: z.string().min(1).default('This is a test message sent through Microsoft Graph.'),
 })
 
-async function checkOutlookAccess(userId: string, serverId: string) {
-    const server = await db.query.servers.findFirst({
-        where: eq(servers.id, serverId),
+async function checkOutlookAccess(userId: string, organizationId: string) {
+    const organization = await db.query.organizations.findFirst({
+        where: eq(organizations.id, organizationId),
     })
 
-    if (!server) {
-        return { server: null, membership: null }
+    if (!organization) {
+        return { organization: null, membership: null }
     }
 
     if (await isPlatformAdmin(userId)) {
-        return { server, membership: { role: 'admin' as const } }
+        return { organization, membership: { role: "admin" as const } }
     }
 
     const membership = await db.query.organizationUsers.findFirst({
         where: and(
-            eq(organizationUsers.organizationId, server.organizationId),
+            eq(organizationUsers.organizationId, organization.id),
             eq(organizationUsers.userId, userId),
         ),
     })
 
-    return { server, membership }
+    return { organization, membership }
 }
 
 function buildFrontendRedirect(params: Record<string, string>) {
-    const url = new URL('/admin/servers', process.env.FRONTEND_URL || 'http://localhost:9000')
+    const url = new URL('/admin/organizations', process.env.FRONTEND_URL || 'http://localhost:9000')
 
     for (const [key, value] of Object.entries(params)) {
         url.searchParams.set(key, value)
@@ -70,13 +70,13 @@ router.post('/connect/start', async (req: Request, res: Response) => {
         }
 
         const data = startSchema.parse(req.body)
-        const { server, membership } = await checkOutlookAccess(userId, data.serverId)
+        const { organization, membership } = await checkOutlookAccess(userId, data.organizationId)
 
-        if (!server || !membership || membership.role !== 'admin') {
+        if (!organization || !membership || membership.role !== 'admin') {
             return res.status(403).json({ error: 'Only admins can connect Outlook mailboxes' })
         }
 
-        const state = createOutlookOauthState(userId, data.serverId)
+        const state = createOutlookOauthState(userId, data.organizationId)
         const authUrl = buildOutlookOauthUrl(state, data.loginHint)
 
         res.json({
@@ -111,9 +111,9 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     try {
         const state = parseOutlookOauthState(stateParam)
-        const { server, membership } = await checkOutlookAccess(state.userId, state.serverId)
+        const { organization, membership } = await checkOutlookAccess(state.userId, state.organizationId)
 
-        if (!server || !membership || membership.role !== 'admin') {
+        if (!organization || !membership || membership.role !== 'admin') {
             return res.status(403).json({ error: 'Outlook callback is no longer authorized' })
         }
 
@@ -130,13 +130,13 @@ router.get('/callback', async (req: Request, res: Response) => {
             }) ||
             await db.query.outlookMailboxes.findFirst({
                 where: and(
-                    eq(outlookMailboxes.serverId, state.serverId),
+                    eq(outlookMailboxes.organizationId, state.organizationId),
                     eq(outlookMailboxes.email, mailboxEmail),
                 ),
             })
 
         const payload = {
-            serverId: state.serverId,
+            organizationId: state.organizationId,
             email: mailboxEmail,
             displayName: connection.profile.displayName || null,
             microsoftUserId: connection.profile.id,
@@ -174,24 +174,24 @@ router.get('/callback', async (req: Request, res: Response) => {
 router.get('/mailboxes', async (req: Request, res: Response) => {
     try {
         const userId = req.headers['x-user-id'] as string
-        const serverId = req.query.serverId as string
+        const organizationId = req.query.organizationId as string
 
         if (!userId) {
             return res.status(401).json({ error: 'Unauthorized' })
         }
 
-        if (!serverId) {
-            return res.status(400).json({ error: 'Server ID required' })
+        if (!organizationId) {
+            return res.status(400).json({ error: 'Organization ID required' })
         }
 
-        const { server, membership } = await checkOutlookAccess(userId, serverId)
+        const { organization, membership } = await checkOutlookAccess(userId, organizationId)
 
-        if (!server || !membership) {
+        if (!organization || !membership) {
             return res.status(403).json({ error: 'Access denied' })
         }
 
         const mailboxes = await db.query.outlookMailboxes.findMany({
-            where: eq(outlookMailboxes.serverId, serverId),
+            where: eq(outlookMailboxes.organizationId, organizationId),
         })
 
         res.json({
@@ -220,16 +220,16 @@ router.post('/mailboxes/:id/send-test', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Outlook mailbox not found' })
         }
 
-        const { server, membership } = await checkOutlookAccess(userId, mailbox.serverId)
+        const { organization, membership } = await checkOutlookAccess(userId, mailbox.organizationId)
 
-        if (!server || !membership || membership.role !== 'admin') {
+        if (!organization || !membership || membership.role !== 'admin') {
             return res.status(403).json({ error: 'Only admins can send Outlook tests' })
         }
 
         const data = sendTestSchema.parse(req.body)
 
         await sendMessageWithOutlook({
-            serverId: mailbox.serverId,
+            organizationId: mailbox.organizationId,
             mailboxId: mailbox.id,
             fromAddress: mailbox.email,
             to: [data.to],
@@ -270,9 +270,9 @@ router.delete('/mailboxes/:id', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Outlook mailbox not found' })
         }
 
-        const { server, membership } = await checkOutlookAccess(userId, mailbox.serverId)
+        const { organization, membership } = await checkOutlookAccess(userId, mailbox.organizationId)
 
-        if (!server || !membership || membership.role !== 'admin') {
+        if (!organization || !membership || membership.role !== 'admin') {
             return res.status(403).json({ error: 'Only admins can disconnect Outlook mailboxes' })
         }
 
@@ -302,13 +302,13 @@ router.get('/mailboxes/:id', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Outlook mailbox not found' })
         }
 
-        const { server, membership } = await checkOutlookAccess(userId, mailbox.serverId)
+        const { organization, membership } = await checkOutlookAccess(userId, mailbox.organizationId)
 
-        if (!server || !membership) {
+        if (!organization || !membership) {
             return res.status(403).json({ error: 'Access denied' })
         }
 
-        const activeMailbox = await resolveOutlookMailboxForServer(mailbox.serverId, mailbox.id)
+        const activeMailbox = await resolveOutlookMailboxForServer(mailbox.organizationId, mailbox.id)
 
         res.json({
             mailbox: sanitizeOutlookMailbox(activeMailbox || mailbox),

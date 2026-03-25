@@ -10,7 +10,7 @@ const mockTrashEmails: EmailItem[] = [
         subject: 'Old Newsletter',
         snippet: 'Check out our latest updates and news from last month...',
         from: { name: 'Newsletter', email: 'newsletter@spam.com' },
-        to: [{ name: 'You', email: 'user@skaleclub.com' }],
+        to: [{ name: 'You', email: 'user@example.com' }],
         date: new Date(Date.now() - 604800000),
         read: true,
         starred: false,

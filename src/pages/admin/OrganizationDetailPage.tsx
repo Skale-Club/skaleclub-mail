@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { useRoute } from 'wouter'
 import {
     ArrowLeft,
@@ -11,24 +11,13 @@ import {
     Users,
 } from 'lucide-react'
 import { Button } from '../../components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
-import { getAccessToken } from '../../components/admin/org-tabs/shared'
+import { apiFetch } from './helpers'
 import DomainsTab from '../../components/admin/org-tabs/DomainsTab'
 import TemplatesTab from '../../components/admin/org-tabs/TemplatesTab'
 import MessagesTab from '../../components/admin/org-tabs/MessagesTab'
 import AnalyticsTab from '../../components/admin/org-tabs/AnalyticsTab'
 import MembersTab from '../../components/admin/org-tabs/MembersTab'
 import SettingsTab from '../../components/admin/org-tabs/SettingsTab'
-
-interface ServerItem {
-    id: string
-    name: string
-    slug: string
-    mode: string
-    sendMode: string
-    suspended: boolean
-    createdAt: string
-}
 
 interface Member {
     id: string
@@ -49,7 +38,6 @@ interface Organization {
     timezone: string
     owner_id: string
     createdAt: string
-    servers: ServerItem[]
     members: Member[]
 }
 
@@ -64,8 +52,6 @@ const tabs: Array<{ key: TabKey, label: string, icon: ReactNode }> = [
     { key: 'settings', label: 'Settings', icon: <Settings className="h-4 w-4" /> },
 ]
 
-const serverScopedTabs: TabKey[] = ['domains', 'templates', 'messages', 'analytics']
-
 export default function OrganizationDetailPage() {
     const [, params] = useRoute('/admin/organizations/:id')
     const orgId = params?.id
@@ -73,7 +59,6 @@ export default function OrganizationDetailPage() {
     const [org, setOrg] = useState<Organization | null>(null)
     const [role, setRole] = useState('')
     const [isLoading, setIsLoading] = useState(true)
-    const [isCreatingServer, setIsCreatingServer] = useState(false)
     const [activeTab, setActiveTab] = useState<TabKey>('domains')
 
     useEffect(() => {
@@ -85,18 +70,9 @@ export default function OrganizationDetailPage() {
     async function fetchOrganization() {
         setIsLoading(true)
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/organizations/${orgId}`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            })
-
-            if (response.ok) {
-                const data = await response.json()
-                setOrg(data.organization)
-                setRole(data.role)
-            }
+            const data = await apiFetch<{ organization: Organization; role: string }>(`/api/organizations/${orgId}`)
+            setOrg(data.organization)
+            setRole(data.role)
         } catch (error) {
             console.error('Error fetching organization:', error)
         } finally {
@@ -104,85 +80,25 @@ export default function OrganizationDetailPage() {
         }
     }
 
-    const defaultServerId = useMemo(() => org?.servers?.[0]?.id || null, [org])
     const isAdmin = role === 'admin'
-    const needsServerSetup = !defaultServerId && serverScopedTabs.includes(activeTab)
-
-    async function handleCreateDefaultServer() {
-        if (!org) return
-
-        setIsCreatingServer(true)
-        try {
-            const token = await getAccessToken()
-            const response = await fetch('/api/servers', {
-                method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    organizationId: org.id,
-                    name: org.name,
-                    slug: org.slug,
-                    mode: 'live',
-                    sendMode: 'smtp',
-                }),
-            })
-
-            if (response.ok) {
-                await fetchOrganization()
-            } else {
-                const error = await response.json()
-                alert(error.error || 'Failed to configure organization')
-            }
-        } catch (error) {
-            console.error('Error creating default server:', error)
-        } finally {
-            setIsCreatingServer(false)
-        }
-    }
 
     function renderActiveTab() {
         if (!org) return null
 
-        if (needsServerSetup) {
-            return (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Organization setup required</CardTitle>
-                        <CardDescription>
-                            Legacy organizations need an internal default server before these resources can be managed.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {isAdmin ? (
-                            <Button onClick={() => void handleCreateDefaultServer()} disabled={isCreatingServer}>
-                                Configurar
-                            </Button>
-                        ) : (
-                            <p className="text-sm text-muted-foreground">
-                                Ask an organization admin to finish the initial setup.
-                            </p>
-                        )}
-                    </CardContent>
-                </Card>
-            )
+        if (activeTab === 'domains') {
+            return <DomainsTab orgId={org.id} />
         }
 
-        if (defaultServerId && activeTab === 'domains') {
-            return <DomainsTab serverId={defaultServerId} orgId={org.id} />
+        if (activeTab === 'templates') {
+            return <TemplatesTab orgId={org.id} />
         }
 
-        if (defaultServerId && activeTab === 'templates') {
-            return <TemplatesTab serverId={defaultServerId} orgId={org.id} />
+        if (activeTab === 'messages') {
+            return <MessagesTab orgId={org.id} />
         }
 
-        if (defaultServerId && activeTab === 'messages') {
-            return <MessagesTab serverId={defaultServerId} orgId={org.id} />
-        }
-
-        if (defaultServerId && activeTab === 'analytics') {
-            return <AnalyticsTab serverId={defaultServerId} orgId={org.id} />
+        if (activeTab === 'analytics') {
+            return <AnalyticsTab orgId={org.id} />
         }
 
         if (activeTab === 'members') {
@@ -250,7 +166,7 @@ export default function OrganizationDetailPage() {
                 </div>
             </div>
 
-            <div className="overflow-x-auto border-b">
+            <div className="overflow-x-auto overflow-y-hidden border-b">
                 <div className="flex min-w-max gap-1">
                     {tabs.map((tab) => (
                         <button

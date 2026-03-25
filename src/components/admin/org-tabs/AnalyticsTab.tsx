@@ -3,7 +3,7 @@ import { AlertCircle, BarChart2, CheckCircle, Eye, Mail, MousePointer, RefreshCw
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card'
 import { Progress } from '../../ui/progress'
 import { Button } from '../../ui/button'
-import { supabase } from '../../../lib/supabase'
+import { fetchWithAuth } from './shared'
 
 interface DailyStat {
     date: string
@@ -82,33 +82,24 @@ function getStatusColor(status: string) {
 }
 
 interface AnalyticsTabProps {
-    serverId: string
     orgId: string
 }
 
-export default function AnalyticsTab({ serverId }: AnalyticsTabProps) {
+export default function AnalyticsTab({ orgId }: AnalyticsTabProps) {
     const [days, setDays] = useState(30)
     const [analytics, setAnalytics] = useState<Analytics | null>(null)
     const [isLoading, setIsLoading] = useState(false)
 
     useEffect(() => {
         void fetchAnalytics()
-    }, [serverId, days])
-
-    async function getToken() {
-        const { data: { session } } = await supabase.auth.getSession()
-        return session?.access_token
-    }
+    }, [orgId, days])
 
     async function fetchAnalytics() {
-        if (!serverId) return
+        if (!orgId) return
 
         setIsLoading(true)
         try {
-            const token = await getToken()
-            const response = await fetch(`/api/servers/${serverId}/statistics?days=${days}`, {
-                headers: { Authorization: `Bearer ${token}` },
-            })
+            const response = await fetchWithAuth(`/api/organizations/${orgId}/statistics?days=${days}`)
             if (response.ok) {
                 const data = await response.json()
                 setAnalytics(data)

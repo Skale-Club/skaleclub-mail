@@ -4,11 +4,11 @@ import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
 import { Plus, Search, Trash2, Edit } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
+import { apiFetch } from './helpers'
 
 interface RouteConfig {
     id: string
-    serverId: string
+    organizationId: string
     name: string
     address: string
     mode: 'endpoint' | 'hold' | 'reject'
@@ -33,7 +33,7 @@ export default function RoutesPage() {
         spamThreshold: 5,
     })
     const [newRoute, setNewRoute] = useState({
-        serverId: '',
+        organizationId: '',
         name: '',
         address: '',
         mode: 'endpoint' as 'endpoint' | 'hold' | 'reject',
@@ -52,19 +52,8 @@ export default function RoutesPage() {
 
     async function fetchRoutes() {
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-
-            const response = await fetch(`/api/routes?serverId=${selectedServer}`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                },
-            })
-
-            if (response.ok) {
-                const data = await response.json()
-                setRoutes(data.routes || [])
-            }
+            const data = await apiFetch<{ routes: RouteConfig[] }>(`/api/routes?organizationId=${selectedServer}`)
+            setRoutes(data.routes || [])
         } catch (error) {
             console.error('Error fetching routes:', error)
         } finally {
@@ -79,59 +68,37 @@ export default function RoutesPage() {
 
     const handleCreateRoute = async () => {
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-
-            const response = await fetch('/api/routes', {
+            const data = await apiFetch<{ route: RouteConfig }>('/api/routes', {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ ...newRoute, serverId: selectedServer }),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...newRoute, organizationId: selectedServer }),
             })
-
-            if (response.ok) {
-                const data = await response.json()
-                setRoutes([...routes, data.route])
-                setShowCreateModal(false)
-                setNewRoute({
-                    serverId: '',
-                    name: '',
-                    address: '',
-                    mode: 'endpoint',
-                    spamMode: 'mark',
-                    spamThreshold: 5,
-                })
-            } else {
-                const errorData = await response.json()
-                alert(errorData.error || 'Failed to create route')
-            }
+            setRoutes([...routes, data.route])
+            setShowCreateModal(false)
+            setNewRoute({
+                organizationId: '',
+                name: '',
+                address: '',
+                mode: 'endpoint',
+                spamMode: 'mark',
+                spamThreshold: 5,
+            })
         } catch (error) {
             console.error('Error creating route:', error)
+            alert(error instanceof Error ? error.message : 'Failed to create route')
         }
     }
 
     const handleUpdateRoute = async (id: string, updates: Partial<RouteConfig>) => {
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-
-            const response = await fetch(`/api/routes/${id}`, {
+            const data = await apiFetch<{ route: RouteConfig }>(`/api/routes/${id}`, {
                 method: 'PUT',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(updates),
             })
-
-            if (response.ok) {
-                const data = await response.json()
-                setRoutes(routes.map(r => r.id === id ? data.route : r))
-                setShowEditModal(false)
-                setSelectedRoute(null)
-            }
+            setRoutes(routes.map(r => r.id === id ? data.route : r))
+            setShowEditModal(false)
+            setSelectedRoute(null)
         } catch (error) {
             console.error('Error updating route:', error)
         }
@@ -143,19 +110,8 @@ export default function RoutesPage() {
         }
 
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-
-            const response = await fetch(`/api/routes/${id}`, {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                },
-            })
-
-            if (response.ok) {
-                setRoutes(routes.filter(r => r.id !== id))
-            }
+            await apiFetch(`/api/routes/${id}`, { method: 'DELETE' })
+            setRoutes(routes.filter(r => r.id !== id))
         } catch (error) {
             console.error('Error deleting route:', error)
         }
@@ -177,10 +133,10 @@ export default function RoutesPage() {
                 </Button>
             </div>
 
-            {/* Server Selector */}
+            {/* Organization Selector */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Select Server</CardTitle>
+                    <CardTitle>Select Organization</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <select
@@ -188,8 +144,8 @@ export default function RoutesPage() {
                         value={selectedServer}
                         onChange={(e) => setSelectedServer(e.target.value)}
                     >
-                        <option value="">Select a server...</option>
-                        {/* Server options would be populated dynamically */}
+                        <option value="">Select an organization...</option>
+                        {/* Organization options would be populated dynamically */}
                     </select>
                 </CardContent>
             </Card>
