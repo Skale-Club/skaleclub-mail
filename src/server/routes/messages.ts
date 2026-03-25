@@ -200,7 +200,7 @@ router.post('/', async (req: Request, res: Response) => {
             return res.status(403).json({ error: 'Access denied' })
         }
 
-        const sendMode = 'smtp'
+        const sendMode: 'smtp' | 'outlook' = data.outlookMailboxId ? 'outlook' : 'smtp'
         const trackOpens = true
         const trackClicks = true
         const privacyMode = false
