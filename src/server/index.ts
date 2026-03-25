@@ -191,8 +191,9 @@ if (!process.env.VERCEL) {
 
         import('./jobs/index').then((jobs) => jobs.startJobs())
 
-        // Start native SMTP + IMAP servers (skipped on Railway — requires TCP addon)
-        if (!process.env.RAILWAY_ENVIRONMENT) {
+        // Start native SMTP + IMAP servers
+        const enableMailServer = process.env.ENABLE_MAIL_SERVER === 'true'
+        if (enableMailServer || !process.env.RAILWAY_ENVIRONMENT) {
             try {
                 const smtpServer = createSMTPServer()
                 const imapServer = createIMAPServer()
@@ -202,7 +203,7 @@ if (!process.env.VERCEL) {
                 console.warn('⚠️  SMTP/IMAP servers failed to start:', (err as Error).message)
             }
         } else {
-            console.log('ℹ️  SMTP/IMAP servers disabled on Railway (enable TCP addon to use)')
+            console.log('ℹ️  SMTP/IMAP servers disabled on Railway (set ENABLE_MAIL_SERVER=true to enable)')
         }
     })
 }
