@@ -1,8 +1,7 @@
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
-import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
+import { join } from 'path'
 import { existsSync } from 'fs'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
@@ -153,15 +152,13 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
     })
 })
 
-// Serve static frontend files in production
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-const clientDist = join(__dirname, '..', 'client')
+// Serve static frontend files in production (dist/client built by Vite)
+const clientDist = join(process.cwd(), 'dist', 'client')
 
 if (existsSync(clientDist)) {
     app.use(express.static(clientDist))
     // SPA fallback — serve index.html for all non-API routes
-    app.get('*', (_req: express.Request, res: express.Response) => {
+    app.use((_req: express.Request, res: express.Response) => {
         res.sendFile(join(clientDist, 'index.html'))
     })
 } else {
