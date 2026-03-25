@@ -337,8 +337,7 @@ router.get('/usage', async (req: Request, res: Response) => {
             FROM users u
             LEFT JOIN organization_users ou ON ou.user_id = u.id
             LEFT JOIN organizations org ON org.id = ou.organization_id
-            LEFT JOIN organizations org ON org.id = ou.organization_id
-            LEFT JOIN messages m ON m.organization_id = s.id
+            LEFT JOIN messages m ON m.organization_id = org.id
             WHERE u.is_admin = false
             GROUP BY u.id, u.email, u.first_name, u.last_name
             ORDER BY message_count DESC
