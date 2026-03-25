@@ -1,6 +1,9 @@
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
+import { existsSync } from 'fs'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import { createClient } from '@supabase/supabase-js'
@@ -150,9 +153,22 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
     })
 })
 
-app.use((_req: express.Request, res: express.Response) => {
-    res.status(404).json({ error: 'Not found' })
-})
+// Serve static frontend files in production
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+const clientDist = join(__dirname, '..', 'client')
+
+if (existsSync(clientDist)) {
+    app.use(express.static(clientDist))
+    // SPA fallback — serve index.html for all non-API routes
+    app.get('*', (_req: express.Request, res: express.Response) => {
+        res.sendFile(join(clientDist, 'index.html'))
+    })
+} else {
+    app.use((_req: express.Request, res: express.Response) => {
+        res.status(404).json({ error: 'Not found' })
+    })
+}
 
 if (!process.env.VERCEL) {
     app.listen(PORT, async () => {
@@ -168,11 +184,19 @@ if (!process.env.VERCEL) {
 
         import('./jobs/index').then((jobs) => jobs.startJobs())
 
-        // Start native SMTP + IMAP servers
-        const smtpServer = createSMTPServer()
-        const imapServer = createIMAPServer()
-        smtpServer.start()
-        loadImapBranding().then(() => imapServer.start())
+        // Start native SMTP + IMAP servers (skipped on Railway — requires TCP addon)
+        if (!process.env.RAILWAY_ENVIRONMENT) {
+            try {
+                const smtpServer = createSMTPServer()
+                const imapServer = createIMAPServer()
+                smtpServer.start()
+                loadImapBranding().then(() => imapServer.start())
+            } catch (err) {
+                console.warn('⚠️  SMTP/IMAP servers failed to start:', (err as Error).message)
+            }
+        } else {
+            console.log('ℹ️  SMTP/IMAP servers disabled on Railway (enable TCP addon to use)')
+        }
     })
 }
 
