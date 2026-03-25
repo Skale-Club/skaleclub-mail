@@ -6,45 +6,96 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy:
+  build-and-push:
     runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
-          node-version: '20'
-          cache: 'npm'
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_APP_NAME: "Skale Club Mail"
-
-      - name: Deploy to Hetzner via RSync
-        uses: burnett01/rsync-deployments@5.2
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
         with:
-          switches: -avz --delete
-          remote_path: /opt/skaleclub-mail/
-          remote_host: ${{ secrets.HETZNER_HOST }}
-          remote_user: root
-          remote_key: ${{ secrets.HETZNER_SSH_KEY }}
+          images: ghcr.io/${{ github.repository }}/app
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=
 
-      - name: Setup PM2 on Hetzner
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
+            VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
+            VITE_APP_NAME=Skale Club Mail
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Hetzner
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.HETZNER_HOST }}
           username: root
           key: ${{ secrets.HETZNER_SSH_KEY }}
           script: |
-            cd /opt/skaleclub-mail
-            pm2 delete skaleclub-mail || true
-            pm2 start npm --name skaleclub-mail -- start
-            pm2 save
+            IMAGE=${{ needs.build-and-push.outputs.image-tag }}
+            
+            # Install Docker if not present
+            if ! command -v docker &> /dev/null; then
+              curl -fsSL https://get.docker.com | sh
+              systemctl start docker
+              systemctl enable docker
+            fi
+            
+            # Stop and remove old container
+            docker stop skaleclub-mail || true
+            docker rm skaleclub-mail || true
+            
+            # Pull and run new image
+            docker pull $IMAGE
+            docker run -d \
+              --name skaleclub-mail \
+              --restart unless-stopped \
+              -p 9001:9001 \
+              -p 25:25 \
+              -p 587:587 \
+              -p 993:993 \
+              -e NODE_ENV=production \
+              -e PORT=9001 \
+              -e SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
+              -e SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
+              -e SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }} \
+              -e DATABASE_URL=${{ secrets.DATABASE_URL }} \
+              -e JWT_SECRET=${{ secrets.JWT_SECRET }} \
+              -e ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }} \
+              -e OUTLOOK_TOKEN_ENCRYPTION_KEY=${{ secrets.OUTLOOK_TOKEN_ENCRYPTION_KEY }} \
+              -e MAIL_DOMAIN=${{ secrets.MAIL_DOMAIN }} \
+              -e SMTP_HOST=${{ secrets.SMTP_HOST }} \
+              -e SMTP_PORT=${{ secrets.SMTP_PORT }} \
+              -e SMTP_USER=${{ secrets.SMTP_USER }} \
+              -e SMTP_PASS=${{ secrets.SMTP_PASS }} \
+              -e SMTP_FROM=${{ secrets.SMTP_FROM }} \
+              -e SMTP_SUBMISSION_PORT=587 \
+              -e IMAP_PORT=993 \
+              -e ENABLE_MAIL_SERVER=true \
+              $IMAGE

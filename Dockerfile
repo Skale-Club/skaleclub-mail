@@ -10,6 +10,8 @@ RUN npm run build
 
 ENV NODE_ENV=production
 
-EXPOSE 3001
+EXPOSE 9001 25 587 993
 
-CMD ["npm", "start"]
+ENV PORT=9001
+
+CMD ["node", "dist/server/index.js"]
