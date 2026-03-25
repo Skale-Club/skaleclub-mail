@@ -4,6 +4,8 @@ import { db } from '../../../db'
 import { emailAccounts, organizationUsers } from '../../../db/schema'
 import { eq, and } from 'drizzle-orm'
 import { encrypt, decrypt } from '../../../lib/crypto'
+import nodemailer from 'nodemailer'
+import { ImapFlow } from 'imapflow'
 
 const router = Router()
 
@@ -335,8 +337,74 @@ router.post('/:id/verify', async (req: Request, res: Response) => {
             return res.status(403).json({ error: 'Access denied' })
         }
 
-        // TODO: Implement actual SMTP/IMAP connection test
-        // For now, just mark as verified
+        const smtpPassword = decrypt(account.smtpPassword)
+        const errors: string[] = []
+
+        // Test SMTP connection
+        try {
+            const smtpTransporter = nodemailer.createTransport({
+                host: account.smtpHost,
+                port: account.smtpPort,
+                secure: account.smtpSecure,
+                auth: {
+                    user: account.smtpUsername,
+                    pass: smtpPassword,
+                },
+                connectionTimeout: 10_000,
+                greetingTimeout: 10_000,
+            })
+
+            await smtpTransporter.verify()
+            smtpTransporter.close()
+        } catch (smtpError) {
+            const msg = smtpError instanceof Error ? smtpError.message : 'SMTP connection failed'
+            errors.push(`SMTP: ${msg}`)
+        }
+
+        // Test IMAP connection (if configured)
+        if (account.imapHost && account.imapUsername && account.imapPassword) {
+            try {
+                const imapPassword = decrypt(account.imapPassword)
+                const imapClient = new ImapFlow({
+                    host: account.imapHost,
+                    port: account.imapPort || 993,
+                    secure: account.imapSecure !== false,
+                    auth: {
+                        user: account.imapUsername,
+                        pass: imapPassword,
+                    },
+                    logger: false,
+                })
+
+                await imapClient.connect()
+                await imapClient.logout()
+            } catch (imapError) {
+                const msg = imapError instanceof Error ? imapError.message : 'IMAP connection failed'
+                errors.push(`IMAP: ${msg}`)
+            }
+        }
+
+        if (errors.length > 0) {
+            const [updatedAccount] = await db.update(emailAccounts)
+                .set({
+                    status: 'failed',
+                    lastError: errors.join('; '),
+                    updatedAt: new Date(),
+                })
+                .where(eq(emailAccounts.id, accountId))
+                .returning()
+
+            return res.status(400).json({
+                emailAccount: {
+                    ...updatedAccount,
+                    smtpPassword: undefined,
+                    imapPassword: undefined,
+                },
+                verified: false,
+                errors,
+            })
+        }
+
         const [updatedAccount] = await db.update(emailAccounts)
             .set({
                 status: 'verified',

@@ -4,6 +4,7 @@ import { db } from '../../db'
 import { webhooks, webhookRequests, organizations, organizationUsers } from '../../db/schema'
 import { eq, and, desc } from 'drizzle-orm'
 import { isPlatformAdmin } from '../lib/admin'
+import { createHmac } from 'crypto'
 
 const router = Router()
 
@@ -315,13 +316,21 @@ router.post('/:id/test', async (req: Request, res: Response) => {
         }
 
         try {
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+                'X-Webhook-Event': 'test',
+            }
+
+            if (webhook.secret) {
+                const sig = createHmac('sha256', webhook.secret)
+                    .update(JSON.stringify(testPayload))
+                    .digest('hex')
+                headers['X-Webhook-Signature'] = `sha256=${sig}`
+            }
+
             const response = await fetch(webhook.url, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Webhook-Secret': webhook.secret || '',
-                    'X-Webhook-Event': 'test',
-                },
+                headers,
                 body: JSON.stringify(testPayload),
             })
 

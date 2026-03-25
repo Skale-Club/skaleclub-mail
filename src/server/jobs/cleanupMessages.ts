@@ -1,25 +1,34 @@
 import { db } from '../../db'
-import { messages, deliveries, organizations } from '../../db/schema'
-import { eq } from 'drizzle-orm'
+import { messages, deliveries, outreachEmails, webhookRequests } from '../../db/schema'
+import { lt, eq } from 'drizzle-orm'
 
 let running = false
+
+const RETENTION_DAYS = parseInt(process.env.MESSAGE_RETENTION_DAYS || '30')
+const WEBHOOK_LOG_RETENTION_DAYS = parseInt(process.env.WEBHOOK_LOG_RETENTION_DAYS || '7')
+const BATCH_SIZE = 500
 
 export async function cleanupOldMessages(): Promise<void> {
     if (running) return
     running = true
 
     try {
-        const allOrganizations = await db.select({ id: organizations.id }).from(organizations)
+        const cutoffDate = new Date()
+        cutoffDate.setDate(cutoffDate.getDate() - RETENTION_DAYS)
 
+        const webhookCutoff = new Date()
+        webhookCutoff.setDate(webhookCutoff.getDate() - WEBHOOK_LOG_RETENTION_DAYS)
+
+        // Clean old messages
         let totalDeleted = 0
-
-        for (const org of allOrganizations) {
+        while (true) {
             const oldMessages = await db
                 .select({ id: messages.id })
                 .from(messages)
-                .where(eq(messages.organizationId, org.id))
+                .where(lt(messages.createdAt, cutoffDate))
+                .limit(BATCH_SIZE)
 
-            if (oldMessages.length === 0) continue
+            if (oldMessages.length === 0) break
 
             const messageIds = oldMessages.map((m) => m.id)
 
@@ -34,8 +43,44 @@ export async function cleanupOldMessages(): Promise<void> {
             totalDeleted += oldMessages.length
         }
 
-        if (totalDeleted > 0) {
-            console.log(`[cleanup] Deleted ${totalDeleted} old messages`)
+        // Clean old outreach emails
+        let outreachDeleted = 0
+        while (true) {
+            const oldOutreach = await db
+                .select({ id: outreachEmails.id })
+                .from(outreachEmails)
+                .where(lt(outreachEmails.createdAt, cutoffDate))
+                .limit(BATCH_SIZE)
+
+            if (oldOutreach.length === 0) break
+
+            for (const email of oldOutreach) {
+                await db.delete(outreachEmails).where(eq(outreachEmails.id, email.id))
+            }
+
+            outreachDeleted += oldOutreach.length
+        }
+
+        // Clean old webhook request logs
+        let webhookLogsDeleted = 0
+        while (true) {
+            const oldLogs = await db
+                .select({ id: webhookRequests.id })
+                .from(webhookRequests)
+                .where(lt(webhookRequests.createdAt, webhookCutoff))
+                .limit(BATCH_SIZE)
+
+            if (oldLogs.length === 0) break
+
+            for (const log of oldLogs) {
+                await db.delete(webhookRequests).where(eq(webhookRequests.id, log.id))
+            }
+
+            webhookLogsDeleted += oldLogs.length
+        }
+
+        if (totalDeleted > 0 || outreachDeleted > 0 || webhookLogsDeleted > 0) {
+            console.log(`[cleanup] Deleted ${totalDeleted} messages, ${outreachDeleted} outreach emails, ${webhookLogsDeleted} webhook logs (retention: ${RETENTION_DAYS}d)`)
         }
     } catch (err) {
         console.error('[cleanup] Error:', err)

@@ -11,10 +11,11 @@
 
 import nodemailer from 'nodemailer'
 import { db } from '../../db'
-import { campaigns, sequences, sequenceSteps, campaignLeads, leads, emailAccounts, outreachEmails } from '../../db/schema'
-import { eq, and, lte, gt, sql, inArray, notInArray, isNotNull } from 'drizzle-orm'
+import { campaigns, sequenceSteps, campaignLeads, leads, emailAccounts, outreachEmails, suppressions } from '../../db/schema'
+import { eq, and, lte, gt, sql, inArray, notInArray } from 'drizzle-orm'
 import { decryptSecret } from '../lib/crypto'
 import { interpolateTemplate } from '../lib/template-variables'
+import { injectTracking } from '../lib/tracking'
 
 type Campaign = typeof campaigns.$inferSelect
 type Lead = typeof leads.$inferSelect
@@ -87,8 +88,9 @@ async function sendEmail(
     subject: string,
     htmlBody: string | null,
     plainBody: string | null,
-    replyTo?: string | null
-): Promise<{ messageId: string }> {
+    replyTo?: string | null,
+    tracking?: { token: string; baseUrl: string; trackOpens: boolean; trackClicks: boolean }
+): Promise<{ messageId: string; finalHtml: string | null }> {
     const transporter = nodemailer.createTransport({
         host: account.smtpHost,
         port: account.smtpPort,
@@ -99,18 +101,29 @@ async function sendEmail(
         }
     })
 
+    let finalHtml = htmlBody
+    if (finalHtml && tracking && (tracking.trackOpens || tracking.trackClicks)) {
+        finalHtml = injectTracking(
+            finalHtml,
+            tracking.token,
+            tracking.baseUrl,
+            tracking.trackOpens,
+            tracking.trackClicks
+        )
+    }
+
     const from = fromName ? `${fromName} <${account.email}>` : account.email
 
     const info = await transporter.sendMail({
         from,
         to,
         subject,
-        html: htmlBody || undefined,
+        html: finalHtml || undefined,
         text: plainBody || undefined,
         replyTo: replyTo || undefined
     })
 
-    return { messageId: info.messageId }
+    return { messageId: info.messageId, finalHtml }
 }
 
 export async function processOutreachSequences(): Promise<{ processed: number; sent: number; errors: number }> {
@@ -188,6 +201,19 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
                 continue
             }
 
+            const isSuppressed = await db.query.suppressions.findFirst({
+                where: and(
+                    eq(suppressions.organizationId, campaign.organizationId),
+                    eq(suppressions.emailAddress, lead.email)
+                ),
+            })
+            if (isSuppressed) {
+                await db.update(campaignLeads)
+                    .set({ status: 'bounced', nextScheduledAt: null })
+                    .where(eq(campaignLeads.id, campaignLead.id))
+                continue
+            }
+
             if (!isWithinSendWindow(campaign, now)) {
                 continue
             }
@@ -221,14 +247,21 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
             const htmlBody = currentStep.htmlBody ? interpolateTemplate(currentStep.htmlBody, lead as any) : null
             const plainBody = currentStep.plainBody ? interpolateTemplate(currentStep.plainBody, lead as any) : null
 
-            const { messageId } = await sendEmail(
+            const trackingBaseUrl = process.env.FRONTEND_URL || 'http://localhost:9000'
+            const { messageId, finalHtml } = await sendEmail(
                 emailAccount,
                 lead.email,
                 campaign.fromName,
                 subject,
                 htmlBody,
                 plainBody,
-                campaign.replyToEmail
+                campaign.replyToEmail,
+                {
+                    token: campaignLead.id,
+                    baseUrl: trackingBaseUrl,
+                    trackOpens: campaign.trackOpens,
+                    trackClicks: campaign.trackClicks,
+                }
             )
 
             await db.insert(outreachEmails).values({
@@ -240,7 +273,7 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
                 messageId,
                 subject,
                 plainBody,
-                htmlBody,
+                htmlBody: finalHtml,
                 abVariant: null,
                 status: 'sent',
                 sentAt: new Date()

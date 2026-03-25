@@ -6,17 +6,33 @@ import { incrementStat, fireWebhooks } from '../lib/tracking'
 
 let running = false
 
+const MAX_RETRIES = 3
+const RETRY_DELAYS_MS = [60_000, 300_000, 900_000] // 1min, 5min, 15min
+
 export async function processQueue(): Promise<void> {
     if (running) return
     running = true
 
     try {
+        const now = new Date().toISOString()
         const pendingDeliveries = await db.query.deliveries.findMany({
             where: eq(deliveries.status, 'pending'),
             limit: 50,
         })
 
-        for (const delivery of pendingDeliveries) {
+        // Filter out deliveries still in retry delay
+        const readyDeliveries = pendingDeliveries.filter((d) => {
+            if (!d.details) return true
+            try {
+                const details = JSON.parse(d.details)
+                if (details.nextAttempt && new Date(details.nextAttempt) > new Date(now)) {
+                    return false // Still in retry delay
+                }
+            } catch { /* not JSON — ready to process */ }
+            return true
+        })
+
+        for (const delivery of readyDeliveries) {
             await processDelivery(delivery)
         }
     } catch (err) {
@@ -125,12 +141,37 @@ async function processDelivery(delivery: typeof deliveries.$inferSelect): Promis
         const errorMsg = err instanceof Error ? err.message : 'Unknown error'
         console.error(`[processQueue] Delivery ${delivery.id} failed:`, errorMsg)
 
-        await db.update(deliveries)
-            .set({
-                status: 'bounced',
-                bouncedAt: new Date(),
-                details: errorMsg,
-            })
-            .where(eq(deliveries.id, delivery.id))
+        // Parse retry count from details
+        let retryCount = 0
+        try {
+            const details = JSON.parse(delivery.details || '{}')
+            retryCount = details.retryCount || 0
+        } catch { /* first attempt */ }
+
+        retryCount++
+
+        if (retryCount <= MAX_RETRIES) {
+            const delayMs = RETRY_DELAYS_MS[Math.min(retryCount - 1, RETRY_DELAYS_MS.length - 1)]
+            const nextAttempt = new Date(Date.now() + delayMs)
+
+            await db.update(deliveries)
+                .set({
+                    status: 'pending',
+                    details: JSON.stringify({ retryCount, lastError: errorMsg, nextAttempt: nextAttempt.toISOString() }),
+                })
+                .where(eq(deliveries.id, delivery.id))
+
+            console.log(`[processQueue] Delivery ${delivery.id} will retry (attempt ${retryCount}/${MAX_RETRIES}) after ${delayMs / 1000}s`)
+        } else {
+            await db.update(deliveries)
+                .set({
+                    status: 'bounced',
+                    bouncedAt: new Date(),
+                    details: errorMsg,
+                })
+                .where(eq(deliveries.id, delivery.id))
+
+            console.log(`[processQueue] Delivery ${delivery.id} permanently failed after ${MAX_RETRIES} retries`)
+        }
     }
 }
