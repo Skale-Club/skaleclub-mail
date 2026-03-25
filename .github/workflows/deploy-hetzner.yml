@@ -1,0 +1,50 @@
+name: Deploy to Hetzner
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_APP_NAME: "Skale Club Mail"
+
+      - name: Deploy to Hetzner via RSync
+        uses: burnett01/rsync-deployments@5.2
+        with:
+          switches: -avz --delete
+          remote_path: /opt/skaleclub-mail/
+          remote_host: ${{ secrets.HETZNER_HOST }}
+          remote_user: root
+          remote_key: ${{ secrets.HETZNER_SSH_KEY }}
+
+      - name: Setup PM2 on Hetzner
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: root
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            cd /opt/skaleclub-mail
+            pm2 delete skaleclub-mail || true
+            pm2 start npm --name skaleclub-mail -- start
+            pm2 save
