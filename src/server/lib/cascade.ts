@@ -3,9 +3,10 @@ import {
     deliveries, messages, webhookRequests, webhooks,
     credentials, routes, smtpEndpoints, httpEndpoints,
     addressEndpoints, domains, templates, trackDomains,
-    suppressions, statistics, organizationUsers, organizations,
+    suppressions, statistics, organizationUsers, organizations, users,
 } from '../../db/schema'
 import { eq } from 'drizzle-orm'
+import { deleteUserMailbox } from './native-mail'
 
 export async function deleteOrganizationCascade(organizationId: string): Promise<void> {
     await db.delete(deliveries).where(eq(deliveries.organizationId, organizationId))
@@ -38,6 +39,18 @@ export async function deleteOrganizationCascade(organizationId: string): Promise
     await db.delete(suppressions).where(eq(suppressions.organizationId, organizationId))
 
     await db.delete(statistics).where(eq(statistics.organizationId, organizationId))
+
+    // Clean up native mailboxes for all org members
+    const memberships = await db.query.organizationUsers.findMany({
+        where: eq(organizationUsers.organizationId, organizationId),
+        columns: { userId: true },
+    })
+    for (const { userId } of memberships) {
+        await deleteUserMailbox(userId)
+        await db.update(users)
+            .set({ passwordHash: null })
+            .where(eq(users.id, userId))
+    }
 
     await db.delete(organizationUsers).where(eq(organizationUsers.organizationId, organizationId))
 

@@ -5,6 +5,7 @@ import { db } from '../../db'
 import { users, organizationUsers, organizations } from '../../db/schema'
 import { eq, and } from 'drizzle-orm'
 import { isPlatformAdmin } from '../lib/admin'
+import { hashPassword, createUserMailbox, validateEmailDomainForOrg, deleteUserMailbox } from '../lib/native-mail'
 
 const router = Router()
 
@@ -227,6 +228,16 @@ router.post('/', async (req: Request, res: Response) => {
             if (!targetOrganization) {
                 return res.status(404).json({ error: 'Organization not found' })
             }
+
+            // Non-admin users must have email matching a verified domain in the org
+            if (!userData.isAdmin) {
+                const domainValid = await validateEmailDomainForOrg(userData.email, userData.organizationId)
+                if (!domainValid) {
+                    return res.status(400).json({
+                        error: 'User email domain must match a verified domain of the organization. Verify the domain first, then create the user.',
+                    })
+                }
+            }
         }
 
         // Check if user already exists
@@ -258,6 +269,12 @@ router.post('/', async (req: Request, res: Response) => {
             return res.status(500).json({ error: 'Failed to create user' })
         }
 
+        // Hash password for SMTP/IMAP auth (non-admin users with immediate password)
+        let passwordHash: string | null = null
+        if (!userData.isAdmin && userData.password && !userData.sendInvite) {
+            passwordHash = await hashPassword(userData.password)
+        }
+
         // Create user profile in database
         const [newUser] = await db.insert(users).values({
             id: authData.user.id,
@@ -266,6 +283,7 @@ router.post('/', async (req: Request, res: Response) => {
             lastName: userData.lastName || null,
             isAdmin: userData.isAdmin,
             emailVerified: true,
+            passwordHash,
         }).returning()
 
         if (userData.organizationId) {
@@ -274,6 +292,11 @@ router.post('/', async (req: Request, res: Response) => {
                 userId: newUser.id,
                 role: userData.organizationRole,
             })
+
+            // Auto-create native mailbox for non-admin users with a password
+            if (!userData.isAdmin && passwordHash) {
+                await createUserMailbox(newUser.id, userData.email)
+            }
         }
 
         // If sendInvite is true, send password reset email
@@ -500,6 +523,18 @@ router.put('/:id/password', async (req: Request, res: Response) => {
             return res.status(400).json({ error: error.message })
         }
 
+        // Sync passwordHash for SMTP/IMAP auth
+        const targetUser = await db.query.users.findFirst({ where: eq(users.id, targetUserId) })
+        if (targetUser && !targetUser.isAdmin) {
+            const newHash = await hashPassword(password)
+            await db.update(users)
+                .set({ passwordHash: newHash, updatedAt: new Date() })
+                .where(eq(users.id, targetUserId))
+
+            // Create mailbox if it doesn't exist yet (e.g. first password set after invite)
+            await createUserMailbox(targetUserId, targetUser.email)
+        }
+
         res.json({ message: 'Password updated successfully' })
     } catch (error) {
         if (error instanceof z.ZodError) {
@@ -540,12 +575,53 @@ router.delete('/:id', async (req: Request, res: Response) => {
             console.error('Error deleting user from auth:', authError)
         }
 
+        // Delete native mailbox and messages
+        await deleteUserMailbox(targetUserId)
+
         // Delete from database
         await db.delete(users).where(eq(users.id, targetUserId))
 
         res.json({ message: 'User deleted successfully' })
     } catch (error) {
         console.error('Error deleting user:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+// Self-service: change own password (syncs Supabase Auth + users.passwordHash)
+router.post('/me/change-password', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+        const { currentPassword, newPassword } = z.object({
+            currentPassword: z.string(),
+            newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+        }).parse(req.body)
+
+        const user = await db.query.users.findFirst({ where: eq(users.id, userId) })
+        if (!user) return res.status(404).json({ error: 'User not found' })
+        if (user.isAdmin) return res.status(403).json({ error: 'Platform admins cannot use this endpoint' })
+        if (!user.passwordHash) return res.status(400).json({ error: 'No password set on this account' })
+
+        const bcrypt = await import('bcrypt')
+        const valid = await bcrypt.default.compare(currentPassword, user.passwordHash)
+        if (!valid) return res.status(400).json({ error: 'Current password is incorrect' })
+
+        const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, { password: newPassword })
+        if (error) return res.status(400).json({ error: error.message })
+
+        const newHash = await hashPassword(newPassword)
+        await db.update(users)
+            .set({ passwordHash: newHash, updatedAt: new Date() })
+            .where(eq(users.id, userId))
+
+        res.json({ message: 'Password changed successfully' })
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({ error: error.errors })
+        }
+        console.error('Error changing password:', error)
         res.status(500).json({ error: 'Internal server error' })
     }
 })

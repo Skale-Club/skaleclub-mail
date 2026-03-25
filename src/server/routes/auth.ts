@@ -1,6 +1,10 @@
 import { Router, Request, Response } from 'express'
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
+import { db } from '../../db'
+import { users } from '../../db/schema'
+import { eq } from 'drizzle-orm'
+import { hashPassword, createUserMailbox } from '../lib/native-mail'
 
 const router = Router()
 
@@ -177,10 +181,25 @@ router.post('/update-password', async (req: Request, res: Response) => {
             },
         })
 
-        const { error } = await userClient.auth.updateUser({ password })
+        const { error, data: updatedData } = await userClient.auth.updateUser({ password })
 
         if (error) {
             return res.status(400).json({ error: error.message })
+        }
+
+        // Sync passwordHash for SMTP/IMAP auth, and create mailbox on first set
+        if (updatedData?.user) {
+            const userId = updatedData.user.id
+            const dbUser = await db.query.users.findFirst({ where: eq(users.id, userId) })
+            if (dbUser && !dbUser.isAdmin) {
+                const newHash = await hashPassword(password)
+                await db.update(users)
+                    .set({ passwordHash: newHash, updatedAt: new Date() })
+                    .where(eq(users.id, userId))
+
+                // Create mailbox on first password set (invite flow)
+                await createUserMailbox(userId, dbUser.email)
+            }
         }
 
         res.json({ message: 'Password updated successfully' })

@@ -4,30 +4,17 @@
  * Listens on SMTP_SUBMISSION_PORT (default 2587 for dev, 587 for prod).
  * Authenticated users can submit email for delivery.
  *
- * Auth: PLAIN/LOGIN against nativeMailboxes.passwordHash (bcrypt)
+ * Auth: PLAIN/LOGIN against users.passwordHash (bcrypt) — same password as web login.
  */
 
 import { SMTPServer } from 'smtp-server'
-import bcrypt from 'bcrypt'
 import nodemailer from 'nodemailer'
 import { v4 as uuidv4 } from 'uuid'
 import { db } from '../db'
-import { nativeMailboxes, mailboxes, mailFolders, mailMessages } from '../db/schema'
+import { mailboxes, mailFolders, mailMessages } from '../db/schema'
 import { eq, and } from 'drizzle-orm'
 import { parseRawEmail } from './lib/mail'
-
-// Lookup a native mailbox by email and verify password
-async function authenticateNativeMailbox(email: string, password: string) {
-    const account = await db.query.nativeMailboxes.findFirst({
-        where: and(
-            eq(nativeMailboxes.email, email.toLowerCase()),
-            eq(nativeMailboxes.isActive, true)
-        ),
-    })
-    if (!account) return null
-    const valid = await bcrypt.compare(password, account.passwordHash)
-    return valid ? account : null
-}
+import { authenticateNativeUser, findLocalUser } from './lib/native-mail'
 
 // Find the companion mailboxes entry (for folder/message storage)
 async function getCompanionMailbox(email: string, userId: string) {
@@ -124,15 +111,10 @@ async function relayMessage(
     }
 }
 
-// Check if an address is a local (native) account on this server
+// Check if an address is a local (native) user on this server
 async function isLocalAddress(email: string): Promise<string | null> {
-    const account = await db.query.nativeMailboxes.findFirst({
-        where: and(
-            eq(nativeMailboxes.email, email.toLowerCase()),
-            eq(nativeMailboxes.isActive, true)
-        ),
-    })
-    return account ? account.organizationId : null
+    const result = await findLocalUser(email)
+    return result ? result.userId : null
 }
 
 export function createSMTPServer() {
@@ -147,21 +129,21 @@ export function createSMTPServer() {
         authOptional: false,
 
         onAuth(auth, _session, callback) {
-            const username = auth.username
+            const username = auth.username?.toLowerCase()
             const password = auth.password
 
             if (!username || !password) {
                 return callback(new Error('Username and password required'))
             }
 
-            authenticateNativeMailbox(username, password)
+            authenticateNativeUser(username, password)
                 .then(account => {
                     if (!account) {
                         return callback(new Error('Invalid credentials'))
                     }
                     console.log(`[SMTP] Auth success: ${username}`)
                     // Return user object; this becomes session.user
-                    callback(null, { user: JSON.stringify({ email: account.email, userId: account.organizationId }) })
+                    callback(null, { user: JSON.stringify({ email: account.email, userId: account.id }) })
                 })
                 .catch(err => {
                     console.error('[SMTP] Auth error:', err)

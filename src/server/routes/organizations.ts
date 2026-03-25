@@ -5,6 +5,7 @@ import { organizations, organizationUsers, users, messages, statistics } from '.
 import { eq, and, isNotNull, sql, gte, desc } from 'drizzle-orm'
 import { deleteOrganizationCascade } from '../lib/cascade'
 import { isPlatformAdmin } from '../lib/admin'
+import { validateEmailDomainForOrg, createUserMailbox, deleteUserMailbox } from '../lib/native-mail'
 
 const router = Router()
 const createOrganizationSchema = z.object({
@@ -265,6 +266,16 @@ router.post('/:id/members', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'User not found' })
         }
 
+        // Non-admin users must have email matching a verified domain in the org
+        if (!userToAdd.isAdmin) {
+            const domainValid = await validateEmailDomainForOrg(userToAdd.email, organizationId)
+            if (!domainValid) {
+                return res.status(400).json({
+                    error: 'User email domain does not match any verified domain of this organization.',
+                })
+            }
+        }
+
         const existingMembership = await db.query.organizationUsers.findFirst({
             where: and(
                 eq(organizationUsers.organizationId, organizationId),
@@ -281,6 +292,11 @@ router.post('/:id/members', async (req: Request, res: Response) => {
             userId: userToAdd.id,
             role,
         }).returning()
+
+        // Auto-create native mailbox if the user already has a passwordHash
+        if (!userToAdd.isAdmin && userToAdd.passwordHash) {
+            await createUserMailbox(userToAdd.id, userToAdd.email)
+        }
 
         res.status(201).json({ membership: newMembership })
     } catch (error) {
@@ -329,6 +345,12 @@ router.delete('/:id/members/:userId', async (req: Request, res: Response) => {
                 eq(organizationUsers.userId, targetUserId)
             )
         )
+
+        // Remove native mailbox and revoke SMTP/IMAP access
+        await deleteUserMailbox(targetUserId)
+        await db.update(users)
+            .set({ passwordHash: null, updatedAt: new Date() })
+            .where(eq(users.id, targetUserId))
 
         res.json({ message: 'Member removed successfully' })
     } catch (error) {

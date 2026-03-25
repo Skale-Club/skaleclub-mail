@@ -21,7 +21,6 @@ import templateRoutes from './routes/templates'
 import outreachRoutes from './routes/outreach'
 import outlookRoutes from './routes/outlook'
 import mailRoutes from './routes/mail'
-import nativeMailboxRoutes from './routes/native-mailboxes'
 import { createSMTPServer } from './smtp-server'
 import { createIMAPServer, loadImapBranding } from './imap-server'
 
@@ -83,6 +82,7 @@ const PUBLIC_PATHS = [
     '/api/auth/reset-password',
     '/api/auth/refresh',
     '/api/system/branding',
+    '/api/system/mail-server-info',
 ]
 
 app.use('/api', async (req, res, next) => {
@@ -137,7 +137,6 @@ app.use('/api/templates', templateRoutes)
 app.use('/api/outreach', outreachRoutes)
 app.use('/api/outlook', outlookRoutes)
 app.use('/api/mail', mailRoutes)
-app.use('/api/native-mailboxes', nativeMailboxRoutes)
 
 app.use('/t', trackRoutes)
 

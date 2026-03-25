@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express'
 import { createClient } from '@supabase/supabase-js'
 import { db } from '../../db'
 import { sql } from 'drizzle-orm'
-import { systemBranding, users } from '../../db/schema'
+import { systemBranding, users, organizations } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { readBranding as readBrandingFromDB, clearBrandingCache } from '../lib/serverBranding'
@@ -360,6 +360,85 @@ router.get('/usage', async (req: Request, res: Response) => {
         })
     } catch (error) {
         console.error('Error fetching system usage:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+// GET /api/system/mail-server-info — public SMTP/IMAP connection info
+router.get('/mail-server-info', (_req: Request, res: Response) => {
+    const mailHost = process.env.MAIL_HOST || 'localhost'
+    const smtpPort = parseInt(process.env.SMTP_SUBMISSION_PORT || '2587')
+    const imapPort = parseInt(process.env.IMAP_PORT || '2993')
+
+    res.json({
+        smtp: {
+            host: mailHost,
+            port: smtpPort,
+            security: 'STARTTLS',
+            auth: 'PLAIN/LOGIN',
+            description: 'Use your account email and password to authenticate',
+        },
+        imap: {
+            host: mailHost,
+            port: imapPort,
+            security: 'SSL/TLS',
+            auth: 'PLAIN',
+            description: 'Use your account email and password to authenticate',
+        },
+    })
+})
+
+// GET /api/system/outreach - Get outreach enabled status (platform-wide)
+router.get('/outreach', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        const { isPlatformAdmin } = await import('../lib/admin')
+        if (!await isPlatformAdmin(userId)) {
+            return res.status(403).json({ error: 'Forbidden' })
+        }
+
+        const allOrgs = await db.select({ outreach_enabled: organizations.outreach_enabled }).from(organizations)
+        const enabledOrgs = allOrgs.filter(o => o.outreach_enabled).length
+        const totalOrgs = allOrgs.length
+
+        res.json({
+            outreach_enabled: enabledOrgs === totalOrgs,
+            enabled_count: enabledOrgs,
+            total_count: totalOrgs,
+        })
+    } catch (error) {
+        console.error('Error fetching outreach status:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+// PUT /api/system/outreach - Toggle outreach enabled for all organizations
+router.put('/outreach', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        const { isPlatformAdmin } = await import('../lib/admin')
+        if (!await isPlatformAdmin(userId)) {
+            return res.status(403).json({ error: 'Forbidden' })
+        }
+
+        const { enabled } = req.body
+        if (typeof enabled !== 'boolean') {
+            return res.status(400).json({ error: 'enabled must be a boolean' })
+        }
+
+        await db.update(organizations).set({ outreach_enabled: enabled })
+
+        res.json({ success: true, outreach_enabled: enabled })
+    } catch (error) {
+        console.error('Error updating outreach status:', error)
         res.status(500).json({ error: 'Internal server error' })
     }
 })

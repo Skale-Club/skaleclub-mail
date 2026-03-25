@@ -436,7 +436,10 @@ async function getLastKnownUid(mailboxId: string, folderId: string): Promise<num
 
 export async function syncAllMailboxes(): Promise<SyncResult[]> {
     const mailboxesToSync = await db.query.mailboxes.findMany({
-        where: eq(mailboxes.isActive, true),
+        where: and(
+            eq(mailboxes.isActive, true),
+            eq(mailboxes.isNative, false)
+        ),
     })
 
     const results: SyncResult[] = []

@@ -28,6 +28,7 @@ import { InboxesPage } from './pages/outreach/InboxesPage'
 import { SequencesPage } from './pages/outreach/SequencesPage'
 import { AnalyticsPage as OutreachAnalyticsPage } from './pages/outreach/AnalyticsPage'
 import { SettingsPage as OutreachSettingsPage } from './pages/outreach/SettingsPage'
+import { OutreachCheck } from './components/OutreachCheck'
 
 import InboxPage from './pages/mail/InboxPage'
 import SentPage from './pages/mail/SentPage'
@@ -192,37 +193,51 @@ function App() {
 
                         <Route path="/outreach">
                             <AuthCheck>
-                                <OutreachDashboard />
+                                <OutreachCheck>
+                                    <OutreachDashboard />
+                                </OutreachCheck>
                             </AuthCheck>
                         </Route>
                         <Route path="/outreach/campaigns">
                             <AuthCheck>
-                                <CampaignsPage />
+                                <OutreachCheck>
+                                    <CampaignsPage />
+                                </OutreachCheck>
                             </AuthCheck>
                         </Route>
                         <Route path="/outreach/leads">
                             <AuthCheck>
-                                <LeadsPage />
+                                <OutreachCheck>
+                                    <LeadsPage />
+                                </OutreachCheck>
                             </AuthCheck>
                         </Route>
                         <Route path="/outreach/inboxes">
                             <AuthCheck>
-                                <InboxesPage />
+                                <OutreachCheck>
+                                    <InboxesPage />
+                                </OutreachCheck>
                             </AuthCheck>
                         </Route>
                         <Route path="/outreach/sequences">
                             <AuthCheck>
-                                <SequencesPage />
+                                <OutreachCheck>
+                                    <SequencesPage />
+                                </OutreachCheck>
                             </AuthCheck>
                         </Route>
                         <Route path="/outreach/analytics">
                             <AuthCheck>
-                                <OutreachAnalyticsPage />
+                                <OutreachCheck>
+                                    <OutreachAnalyticsPage />
+                                </OutreachCheck>
                             </AuthCheck>
                         </Route>
                         <Route path="/outreach/settings">
                             <AuthCheck>
-                                <OutreachSettingsPage />
+                                <OutreachCheck>
+                                    <OutreachSettingsPage />
+                                </OutreachCheck>
                             </AuthCheck>
                         </Route>
 

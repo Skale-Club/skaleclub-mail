@@ -58,6 +58,7 @@ export const organizations = pgTable('organizations', {
     slug: text('slug').notNull().unique(),
     timezone: text('timezone').default('UTC').notNull(),
     owner_id: uuid('owner_id').references(() => users.id).notNull(),
+    outreach_enabled: boolean('outreach_enabled').default(true).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
@@ -71,23 +72,6 @@ export const organizationUsers = pgTable('organization_users', {
     createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
     orgUserUnique: uniqueIndex('org_user_unique').on(table.organizationId, table.userId),
-}))
-
-// Native Mailboxes (for built-in SMTP/IMAP servers)
-export const nativeMailboxes = pgTable('native_mailboxes', {
-    id: uuid('id').primaryKey().defaultRandom(),
-    organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
-    email: text('email').notNull(),
-    username: text('username').notNull(),
-    passwordHash: text('password_hash').notNull(),
-    quotaBytes: bigint('quota_bytes', { mode: 'number' }).default(1073741824),
-    usedBytes: bigint('used_bytes', { mode: 'number' }).default(0).notNull(),
-    isActive: boolean('is_active').default(true).notNull(),
-    lastLoginAt: timestamp('last_login_at'),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
-}, (table) => ({
-    orgEmailUnique: uniqueIndex('native_mailbox_org_email_unique').on(table.organizationId, table.email),
 }))
 
 // Domains table
@@ -355,6 +339,17 @@ export const statistics = pgTable('statistics', {
     orgDateUnique: uniqueIndex('stats_org_date_unique').on(table.organizationId, table.date),
 }))
 
+export const systemBranding = pgTable('system_branding', {
+    id: text('id').primaryKey().default('default'),
+    companyName: text('company_name').notNull().default(''),
+    applicationName: text('application_name').notNull().default('Mail Platform'),
+    logoStorage: text('logo_storage'),
+    faviconStorage: text('favicon_storage'),
+    mailHost: text('mail_host'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
     organizations: many(organizationUsers),
@@ -379,7 +374,6 @@ export const organizationsRelations = relations(organizations, ({ one, many }) =
     suppressions: many(suppressions),
     statistics: many(statistics),
     templates: many(templates),
-    nativeMailboxes: many(nativeMailboxes),
 }))
 
 export const organizationUsersRelations = relations(organizationUsers, ({ one }) => ({
@@ -390,13 +384,6 @@ export const organizationUsersRelations = relations(organizationUsers, ({ one })
     user: one(users, {
         fields: [organizationUsers.userId],
         references: [users.id],
-    }),
-}))
-
-export const nativeMailboxesRelations = relations(nativeMailboxes, ({ one }) => ({
-    organization: one(organizations, {
-        fields: [nativeMailboxes.organizationId],
-        references: [organizations.id],
     }),
 }))
 
@@ -1061,6 +1048,7 @@ export const mailboxes = pgTable('mailboxes', {
     // Status
     isDefault: boolean('is_default').default(false).notNull(),
     isActive: boolean('is_active').default(true).notNull(),
+    isNative: boolean('is_native').default(false).notNull(),
     lastSyncAt: timestamp('last_sync_at'),
     syncError: text('sync_error'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -1182,14 +1170,6 @@ export type NewMailFolder = typeof mailFolders.$inferInsert
 
 export type MailMessage = typeof mailMessages.$inferSelect
 export type NewMailMessage = typeof mailMessages.$inferInsert
-
-// Zod schemas
-export const insertNativeMailboxSchema = createInsertSchema(nativeMailboxes)
-export const selectNativeMailboxSchema = createSelectSchema(nativeMailboxes)
-
-// Types
-export type NativeMailbox = typeof nativeMailboxes.$inferSelect
-export type NewNativeMailbox = typeof nativeMailboxes.$inferInsert
 
 export type MailFilter = typeof mailFilters.$inferSelect
 export type NewMailFilter = typeof mailFilters.$inferInsert

@@ -3,7 +3,7 @@
  *
  * Listens on IMAP_PORT (default 2993 for dev, 993 for prod).
  * Allows Thunderbird and other email clients to read/manage mail
- * stored in the nativeMailboxes / mailMessages database tables.
+ * stored in the mailboxes / mailMessages database tables.
  *
  * Implemented using raw Node.js net module for maximum compatibility.
  * Supports: LOGIN, CAPABILITY, LIST, LSUB, SELECT, EXAMINE, FETCH,
@@ -11,11 +11,11 @@
  */
 
 import net from 'net'
-import bcrypt from 'bcrypt'
 import { db } from '../db'
-import { nativeMailboxes, mailboxes, mailFolders, mailMessages } from '../db/schema'
+import { mailboxes, mailFolders, mailMessages } from '../db/schema'
 import { eq, and, asc } from 'drizzle-orm'
 import { getCachedBranding } from './lib/serverBranding'
+import { authenticateNativeUser } from './lib/native-mail'
 
 let _imapAppName = process.env.APP_APPLICATION_NAME ?? ''
 
@@ -50,15 +50,7 @@ interface DBFolder {
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 async function authenticate(email: string, password: string) {
-    const account = await db.query.nativeMailboxes.findFirst({
-        where: and(
-            eq(nativeMailboxes.email, email.toLowerCase()),
-            eq(nativeMailboxes.isActive, true)
-        ),
-    })
-    if (!account) return null
-    const valid = await bcrypt.compare(password, account.passwordHash)
-    return valid ? account : null
+    return authenticateNativeUser(email, password)
 }
 
 async function getCompanionMailbox(email: string, userId: string) {
