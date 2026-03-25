@@ -20,7 +20,8 @@ import {
     ExternalLink,
     Server,
     Filter,
-    Trash
+    Trash,
+    PenTool
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
@@ -36,7 +37,7 @@ async function mailFetch(url: string, init: RequestInit = {}): Promise<Response>
     })
 }
 
-type TabId = 'profile' | 'notifications' | 'security' | 'appearance' | 'accounts' | 'filters'
+type TabId = 'profile' | 'notifications' | 'security' | 'appearance' | 'accounts' | 'filters' | 'signatures'
 
 interface Tab {
     id: TabId
@@ -50,6 +51,7 @@ const tabs: Tab[] = [
     { id: 'security', label: 'Security', icon: <Shield className="w-5 h-5" /> },
     { id: 'appearance', label: 'Appearance', icon: <Palette className="w-5 h-5" /> },
     { id: 'accounts', label: 'Accounts', icon: <Mail className="w-5 h-5" /> },
+    { id: 'signatures', label: 'Signatures', icon: <PenTool className="w-5 h-5" /> },
     { id: 'filters', label: 'Filters', icon: <Filter className="w-5 h-5" /> },
 ]
 
@@ -84,6 +86,16 @@ interface MailFilter {
     createdAt: string
 }
 
+interface Signature {
+    id: string
+    mailboxId: string
+    name: string
+    content: string
+    isDefault: boolean
+    createdAt: string
+    updatedAt: string
+}
+
 export default function MailSettingsPage() {
     const [activeTab, setActiveTab] = React.useState<TabId>('accounts')
     const [isSaving, setIsSaving] = React.useState(false)
@@ -97,6 +109,11 @@ export default function MailSettingsPage() {
     const [isTesting, setIsTesting] = React.useState(false)
     const [isSavingAccount, setIsSavingAccount] = React.useState(false)
     const [isSavingFilter, setIsSavingFilter] = React.useState(false)
+    const [signatures, setSignatures] = React.useState<Signature[]>([])
+    const [isLoadingSignatures, setIsLoadingSignatures] = React.useState(false)
+    const [showAddSignature, setShowAddSignature] = React.useState(false)
+    const [isSavingSignature, setIsSavingSignature] = React.useState(false)
+    const [editingSignature, setEditingSignature] = React.useState<Signature | null>(null)
 
     const [newAccount, setNewAccount] = React.useState({
         email: '',
@@ -164,6 +181,28 @@ export default function MailSettingsPage() {
             fetchFilters()
         }
     }, [selectedMailboxId, activeTab, fetchFilters])
+
+    const fetchSignatures = React.useCallback(async () => {
+        if (!selectedMailboxId) return
+        setIsLoadingSignatures(true)
+        try {
+            const response = await mailFetch(`/api/mail/mailboxes/${selectedMailboxId}/signatures`)
+            if (response.ok) {
+                const data = await response.json()
+                setSignatures(data.signatures || [])
+            }
+        } catch (error) {
+            console.error('Error fetching signatures:', error)
+        } finally {
+            setIsLoadingSignatures(false)
+        }
+    }, [selectedMailboxId])
+
+    React.useEffect(() => {
+        if (selectedMailboxId && activeTab === 'signatures') {
+            fetchSignatures()
+        }
+    }, [selectedMailboxId, activeTab, fetchSignatures])
 
     const handleTestConnection = async () => {
         setIsTesting(true)
@@ -892,7 +931,148 @@ export default function MailSettingsPage() {
                                 </div>
                             )}
 
-                            {activeTab !== 'accounts' && activeTab !== 'filters' && (
+                            {activeTab === 'signatures' && (
+                                <div className="space-y-6">
+                                    <Card>
+                                        <CardHeader>
+                                            <CardTitle className="flex items-center gap-2">
+                                                <PenTool className="w-5 h-5" />
+                                                Email Signatures
+                                            </CardTitle>
+                                            <CardDescription>
+                                                Create and manage email signatures for your accounts
+                                            </CardDescription>
+                                        </CardHeader>
+                                        <CardContent className="space-y-4">
+                                            {mailboxes.length > 0 && (
+                                                <div className="mb-4">
+                                                    <Label>Select Account</Label>
+                                                    <select
+                                                        className="w-full mt-1 px-3 py-2 border rounded-lg bg-white dark:bg-slate-800 border-gray-200 dark:border-gray-700"
+                                                        value={selectedMailboxId || ''}
+                                                        onChange={(e) => setSelectedMailboxId(e.target.value)}
+                                                    >
+                                                        <option value="">Select an account...</option>
+                                                        {mailboxes.map((mb) => (
+                                                            <option key={mb.id} value={mb.id}>{mb.email}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+
+                                            {isLoadingSignatures ? (
+                                                <p className="text-gray-500">Loading signatures...</p>
+                                            ) : signatures.length === 0 ? (
+                                                <div className="text-center py-8">
+                                                    <PenTool className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                                                    <p className="text-gray-500 mb-4">No signatures created yet</p>
+                                                    {selectedMailboxId && (
+                                                        <Button onClick={() => setShowAddSignature(true)}>
+                                                            <Plus className="w-4 h-4 mr-2" />
+                                                            Create Signature
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-3">
+                                                    {signatures.map((sig) => (
+                                                        <div key={sig.id} className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-xl">
+                                                            <div className="flex items-center gap-4">
+                                                                <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                                                                    <PenTool className="w-5 h-5 text-purple-600" />
+                                                                </div>
+                                                                <div>
+                                                                    <h3 className="font-medium">{sig.name}</h3>
+                                                                    <p className="text-sm text-gray-500">
+                                                                        {sig.isDefault && <span className="text-blue-600">Default • </span>}
+                                                                        Updated {new Date(sig.updatedAt).toLocaleDateString()}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <Button variant="outline" size="sm" onClick={() => setEditingSignature(sig)}>
+                                                                    Edit
+                                                                </Button>
+                                                                {!sig.isDefault && (
+                                                                    <Button variant="outline" size="sm" onClick={async () => {
+                                                                        try {
+                                                                            await mailFetch(`/api/mail/mailboxes/${selectedMailboxId}/signatures/${sig.id}`, {
+                                                                                method: 'PUT',
+                                                                                headers: { 'Content-Type': 'application/json' },
+                                                                                body: JSON.stringify({ isDefault: true }),
+                                                                            })
+                                                                            fetchSignatures()
+                                                                            toast({ title: 'Signature set as default', variant: 'success' })
+                                                                        } catch {
+                                                                            toast({ title: 'Failed to update signature', variant: 'destructive' })
+                                                                        }
+                                                                    }}>
+                                                                        Set Default
+                                                                    </Button>
+                                                                )}
+                                                                <Button variant="outline" size="sm" onClick={async () => {
+                                                                    if (confirm('Delete this signature?')) {
+                                                                        try {
+                                                                            await mailFetch(`/api/mail/mailboxes/${selectedMailboxId}/signatures/${sig.id}`, { method: 'DELETE' })
+                                                                            fetchSignatures()
+                                                                            toast({ title: 'Signature deleted', variant: 'success' })
+                                                                        } catch {
+                                                                            toast({ title: 'Failed to delete signature', variant: 'destructive' })
+                                                                        }
+                                                                    }
+                                                                }}>
+                                                                    <Trash2 className="w-4 h-4 text-red-500" />
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                    <Button onClick={() => setShowAddSignature(true)} className="mt-4">
+                                                        <Plus className="w-4 h-4 mr-2" />
+                                                        Create Signature
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+
+                                    {(showAddSignature || editingSignature) && (
+                                        <SignatureEditor
+                                            mailboxId={selectedMailboxId!}
+                                            signature={editingSignature}
+                                            onSave={async (data) => {
+                                                setIsSavingSignature(true)
+                                                try {
+                                                    const url = editingSignature
+                                                        ? `/api/mail/mailboxes/${selectedMailboxId}/signatures/${editingSignature.id}`
+                                                        : `/api/mail/mailboxes/${selectedMailboxId}/signatures`
+                                                    const response = await mailFetch(url, {
+                                                        method: editingSignature ? 'PUT' : 'POST',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify(data),
+                                                    })
+                                                    if (response.ok) {
+                                                        setShowAddSignature(false)
+                                                        setEditingSignature(null)
+                                                        fetchSignatures()
+                                                        toast({ title: editingSignature ? 'Signature updated' : 'Signature created', variant: 'success' })
+                                                    }
+                                                } catch {
+                                                    toast({ title: 'Failed to save signature', variant: 'destructive' })
+                                                } finally {
+                                                    setIsSavingSignature(false)
+                                                }
+                                            }}
+                                            onCancel={() => {
+                                                setShowAddSignature(false)
+                                                setEditingSignature(null)
+                                            }}
+                                            isSaving={isSavingSignature}
+                                        />
+                                    )}
+                                </div>
+                            )}
+
+                            {activeTab !== 'accounts' && activeTab !== 'filters' && activeTab !== 'signatures' && (
                                 <div className="space-y-6">
                                     <Card>
                                         <CardHeader>
@@ -919,5 +1099,82 @@ export default function MailSettingsPage() {
                 </div>
             </div>
         </MailLayout>
+    )
+}
+
+function SignatureEditor({
+    signature,
+    onSave,
+    onCancel,
+    isSaving
+}: {
+    mailboxId: string
+    signature: Signature | null
+    onSave: (data: { name: string; content: string; isDefault: boolean }) => void
+    onCancel: () => void
+    isSaving: boolean
+}) {
+    const [name, setName] = React.useState(signature?.name || '')
+    const [content, setContent] = React.useState(signature?.content || '')
+    const [isDefault, setIsDefault] = React.useState(signature?.isDefault || false)
+
+    React.useEffect(() => {
+        if (signature) {
+            setName(signature.name)
+            setContent(signature.content)
+            setIsDefault(signature.isDefault)
+        }
+    }, [signature])
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>{signature ? 'Edit Signature' : 'Create New Signature'}</CardTitle>
+                <CardDescription>
+                    {signature ? 'Update your signature details' : 'Create a new email signature'}
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div>
+                    <Label>Signature Name</Label>
+                    <Input
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="e.g., Work, Personal"
+                        className="mt-1"
+                    />
+                </div>
+                <div>
+                    <Label>Signature Content</Label>
+                    <textarea
+                        value={content}
+                        onChange={(e) => setContent(e.target.value)}
+                        placeholder="Your signature..."
+                        className="mt-1 w-full min-h-[200px] px-3 py-2 border rounded-lg bg-white dark:bg-slate-800 border-gray-200 dark:border-gray-700 resize-y"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                        Tip: You can use HTML tags for formatting (e.g., &lt;b&gt;, &lt;i&gt;, &lt;a href="..."&gt;)
+                    </p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Switch
+                        checked={isDefault}
+                        onCheckedChange={setIsDefault}
+                    />
+                    <Label>Set as default signature</Label>
+                </div>
+                <div className="flex gap-3">
+                    <Button
+                        onClick={() => onSave({ name, content, isDefault })}
+                        disabled={isSaving || !name || !content}
+                    >
+                        {isSaving ? 'Saving...' : (signature ? 'Update' : 'Create')}
+                    </Button>
+                    <Button variant="ghost" onClick={onCancel}>
+                        Cancel
+                    </Button>
+                </div>
+            </CardContent>
+        </Card>
     )
 }

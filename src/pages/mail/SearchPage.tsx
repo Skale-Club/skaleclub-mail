@@ -3,139 +3,396 @@ import { Link, useLocation } from 'wouter'
 import { MailLayout } from '../../components/mail/MailLayout'
 import { EmailList, EmailItem, EmailToolbar } from '../../components/mail/EmailList'
 import { toast } from '../../components/ui/toaster'
-import { Search as SearchIcon } from 'lucide-react'
+import { useIsMobile } from '../../hooks/useIsMobile'
+import { useMailbox } from '../../hooks/useMailbox'
+import { useSearchMessages, useDeleteMessage, useArchiveMessage, useBatchUpdate, mapMessageToEmailItem } from '../../hooks/useMail'
+import {
+    Search as SearchIcon,
+    Filter,
+    Calendar,
+    Paperclip,
+    User,
+    Mail,
+    AlertCircle
+} from 'lucide-react'
 
-const mockSearchResults: EmailItem[] = [
-    {
-        id: 's1',
-        subject: 'Project Update - Q4 Planning',
-        snippet: 'Hi team, here are the notes from our Q4 planning session. We discussed the new features and timeline.',
-        from: { name: 'John Smith', email: 'john@company.com' },
-        to: [{ name: 'You', email: 'user@example.com' }],
-        date: new Date(Date.now() - 86400000),
-        read: true,
-        starred: false,
-        hasAttachments: true,
-        labels: ['Work']
-    },
-    {
-        id: 's2',
-        subject: 'Update on Marketing Campaign',
-        snippet: 'The marketing team has completed the analysis of the Q4 campaign. Results look promising...',
-        from: { name: 'Marketing Team', email: 'marketing@company.com' },
-        to: [{ name: 'You', email: 'user@example.com' }],
-        date: new Date(Date.now() - 172800000),
-        read: false,
-        starred: true,
-        hasAttachments: false
-    },
-]
+interface SearchFilters {
+    query: string
+    from: string
+    to: string
+    subject: string
+    hasAttachment: boolean | null
+    dateRange: 'all' | 'today' | 'week' | 'month' | 'year'
+    folder: string
+}
+
+const dateRangeLabels = {
+    all: 'Any time',
+    today: 'Today',
+    week: 'Last 7 days',
+    month: 'Last 30 days',
+    year: 'Last year'
+}
 
 export default function SearchPage() {
     const [location] = useLocation()
-    const [query, setQuery] = React.useState('')
-    const [results, setResults] = React.useState<EmailItem[]>(mockSearchResults)
-    const [isSearching, setIsSearching] = React.useState(false)
+    const { selectedMailbox, mailboxes } = useMailbox()
+    const isMobile = useIsMobile()
+
+    const [filters, setFilters] = React.useState<SearchFilters>({
+        query: '',
+        from: '',
+        to: '',
+        subject: '',
+        hasAttachment: null,
+        dateRange: 'all',
+        folder: ''
+    })
+    const [showFilters, setShowFilters] = React.useState(false)
     const [selectedEmail, setSelectedEmail] = React.useState<string | null>(null)
     const [selectedEmails, setSelectedEmails] = React.useState<Set<string>>(new Set())
+
+    const effectiveQuery = [filters.query, filters.from && `from:${filters.from}`, filters.to && `to:${filters.to}`, filters.subject && `subject:${filters.subject}`].filter(Boolean).join(' ')
+
+    const { data, isLoading, isFetching, refetch } = useSearchMessages(effectiveQuery, filters.folder || undefined)
+    const deleteMessage = useDeleteMessage()
+    const archiveMessage = useArchiveMessage()
+    const batchUpdate = useBatchUpdate()
 
     React.useEffect(() => {
         const params = new URLSearchParams(location.split('?')[1] || '')
         const q = params.get('q') || ''
-        setQuery(q)
-        if (q) {
-            performSearch(q)
-        }
+        const folder = params.get('folder') || ''
+        setFilters(prev => ({ ...prev, query: q, folder }))
     }, [location])
 
-    const performSearch = async (_searchQuery: string) => {
-        setIsSearching(true)
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        setIsSearching(false)
-    }
+    const emails = React.useMemo(() => {
+        if (!data?.messages) return []
+        let results = data.messages.map(mapMessageToEmailItem)
+
+        if (filters.hasAttachment !== null) {
+            results = results.filter(e => filters.hasAttachment ? e.hasAttachments : !e.hasAttachments)
+        }
+
+        if (filters.dateRange !== 'all') {
+            const now = new Date()
+            let cutoff: Date
+            switch (filters.dateRange) {
+                case 'today':
+                    cutoff = new Date(now.setHours(0, 0, 0, 0))
+                    break
+                case 'week':
+                    cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+                    break
+                case 'month':
+                    cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+                    break
+                case 'year':
+                    cutoff = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000)
+                    break
+            }
+            if (cutoff) {
+                results = results.filter(e => e.date >= cutoff)
+            }
+        }
+
+        return results
+    }, [data, filters.hasAttachment, filters.dateRange])
+
+    const activeFilterCount = [
+        filters.from,
+        filters.to,
+        filters.subject,
+        filters.hasAttachment !== null,
+        filters.dateRange !== 'all',
+        filters.folder
+    ].filter(Boolean).length
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault()
-        if (query.trim()) {
-            window.location.href = `/mail/search?q=${encodeURIComponent(query)}`
+        if (filters.query.trim()) {
+            const params = new URLSearchParams()
+            params.set('q', filters.query)
+            if (filters.folder) params.set('folder', filters.folder)
+            window.history.pushState({}, '', `/mail/search?${params}`)
+            refetch()
         }
     }
 
+    const handleClearFilters = () => {
+        setFilters({
+            query: filters.query,
+            from: '',
+            to: '',
+            subject: '',
+            hasAttachment: null,
+            dateRange: 'all',
+            folder: ''
+        })
+    }
+
     const handleSelectEmail = (id: string) => {
+        if (isMobile) {
+            window.location.href = `/mail/search/${id}`
+            return
+        }
         setSelectedEmail(id)
     }
 
     const handleStar = (id: string) => {
-        setResults(prev => prev.map(email => 
-            email.id === id ? { ...email, starred: !email.starred } : email
-        ))
+        toast({
+            title: emails.find(e => e.id === id)?.starred ? 'Removed from starred' : 'Added to starred',
+            variant: 'success'
+        })
     }
 
     const handleDelete = (id: string) => {
-        setResults(prev => prev.filter(email => email.id !== id))
+        if (selectedMailbox) {
+            deleteMessage.mutate(id)
+        }
+        setSelectedEmails(prev => {
+            const newSet = new Set(prev)
+            newSet.delete(id)
+            return newSet
+        })
         toast({ title: 'Email deleted', variant: 'success' })
     }
 
     const handleArchive = (id: string) => {
-        setResults(prev => prev.filter(email => email.id !== id))
+        if (selectedMailbox) {
+            archiveMessage.mutate(id)
+        }
         toast({ title: 'Email archived', variant: 'success' })
+    }
+
+    if (mailboxes.length === 0) {
+        return (
+            <MailLayout>
+                <div className="flex items-center justify-center h-full">
+                    <div className="text-center max-w-md px-6">
+                        <AlertCircle className="w-16 h-16 mx-auto mb-4 text-yellow-500" />
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                            No Email Accounts Connected
+                        </h2>
+                        <p className="text-gray-500 dark:text-gray-400 mb-6">
+                            Add an email account to search your emails.
+                        </p>
+                        <Link
+                            href="/mail/settings"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                        >
+                            Add Email Account
+                        </Link>
+                    </div>
+                </div>
+            </MailLayout>
+        )
     }
 
     return (
         <MailLayout>
             <div className="flex h-full">
-                <div className="w-full lg:w-1/2 xl:w-2/5 border-r border-gray-200 dark:border-gray-800 flex flex-col bg-white dark:bg-slate-900">
-                    <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+                <div className={`w-full ${!isMobile ? 'lg:w-1/2 xl:w-2/5 border-r border-gray-200 dark:border-gray-800' : ''} flex flex-col bg-white dark:bg-slate-900`}>
+                    <div className="px-4 sm:px-5 py-4 border-b border-gray-200 dark:border-gray-800">
                         <form onSubmit={handleSearch} className="relative">
                             <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                             <input
                                 type="text"
                                 placeholder="Search emails..."
-                                value={query}
-                                onChange={(e) => setQuery(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2.5 bg-gray-100 dark:bg-slate-800 border-0 rounded-xl text-sm focus:ring-2 focus:ring-blue-500"
+                                value={filters.query}
+                                onChange={(e) => setFilters({ ...filters, query: e.target.value })}
+                                className="w-full pl-10 pr-12 py-2.5 bg-gray-100 dark:bg-slate-800 border-0 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white placeholder-gray-400"
                                 autoFocus
                             />
+                            <button
+                                type="button"
+                                onClick={() => setShowFilters(!showFilters)}
+                                className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-colors ${
+                                    showFilters || activeFilterCount > 0
+                                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600'
+                                        : 'hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-500'
+                                }`}
+                            >
+                                <Filter className="w-4 h-4" />
+                                {activeFilterCount > 0 && (
+                                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center">
+                                        {activeFilterCount}
+                                    </span>
+                                )}
+                            </button>
                         </form>
+
+                        {showFilters && (
+                            <div className="mt-4 p-4 bg-gray-50 dark:bg-slate-800/50 rounded-xl space-y-3">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Filters</span>
+                                    {activeFilterCount > 0 && (
+                                        <button
+                                            onClick={handleClearFilters}
+                                            className="text-sm text-blue-600 hover:text-blue-700"
+                                        >
+                                            Clear all
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-1">
+                                            <User className="w-3 h-3" />
+                                            From
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="sender@example.com"
+                                            value={filters.from}
+                                            onChange={(e) => setFilters({ ...filters, from: e.target.value })}
+                                            className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-1">
+                                            <Mail className="w-3 h-3" />
+                                            To
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="recipient@example.com"
+                                            value={filters.to}
+                                            onChange={(e) => setFilters({ ...filters, to: e.target.value })}
+                                            className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                                        />
+                                    </div>
+
+                                    <div className="sm:col-span-2">
+                                        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">
+                                            Subject contains
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="Keywords in subject"
+                                            value={filters.subject}
+                                            onChange={(e) => setFilters({ ...filters, subject: e.target.value })}
+                                            className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-1">
+                                            <Calendar className="w-3 h-3" />
+                                            Date
+                                        </label>
+                                        <select
+                                            value={filters.dateRange}
+                                            onChange={(e) => setFilters({ ...filters, dateRange: e.target.value as SearchFilters['dateRange'] })}
+                                            className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                                        >
+                                            {Object.entries(dateRangeLabels).map(([value, label]) => (
+                                                <option key={value} value={value}>{label}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-1">
+                                            <Paperclip className="w-3 h-3" />
+                                            Attachments
+                                        </label>
+                                        <select
+                                            value={filters.hasAttachment === null ? '' : filters.hasAttachment ? 'yes' : 'no'}
+                                            onChange={(e) => setFilters({
+                                                ...filters,
+                                                hasAttachment: e.target.value === '' ? null : e.target.value === 'yes'
+                                            })}
+                                            className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                                        >
+                                            <option value="">Any</option>
+                                            <option value="yes">Has attachments</option>
+                                            <option value="no">No attachments</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="mt-3 flex items-center justify-between">
                             <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
                                 Search Results
                             </h1>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                                {results.length} results for "{query}"
-                            </p>
+                            {!isLoading && (
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    {emails.length} {emails.length === 1 ? 'result' : 'results'}
+                                    {filters.query && ` for "${filters.query}"`}
+                                </p>
+                            )}
                         </div>
                     </div>
 
                     <EmailToolbar
                         selectedCount={selectedEmails.size}
-                        onMarkRead={() => {}}
-                        onMarkUnread={() => {}}
+                        totalCount={data?.total}
+                        onSelectAll={() => {
+                            if (selectedEmails.size === emails.length) {
+                                setSelectedEmails(new Set())
+                            } else {
+                                setSelectedEmails(new Set(emails.map(e => e.id)))
+                            }
+                        }}
+                        onMarkRead={() => {
+                            if (selectedMailbox) {
+                                batchUpdate.mutate({ messageIds: Array.from(selectedEmails), action: 'read' })
+                            }
+                            setSelectedEmails(new Set())
+                        }}
+                        onMarkUnread={() => {
+                            if (selectedMailbox) {
+                                batchUpdate.mutate({ messageIds: Array.from(selectedEmails), action: 'unread' })
+                            }
+                            setSelectedEmails(new Set())
+                        }}
                         onDelete={() => {
-                            setResults(prev => prev.filter(e => !selectedEmails.has(e.id)))
+                            if (selectedMailbox) {
+                                batchUpdate.mutate({ messageIds: Array.from(selectedEmails), action: 'delete' })
+                            }
                             setSelectedEmails(new Set())
                             toast({ title: 'Emails deleted', variant: 'success' })
                         }}
-                        onArchive={() => {}}
+                        onArchive={() => {
+                            if (selectedMailbox) {
+                                batchUpdate.mutate({ messageIds: Array.from(selectedEmails), action: 'archive' })
+                            }
+                            setSelectedEmails(new Set())
+                            toast({ title: 'Emails archived', variant: 'success' })
+                        }}
                         onRefresh={() => {
-                            performSearch(query)
+                            refetch()
                             toast({ title: 'Search refreshed', variant: 'success' })
                         }}
+                        isRefreshing={isFetching}
                     />
 
                     <div className="flex-1 overflow-y-auto">
-                        {isSearching ? (
+                        {isLoading ? (
                             <div className="flex items-center justify-center h-64">
                                 <div className="flex flex-col items-center gap-4">
                                     <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
                                     <p className="text-gray-500 dark:text-gray-400">Searching...</p>
                                 </div>
                             </div>
-                        ) : results.length > 0 ? (
+                        ) : !filters.query ? (
+                            <div className="flex flex-col items-center justify-center h-64 text-gray-500 dark:text-gray-400">
+                                <SearchIcon className="w-12 h-12 mb-4 opacity-50" />
+                                <p className="text-lg font-medium">Search your emails</p>
+                                <p className="text-sm mt-1">Enter keywords to find emails</p>
+                            </div>
+                        ) : emails.length > 0 ? (
                             <EmailList
-                                emails={results}
+                                emails={emails}
                                 selectedId={selectedEmail || undefined}
+                                selectedEmails={selectedEmails}
                                 onSelect={handleSelectEmail}
+                                onSelectMultiple={(ids) => setSelectedEmails(new Set(ids))}
                                 onStar={handleStar}
                                 onDelete={handleDelete}
                                 onArchive={handleArchive}
@@ -146,26 +403,36 @@ export default function SearchPage() {
                                 <SearchIcon className="w-12 h-12 mb-4 opacity-50" />
                                 <p className="text-lg font-medium">No results found</p>
                                 <p className="text-sm mt-1">Try different keywords or check your spelling</p>
+                                {activeFilterCount > 0 && (
+                                    <button
+                                        onClick={handleClearFilters}
+                                        className="mt-4 text-sm text-blue-600 hover:text-blue-700"
+                                    >
+                                        Clear filters
+                                    </button>
+                                )}
                             </div>
                         )}
                     </div>
                 </div>
 
-                <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col bg-gray-50 dark:bg-slate-900/50">
-                    {selectedEmail ? (
-                        <EmailDetail email={results.find(e => e.id === selectedEmail)!} />
-                    ) : (
-                        <div className="flex-1 flex items-center justify-center text-gray-500 dark:text-gray-400">
-                            <div className="text-center">
-                                <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-slate-800 flex items-center justify-center">
-                                    <SearchIcon className="w-10 h-10 text-gray-400" />
+                {!isMobile && (
+                    <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col bg-gray-50 dark:bg-slate-900/50">
+                        {selectedEmail ? (
+                            <EmailDetail email={emails.find(e => e.id === selectedEmail)!} />
+                        ) : (
+                            <div className="flex-1 flex items-center justify-center text-gray-500 dark:text-gray-400">
+                                <div className="text-center">
+                                    <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-slate-800 flex items-center justify-center">
+                                        <SearchIcon className="w-10 h-10 text-gray-400" />
+                                    </div>
+                                    <p className="text-lg font-medium">Select a result to preview</p>
+                                    <p className="text-sm mt-1">Click on an email from the search results</p>
                                 </div>
-                                <p className="text-lg font-medium">Select a result to preview</p>
-                                <p className="text-sm mt-1">Click on an email from the search results</p>
                             </div>
-                        </div>
-                    )}
-                </div>
+                        )}
+                    </div>
+                )}
             </div>
         </MailLayout>
     )

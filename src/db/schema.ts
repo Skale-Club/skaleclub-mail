@@ -1125,6 +1125,17 @@ export const mailFilters = pgTable('mail_filters', {
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
+// Email Signatures
+export const signatures = pgTable('signatures', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    mailboxId: uuid('mailbox_id').references(() => mailboxes.id).notNull(),
+    name: text('name').notNull(),
+    content: text('content').notNull(), // HTML content
+    isDefault: boolean('is_default').default(false).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
 // Mailbox Relations
 export const mailboxesRelations = relations(mailboxes, ({ one, many }) => ({
     user: one(users, {
@@ -1161,6 +1172,13 @@ export const mailFiltersRelations = relations(mailFilters, ({ one }) => ({
     }),
 }))
 
+export const signaturesRelations = relations(signatures, ({ one }) => ({
+    mailbox: one(mailboxes, {
+        fields: [signatures.mailboxId],
+        references: [mailboxes.id],
+    }),
+}))
+
 // Types
 export type Mailbox = typeof mailboxes.$inferSelect
 export type NewMailbox = typeof mailboxes.$inferInsert
@@ -1173,3 +1191,9 @@ export type NewMailMessage = typeof mailMessages.$inferInsert
 
 export type MailFilter = typeof mailFilters.$inferSelect
 export type NewMailFilter = typeof mailFilters.$inferInsert
+
+export const insertSignatureSchema = createInsertSchema(signatures)
+export const selectSignatureSchema = createSelectSchema(signatures)
+
+export type Signature = typeof signatures.$inferSelect
+export type NewSignature = typeof signatures.$inferInsert

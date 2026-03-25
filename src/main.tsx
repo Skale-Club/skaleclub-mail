@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Route, Switch } from 'wouter'
 import { Toaster } from './components/ui/toaster'
 import { ThemeProvider } from './components/theme-provider'
+import { MailboxProvider } from './hooks/useMailbox'
 import { useAuth } from './hooks/useAuth'
 import { useBranding } from './lib/branding'
 import AdminLayout from './components/admin/AdminLayout'
@@ -34,9 +35,11 @@ import InboxPage from './pages/mail/InboxPage'
 import SentPage from './pages/mail/SentPage'
 import DraftsPage from './pages/mail/DraftsPage'
 import TrashPage from './pages/mail/TrashPage'
+import StarredPage from './pages/mail/StarredPage'
 import ComposePage from './pages/mail/ComposePage'
 import MailSettingsPage from './pages/mail/SettingsPage'
 import SearchPage from './pages/mail/SearchPage'
+import EmailDetailPage from './pages/mail/EmailDetailPage'
 
 const queryClient = new QueryClient()
 
@@ -120,9 +123,10 @@ function App() {
     return (
         <ThemeProvider defaultTheme="system">
             <QueryClientProvider client={queryClient}>
-                <BrandingHead />
-                <div className="min-h-screen bg-background">
-                    <Switch>
+                <MailboxProvider>
+                    <BrandingHead />
+                    <div className="min-h-screen bg-background">
+                        <Switch>
                         <Route path="/login">
                             <Login />
                         </Route>
@@ -261,6 +265,16 @@ function App() {
                                 <TrashPage />
                             </AuthCheck>
                         </Route>
+                        <Route path="/mail/starred">
+                            <AuthCheck>
+                                <StarredPage />
+                            </AuthCheck>
+                        </Route>
+                        <Route path="/mail/:folder/:id">
+                            <AuthCheck>
+                                <EmailDetailPage />
+                            </AuthCheck>
+                        </Route>
                         <Route path="/mail/compose">
                             <AuthCheck>
                                 <ComposePage />
@@ -288,6 +302,7 @@ function App() {
                     </Switch>
                     <Toaster />
                 </div>
+                </MailboxProvider>
             </QueryClientProvider>
         </ThemeProvider>
     )

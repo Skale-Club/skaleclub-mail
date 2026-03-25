@@ -32,5 +32,18 @@ export default defineConfig({
     build: {
         outDir: 'dist/client',
         emptyOutDir: true,
+        rollupOptions: {
+            output: {
+                manualChunks: {
+                    'vendor-react': ['react', 'react-dom'],
+                    'vendor-router': ['wouter'],
+                    'vendor-query': ['@tanstack/react-query'],
+                    'vendor-ui': ['lucide-react', 'clsx', 'tailwind-merge'],
+                    'vendor-quill': ['react-quill-new'],
+                    'vendor-date': ['date-fns'],
+                },
+            },
+        },
+        chunkSizeWarningLimit: 500,
     },
 })

@@ -67,4 +67,138 @@
     #root {
         min-height: 100vh;
     }
+
+    .safe-area-bottom {
+        padding-bottom: env(safe-area-inset-bottom, 0);
+    }
+}
+
+@layer utilities {
+    @keyframes slide-in-left {
+        from {
+            transform: translateX(-100%);
+        }
+        to {
+            transform: translateX(0);
+        }
+    }
+
+    .animate-slide-in-left {
+        animation: slide-in-left 0.3s ease-out;
+    }
+
+    @keyframes slide-out-left {
+        from {
+            transform: translateX(0);
+        }
+        to {
+            transform: translateX(-100%);
+        }
+    }
+
+    .animate-slide-out-left {
+        animation: slide-out-left 0.3s ease-out;
+    }
+
+    @keyframes fade-in {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+
+    .animate-fade-in {
+        animation: fade-in 0.2s ease-out;
+    }
+}
+
+.rich-text-editor .ql-container {
+    font-family: 'Inter', sans-serif;
+    font-size: 15px;
+    border: none;
+    min-height: 200px;
+}
+
+.rich-text-editor .ql-editor {
+    padding: 16px;
+    min-height: 200px;
+    line-height: 1.6;
+}
+
+.rich-text-editor .ql-editor.ql-blank::before {
+    font-style: normal;
+    color: #9ca3af;
+}
+
+.rich-text-editor .ql-toolbar {
+    border: none;
+    border-bottom: 1px solid var(--border);
+    background: transparent;
+    padding: 8px 12px;
+}
+
+.rich-text-editor .ql-toolbar button {
+    color: #6b7280;
+}
+
+.rich-text-editor .ql-toolbar button:hover {
+    color: #374151;
+}
+
+.rich-text-editor .ql-toolbar button.ql-active {
+    color: #2563eb;
+}
+
+.rich-text-editor .ql-toolbar .ql-stroke {
+    stroke: currentColor;
+}
+
+.rich-text-editor .ql-toolbar .ql-fill {
+    fill: currentColor;
+}
+
+.rich-text-editor .ql-toolbar .ql-picker {
+    color: #6b7280;
+}
+
+.rich-text-editor .ql-toolbar .ql-picker-options {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.dark .rich-text-editor .ql-toolbar button {
+    color: #9ca3af;
+}
+
+.dark .rich-text-editor .ql-toolbar button:hover {
+    color: #e5e7eb;
+}
+
+.dark .rich-text-editor .ql-toolbar button.ql-active {
+    color: #3b82f6;
+}
+
+.dark .rich-text-editor .ql-toolbar .ql-picker {
+    color: #9ca3af;
+}
+
+.dark .rich-text-editor .ql-toolbar .ql-picker-options {
+    background: #1e293b;
+    border-color: #334155;
+}
+
+.dark .rich-text-editor .ql-toolbar .ql-picker-item:hover {
+    color: #e5e7eb;
+}
+
+.dark .rich-text-editor .ql-editor {
+    color: #e5e7eb;
+}
+
+.dark .rich-text-editor .ql-editor.ql-blank::before {
+    color: #6b7280;
 }
