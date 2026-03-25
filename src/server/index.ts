@@ -34,6 +34,7 @@ app.use(helmet({
         directives: {
             ...helmet.contentSecurityPolicy.getDefaultDirectives(),
             'img-src': ["'self'", 'data:', 'https://ulzqxfeodxkyawfhjtpm.supabase.co'],
+            'connect-src': ["'self'", 'https://ulzqxfeodxkyawfhjtpm.supabase.co'],
         },
     },
 }))
