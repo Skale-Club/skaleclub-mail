@@ -2368,6 +2368,8 @@ init_schema();
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import { join } from "path";
+import { existsSync } from "fs";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { createClient as createClient4 } from "@supabase/supabase-js";
@@ -4283,7 +4285,7 @@ router5.post("/", async (req, res) => {
     if (!organization || !membership) {
       return res.status(403).json({ error: "Access denied" });
     }
-    const sendMode = "smtp";
+    const sendMode = data.outlookMailboxId ? "outlook" : "smtp";
     const trackOpens = true;
     const trackClicks = true;
     const privacyMode = false;
@@ -10239,9 +10241,17 @@ app.use((err, _req, res, _next) => {
     message: process.env.NODE_ENV === "development" ? err.message : void 0
   });
 });
-app.use((_req, res) => {
-  res.status(404).json({ error: "Not found" });
-});
+var clientDist = join(process.cwd(), "dist", "client");
+if (existsSync(clientDist)) {
+  app.use(express.static(clientDist));
+  app.get("*", (_req, res) => {
+    res.sendFile(join(clientDist, "index.html"));
+  });
+} else {
+  app.use((_req, res) => {
+    res.status(404).json({ error: "Not found" });
+  });
+}
 if (!process.env.VERCEL) {
   app.listen(PORT, async () => {
     console.log(`Server running on port ${PORT}`);
@@ -10253,10 +10263,18 @@ if (!process.env.VERCEL) {
     } catch {
     }
     Promise.resolve().then(() => (init_jobs(), jobs_exports)).then((jobs) => jobs.startJobs());
-    const smtpServer = createSMTPServer();
-    const imapServer = createIMAPServer();
-    smtpServer.start();
-    loadImapBranding().then(() => imapServer.start());
+    if (!process.env.RAILWAY_ENVIRONMENT) {
+      try {
+        const smtpServer = createSMTPServer();
+        const imapServer = createIMAPServer();
+        smtpServer.start();
+        loadImapBranding().then(() => imapServer.start());
+      } catch (err) {
+        console.warn("\u26A0\uFE0F  SMTP/IMAP servers failed to start:", err.message);
+      }
+    } else {
+      console.log("\u2139\uFE0F  SMTP/IMAP servers disabled on Railway (enable TCP addon to use)");
+    }
   });
 }
 var server_default = app;
