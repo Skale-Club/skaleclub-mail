@@ -232,9 +232,9 @@ export function createSMTPServer() {
 
     return {
         start() {
-            server.listen(port, () => {
+            server.listen(port, '0.0.0.0', () => {
                 console.log(`[SMTP] Submission server listening on port ${port}`)
-                console.log(`[SMTP] Configure Thunderbird: SMTP → localhost:${port} (STARTTLS)`)
+                console.log(`[SMTP] Configure Thunderbird: SMTP → mail.skale.club:${port} (STARTTLS)`)
             })
         },
         close() {

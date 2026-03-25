@@ -849,9 +849,9 @@ export function createIMAPServer() {
 
     return {
         start() {
-            server.listen(port, () => {
+            server.listen(port, '0.0.0.0', () => {
                 console.log(`[IMAP] Server listening on port ${port}`)
-                console.log(`[IMAP] Configure Thunderbird: IMAP → localhost:${port} (no SSL for dev)`)
+                console.log(`[IMAP] Configure Thunderbird: IMAP → mail.skale.club:${port} (SSL)`)
             })
         },
         close() {
