@@ -1,16 +1,10 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
-import { createClient } from '@supabase/supabase-js'
 import { db } from '../../db'
-import { organizations, organizationUsers, users, } from '../../db/schema'
-import { eq, and } from 'drizzle-orm'
+import { organizations, organizationUsers, users, messages, statistics } from '../../db/schema'
+import { eq, and, isNotNull, sql, gte, desc } from 'drizzle-orm'
 import { deleteOrganizationCascade } from '../lib/cascade'
 import { isPlatformAdmin } from '../lib/admin'
-
-const supabaseAdmin = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 const router = Router()
 const createOrganizationSchema = z.object({
@@ -39,18 +33,14 @@ router.get('/', async (req: Request, res: Response) => {
         }
 
         if (await isPlatformAdmin(userId)) {
-            const allOrgs = await db.query.organizations.findMany({
-                with: {},
-            })
+            const allOrgs = await db.query.organizations.findMany()
             return res.json({ organizations: allOrgs })
         }
 
         const memberships = await db.query.organizationUsers.findMany({
             where: eq(organizationUsers.userId, userId),
             with: {
-                organization: {
-                    with: {},
-                },
+                organization: true,
             },
         })
 
@@ -104,7 +94,6 @@ router.get('/:id', async (req: Request, res: Response) => {
                         },
                     },
                 },
-                
             },
         })
 
@@ -266,34 +255,14 @@ router.post('/:id/members', async (req: Request, res: Response) => {
             }
         }
 
-        const { email, role, password } = addMemberSchema.extend({
-            password: z.string().min(6).optional(),
-        }).parse(req.body)
+        const { email, role } = addMemberSchema.parse(req.body)
 
-        let userToAdd = await db.query.users.findFirst({
+        const userToAdd = await db.query.users.findFirst({
             where: eq(users.email, email),
         })
 
-        // If user doesn't exist yet, create them via Supabase Admin and sync to DB
         if (!userToAdd) {
-            const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-                email,
-                password: password ?? undefined,
-                email_confirm: true,
-            })
-
-            if (authError || !authData.user) {
-                return res.status(400).json({ error: authError?.message || 'Failed to create user account' })
-            }
-
-            const [created] = await db.insert(users).values({
-                id: authData.user.id,
-                email,
-                firstName: null,
-                lastName: null,
-            }).returning()
-
-            userToAdd = created
+            return res.status(404).json({ error: 'User not found' })
         }
 
         const existingMembership = await db.query.organizationUsers.findFirst({
@@ -420,6 +389,152 @@ router.patch('/:id/members/:userId', async (req: Request, res: Response) => {
             return res.status(400).json({ error: error.errors })
         }
         console.error('Error updating member role:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+// Get organization statistics
+router.get('/:id/statistics', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        const organizationId = req.params.id
+        const days = parseInt(req.query.days as string) || 30
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        const isAdmin = await isPlatformAdmin(userId)
+
+        if (!isAdmin) {
+            const membership = await db.query.organizationUsers.findFirst({
+                where: and(
+                    eq(organizationUsers.organizationId, organizationId),
+                    eq(organizationUsers.userId, userId)
+                ),
+            })
+            if (!membership) {
+                return res.status(404).json({ error: 'Organization not found' })
+            }
+        }
+
+        const organization = await db.query.organizations.findFirst({
+            where: eq(organizations.id, organizationId),
+        })
+
+        if (!organization) {
+            return res.status(404).json({ error: 'Organization not found' })
+        }
+
+        const since = new Date()
+        since.setDate(since.getDate() - days)
+
+        // Counts grouped by status
+        const statusCounts = await db
+            .select({
+                status: messages.status,
+                count: sql<number>`count(*)`,
+            })
+            .from(messages)
+            .where(eq(messages.organizationId, organizationId))
+            .groupBy(messages.status)
+
+        const countMap: Record<string, number> = {}
+        for (const row of statusCounts) {
+            countMap[row.status] = Number(row.count)
+        }
+
+        const sent = (countMap['sent'] || 0) + (countMap['delivered'] || 0)
+        const delivered = countMap['delivered'] || 0
+        const bounced = countMap['bounced'] || 0
+        const held = countMap['held'] || 0
+        const pending = (countMap['pending'] || 0) + (countMap['queued'] || 0)
+
+        // Opened count from messages
+        const [openedRow] = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(messages)
+            .where(and(eq(messages.organizationId, organizationId), isNotNull(messages.openedAt)))
+
+        const opened = Number(openedRow?.count || 0)
+
+        // Total clicks from statistics table
+        const [clickRow] = await db
+            .select({ total: sql<number>`coalesce(sum(links_clicked), 0)` })
+            .from(statistics)
+            .where(eq(statistics.organizationId, organizationId))
+
+        const clicked = Number(clickRow?.total || 0)
+
+        const total = sent + (countMap['failed'] || 0) + pending + held + bounced
+
+        // Daily stats for the last N days
+        const daily = await db
+            .select({
+                date: statistics.date,
+                sent: statistics.messagesSent,
+                delivered: statistics.messagesDelivered,
+                opened: statistics.messagesOpened,
+                clicked: statistics.linksClicked,
+                bounced: statistics.messagesBounced,
+                held: statistics.messagesHeld,
+            })
+            .from(statistics)
+            .where(and(eq(statistics.organizationId, organizationId), gte(statistics.date, since)))
+            .orderBy(statistics.date)
+
+        // Aggregate daily stats by date
+        const dailyMap = new Map<string, { sent: number; delivered: number; opened: number; clicked: number; bounced: number; held: number }>()
+        for (const row of daily) {
+            const dateKey = row.date.toISOString().split('T')[0]
+            const existing = dailyMap.get(dateKey) || { sent: 0, delivered: 0, opened: 0, clicked: 0, bounced: 0, held: 0 }
+            dailyMap.set(dateKey, {
+                sent: existing.sent + (row.sent || 0),
+                delivered: existing.delivered + (row.delivered || 0),
+                opened: existing.opened + (row.opened || 0),
+                clicked: existing.clicked + (row.clicked || 0),
+                bounced: existing.bounced + (row.bounced || 0),
+                held: existing.held + (row.held || 0),
+            })
+        }
+
+        const aggregatedDaily = Array.from(dailyMap.entries()).map(([date, data]) => ({
+            date,
+            ...data,
+        })).sort((a, b) => a.date.localeCompare(b.date))
+
+        // Recent messages
+        const recentMessages = await db.query.messages.findMany({
+            where: eq(messages.organizationId, organizationId),
+            orderBy: [desc(messages.createdAt)],
+            limit: 20,
+            columns: {
+                id: true,
+                subject: true,
+                fromAddress: true,
+                toAddresses: true,
+                status: true,
+                direction: true,
+                openedAt: true,
+                sentAt: true,
+                deliveredAt: true,
+                createdAt: true,
+            },
+        })
+
+        res.json({
+            summary: { total, sent, delivered, bounced, held, pending, opened, clicked },
+            rates: {
+                deliveryRate: sent > 0 ? Math.round((delivered / sent) * 1000) / 10 : 0,
+                openRate:     sent > 0 ? Math.round((opened   / sent) * 1000) / 10 : 0,
+                clickRate:    sent > 0 ? Math.round((clicked  / sent) * 1000) / 10 : 0,
+                bounceRate:   sent > 0 ? Math.round((bounced  / sent) * 1000) / 10 : 0,
+            },
+            daily: aggregatedDaily,
+            recentMessages,
+        })
+    } catch (error) {
+        console.error('Error fetching statistics:', error)
         res.status(500).json({ error: 'Internal server error' })
     }
 })

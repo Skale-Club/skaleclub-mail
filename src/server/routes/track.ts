@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { db } from '../../db'
-import { messages, organizations, } from '../../db/schema'
+import { messages, organizations } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import { fireWebhooks, incrementStat } from '../lib/tracking'
 
@@ -50,11 +50,13 @@ router.get('/open/:token', async (req: Request, res: Response) => {
 
         if (!message || message.openedAt) return   // already recorded
 
-        const server = await db.query.organizations.findFirst({
+        const organization = await db.query.organizations.findFirst({
             where: eq(organizations.id, message.organizationId),
         })
 
-        if (!server) return
+        const trackOpens = true
+        const privacyMode = false
+        if (!organization || !trackOpens || privacyMode) return
 
         const now = new Date()
 
@@ -113,11 +115,13 @@ router.get('/click/:token', async (req: Request, res: Response) => {
 
         if (!message) return
 
-        const server = await db.query.organizations.findFirst({
+        const organization = await db.query.organizations.findFirst({
             where: eq(organizations.id, message.organizationId),
         })
 
-        if (!server) return
+        const trackClicks = true
+        const privacyMode = false
+        if (!organization || !trackClicks || privacyMode) return
 
         await Promise.allSettled([
             incrementStat(message.organizationId, 'linksClicked'),

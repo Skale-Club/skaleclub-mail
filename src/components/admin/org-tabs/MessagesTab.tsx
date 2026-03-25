@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Eye, RefreshCw, Search, Trash2, Mail, ArrowUpRight, ArrowDownLeft, ChevronDown } from 'lucide-react'
+import { Eye, RefreshCw, Search, Trash2, Mail, ArrowUpRight, ArrowDownLeft } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card'
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
 import { Label } from '../../ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../ui/Table'
-import { fetchWithAuth } from './shared'
+import { getAccessToken } from './shared'
 
 interface Message {
     id: string
-    orgId: string
+    serverId: string
     messageId: string | null
     token: string
     direction: 'incoming' | 'outgoing'
@@ -28,10 +28,10 @@ interface Message {
 }
 
 interface MessagesTabProps {
-    orgId: string
+    organizationId: string
 }
 
-export default function MessagesTab({ orgId }: MessagesTabProps) {
+export default function MessagesTab({ organizationId }: MessagesTabProps) {
     const [messages, setMessages] = useState<Message[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
@@ -41,16 +41,21 @@ export default function MessagesTab({ orgId }: MessagesTabProps) {
 
     useEffect(() => {
         void fetchMessages()
-    }, [orgId, statusFilter, directionFilter])
+    }, [organizationId, statusFilter, directionFilter])
 
     async function fetchMessages() {
         setIsLoading(true)
         try {
-            const params = new URLSearchParams({ orgId })
+            const token = await getAccessToken()
+            const params = new URLSearchParams({ organizationId })
             if (statusFilter !== 'all') params.set('status', statusFilter)
             if (directionFilter !== 'all') params.set('direction', directionFilter)
 
-            const response = await fetchWithAuth(`/api/messages?${params.toString()}`)
+            const response = await fetch(`/api/messages?${params.toString()}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            })
 
             if (response.ok) {
                 const data = await response.json()
@@ -75,8 +80,12 @@ export default function MessagesTab({ orgId }: MessagesTabProps) {
         if (!confirm('Are you sure you want to delete this message? This action cannot be undone.')) return
 
         try {
-            const response = await fetchWithAuth(`/api/messages/${messageId}`, {
+            const token = await getAccessToken()
+            const response = await fetch(`/api/messages/${messageId}`, {
                 method: 'DELETE',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
             })
 
             if (response.ok) {
@@ -92,8 +101,12 @@ export default function MessagesTab({ orgId }: MessagesTabProps) {
 
     async function handleReleaseHeld(messageId: string) {
         try {
-            const response = await fetchWithAuth(`/api/messages/${messageId}/release`, {
+            const token = await getAccessToken()
+            const response = await fetch(`/api/messages/${messageId}/release`, {
                 method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
             })
 
             if (response.ok) {
@@ -145,35 +158,29 @@ export default function MessagesTab({ orgId }: MessagesTabProps) {
 
             <div className="flex flex-col gap-4 md:flex-row md:items-center">
                 <div className="flex gap-3">
-                    <div className="relative">
-                        <select
-                            className="h-10 w-full cursor-pointer appearance-none rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm outline-none focus:outline-none"
-                            value={statusFilter}
-                            onChange={(event) => setStatusFilter(event.target.value)}
-                        >
-                            <option value="all">All Status</option>
-                            <option value="pending">Pending</option>
-                            <option value="queued">Queued</option>
-                            <option value="sent">Sent</option>
-                            <option value="delivered">Delivered</option>
-                            <option value="bounced">Bounced</option>
-                            <option value="held">Held</option>
-                            <option value="failed">Failed</option>
-                        </select>
-                        <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    </div>
-                    <div className="relative">
-                        <select
-                            className="h-10 w-full cursor-pointer appearance-none rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm outline-none focus:outline-none"
-                            value={directionFilter}
-                            onChange={(event) => setDirectionFilter(event.target.value)}
-                        >
-                            <option value="all">All Directions</option>
-                            <option value="incoming">Incoming</option>
-                            <option value="outgoing">Outgoing</option>
-                        </select>
-                        <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    </div>
+                    <select
+                        className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        value={statusFilter}
+                        onChange={(event) => setStatusFilter(event.target.value)}
+                    >
+                        <option value="all">All Status</option>
+                        <option value="pending">Pending</option>
+                        <option value="queued">Queued</option>
+                        <option value="sent">Sent</option>
+                        <option value="delivered">Delivered</option>
+                        <option value="bounced">Bounced</option>
+                        <option value="held">Held</option>
+                        <option value="failed">Failed</option>
+                    </select>
+                    <select
+                        className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        value={directionFilter}
+                        onChange={(event) => setDirectionFilter(event.target.value)}
+                    >
+                        <option value="all">All Directions</option>
+                        <option value="incoming">Incoming</option>
+                        <option value="outgoing">Outgoing</option>
+                    </select>
                 </div>
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

@@ -331,17 +331,18 @@ export async function markCompletedCampaigns(): Promise<void> {
         const incompleteLeads = await db.query.campaignLeads.findMany({
             where: and(
                 eq(campaignLeads.campaignId, campaign.id),
-                notInArray(campaignLeads.status, ['replied', 'bounced', 'unsubscribed'])
+                notInArray(campaignLeads.status, ['replied', 'bounced', 'unsubscribed']),
             ),
             limit: 1
         })
 
         if (incompleteLeads.length === 0) {
             await db.update(campaigns)
-                .set({ status: 'completed', updatedAt: new Date() })
+                .set({
+                    status: 'completed',
+                    completedAt: new Date()
+                })
                 .where(eq(campaigns.id, campaign.id))
-
-            console.log(`[markCompletedCampaigns] Campaign ${campaign.id} marked as completed`)
         }
     }
 }

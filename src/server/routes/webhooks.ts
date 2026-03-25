@@ -1,10 +1,9 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { db } from '../../db'
-import {  webhooks, webhookRequests, organizationUsers , organizations } from '../../db/schema'
+import { webhooks, webhookRequests, organizations, organizationUsers } from '../../db/schema'
 import { eq, and, desc } from 'drizzle-orm'
 import { isPlatformAdmin } from '../lib/admin'
-import { getCachedBranding } from '../lib/serverBranding'
 
 const router = Router()
 
@@ -44,7 +43,7 @@ async function checkWebhookAccess(userId: string, organizationId: string) {
     if (!organization) return { organization: null, membership: null }
 
     if (await isPlatformAdmin(userId)) {
-        return { organization, membership: { role: "admin" as const } }
+        return { organization, membership: { role: 'admin' as const } }
     }
 
     const membership = await db.query.organizationUsers.findFirst({
@@ -303,7 +302,6 @@ router.post('/:id/test', async (req: Request, res: Response) => {
         }
 
         // Create a test payload
-        const { applicationName } = await getCachedBranding()
         const testPayload = {
             event: 'test',
             timestamp: new Date().toISOString(),
@@ -312,7 +310,7 @@ router.post('/:id/test', async (req: Request, res: Response) => {
                 name: organization.name,
             },
             data: {
-                message: `This is a test webhook from ${applicationName}`,
+                message: 'This is a test webhook from SkaleClub Mail',
             },
         }
 

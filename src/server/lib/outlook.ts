@@ -325,7 +325,7 @@ export async function sendMessageWithOutlook(input: OutlookSendInput) {
     const mailbox = await resolveOutlookMailboxForServer(input.organizationId, input.mailboxId)
 
     if (!mailbox) {
-        throw new Error('No active Outlook mailbox found for this server')
+        throw new Error('No active Outlook mailbox found for this organization')
     }
 
     if (input.fromAddress.toLowerCase() !== mailbox.email.toLowerCase()) {

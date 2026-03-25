@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { db } from '../../db'
-import {  routes, organizationUsers , organizations } from '../../db/schema'
+import { routes, organizations, organizationUsers } from '../../db/schema'
 import { eq, and } from 'drizzle-orm'
 import { isPlatformAdmin } from '../lib/admin'
 
@@ -29,24 +29,24 @@ const updateRouteSchema = z.object({
 
 // Helper to check access
 async function checkRouteAccess(userId: string, organizationId: string) {
-    const server = await db.query.organizations.findFirst({
+    const organization = await db.query.organizations.findFirst({
         where: eq(organizations.id, organizationId),
     })
 
-    if (!server) return { server: null, membership: null }
+    if (!organization) return { organization: null, membership: null }
 
     if (await isPlatformAdmin(userId)) {
-        return { server, membership: { role: 'admin' as const } }
+        return { organization, membership: { role: 'admin' as const } }
     }
 
     const membership = await db.query.organizationUsers.findFirst({
         where: and(
-            eq(organizationUsers.organizationId, server.id),
+            eq(organizationUsers.organizationId, organization.id),
             eq(organizationUsers.userId, userId)
         ),
     })
 
-    return { server, membership }
+    return { organization, membership }
 }
 
 // List routes for organization
@@ -63,9 +63,9 @@ router.get('/', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Organization ID required' })
         }
 
-        const { server, membership } = await checkRouteAccess(userId, organizationId)
+        const { organization, membership } = await checkRouteAccess(userId, organizationId)
 
-        if (!server || !membership) {
+        if (!organization || !membership) {
             return res.status(403).json({ error: 'Access denied' })
         }
 
@@ -91,9 +91,9 @@ router.post('/', async (req: Request, res: Response) => {
 
         const data = createRouteSchema.parse(req.body)
 
-        const { server, membership } = await checkRouteAccess(userId, data.organizationId)
+        const { organization, membership } = await checkRouteAccess(userId, data.organizationId)
 
-        if (!server || !membership || membership.role !== 'admin') {
+        if (!organization || !membership || membership.role !== 'admin') {
             return res.status(403).json({ error: 'Only admins can create routes' })
         }
 
@@ -131,9 +131,9 @@ router.put('/:id', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Route not found' })
         }
 
-        const { server, membership } = await checkRouteAccess(userId, route.organizationId)
+        const { organization, membership } = await checkRouteAccess(userId, route.organizationId)
 
-        if (!server || !membership || membership.role !== 'admin') {
+        if (!organization || !membership || membership.role !== 'admin') {
             return res.status(403).json({ error: 'Only admins can update routes' })
         }
 
@@ -174,9 +174,9 @@ router.delete('/:id', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Route not found' })
         }
 
-        const { server, membership } = await checkRouteAccess(userId, route.organizationId)
+        const { organization, membership } = await checkRouteAccess(userId, route.organizationId)
 
-        if (!server || !membership || membership.role !== 'admin') {
+        if (!organization || !membership || membership.role !== 'admin') {
             return res.status(403).json({ error: 'Only admins can delete routes' })
         }
 

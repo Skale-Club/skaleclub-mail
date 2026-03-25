@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { db } from '../../db'
-import {  templates, organizationUsers , organizations } from '../../db/schema'
+import { templates, organizations, organizationUsers } from '../../db/schema'
 import { eq, and, desc, like } from 'drizzle-orm'
 import { isPlatformAdmin } from '../lib/admin'
 

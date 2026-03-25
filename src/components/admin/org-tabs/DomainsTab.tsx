@@ -1,24 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Globe, Plus, Search, CheckCircle, XCircle, Trash2, Copy, RefreshCw, Loader2, X } from 'lucide-react'
+import { Globe, Plus, Search, CheckCircle, XCircle, Trash2, Copy, RefreshCw, X } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card'
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
 import { Label } from '../../ui/label'
-import { fetchWithAuth } from './shared'
+import { getAccessToken } from './shared'
 
 interface Domain {
     id: string
-    orgId: string
+    organizationId: string
     name: string
     verificationToken: string
     verificationStatus: 'pending' | 'verified' | 'failed'
     verificationMethod: string | null
     spfStatus: string | null
     spfError: string | null
-    dkimStatus: string | null
-    dkimError: string | null
-    dmarcStatus: string | null
-    dmarcError: string | null
     mxStatus: string | null
     mxError: string | null
     returnPathStatus: string | null
@@ -30,12 +26,10 @@ interface Domain {
 }
 
 interface DnsRecord {
-    key: string
     label: string
     type: string
     name: string
     value: string
-    priority?: string
     status: 'success' | 'error' | 'pending'
 }
 
@@ -49,7 +43,7 @@ interface DnsResults {
 }
 
 interface DomainsTabProps {
-    orgId: string
+    organizationId: string
 }
 
 function copyToClipboard(text: string) {
@@ -80,25 +74,15 @@ function StatusBadge({ status }: { status: 'success' | 'error' | 'pending' }) {
     )
 }
 
-function DnsRecordCard({ record, onCheck, isChecking, disabled }: {
-    record: DnsRecord
-    onCheck: () => void
-    isChecking: boolean
-    disabled?: boolean
-}) {
+function DnsRecordCard({ record }: { record: DnsRecord }) {
     return (
         <div className="rounded-lg border bg-card p-5 space-y-4">
             <div className="flex items-center justify-between">
                 <h4 className="text-sm font-semibold">{record.label}</h4>
-                <div className="flex items-center gap-2">
-                    <StatusBadge status={record.status} />
-                    <Button variant="ghost" size="icon" className="h-7 w-7 focus-visible:ring-0 focus-visible:ring-offset-0" onClick={onCheck} disabled={disabled || isChecking} title="Check this record">
-                        <RefreshCw className={`h-3.5 w-3.5 ${isChecking ? 'animate-spin' : ''}`} />
-                    </Button>
-                </div>
+                <StatusBadge status={record.status} />
             </div>
 
-            <div className={`grid gap-4 ${record.priority ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
+            <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-1">
                     <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Type</span>
                     <div>
@@ -114,17 +98,6 @@ function DnsRecordCard({ record, onCheck, isChecking, disabled }: {
                         </Button>
                     </div>
                 </div>
-                {record.priority && (
-                    <div className="space-y-1">
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Priority</span>
-                        <div className="flex items-center gap-1.5">
-                            <code className="flex-1 truncate rounded bg-muted px-2.5 py-1.5 text-xs font-mono">{record.priority}</code>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => copyToClipboard(record.priority!)} title="Copy priority">
-                                <Copy className="h-3.5 w-3.5" />
-                            </Button>
-                        </div>
-                    </div>
-                )}
                 <div className="space-y-1">
                     <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Value</span>
                     <div className="flex items-center gap-1.5">
@@ -138,27 +111,26 @@ function DnsRecordCard({ record, onCheck, isChecking, disabled }: {
 
             {record.status === 'error' && (
                 <div className="rounded-md bg-red-50 p-3 text-xs text-red-700 dark:bg-red-950/50 dark:text-red-300">
-                    The {record.label} values in your platform and in your domain provider account mismatch. Add this value to your domain provider account to authenticate this domain.
+                    The {record.label} values in Skale Club and in your domain provider account mismatch. Add this value to your domain provider account to authenticate this domain.
                 </div>
             )}
             {record.status === 'success' && (
                 <div className="rounded-md bg-emerald-50 p-3 text-xs text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
-                    The {record.label} values in your platform and your domain provider account match.
+                    The {record.label} values in Skale Club and your domain provider account match.
                 </div>
             )}
         </div>
     )
 }
 
-export default function DomainsTab({ orgId }: DomainsTabProps) {
+export default function DomainsTab({ organizationId }: DomainsTabProps) {
     const [domains, setDomains] = useState<Domain[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
     const [showCreateModal, setShowCreateModal] = useState(false)
     const [selectedDomain, setSelectedDomain] = useState<Domain | null>(null)
     const [dnsResults, setDnsResults] = useState<DnsResults | null>(null)
-    const [checkingRecord, setCheckingRecord] = useState<string | null>(null)
-    const [verifyingAll, setVerifyingAll] = useState(false)
+    const [isVerifying, setIsVerifying] = useState(false)
     const [newDomain, setNewDomain] = useState({
         name: '',
         verificationMethod: 'dns',
@@ -166,12 +138,17 @@ export default function DomainsTab({ orgId }: DomainsTabProps) {
 
     useEffect(() => {
         void fetchDomains()
-    }, [orgId])
+    }, [organizationId])
 
     async function fetchDomains() {
         setIsLoading(true)
         try {
-            const response = await fetchWithAuth(`/api/domains?organizationId=${orgId}`)
+            const token = await getAccessToken()
+            const response = await fetch(`/api/domains?organizationId=${organizationId}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            })
 
             if (response.ok) {
                 const data = await response.json()
@@ -194,11 +171,15 @@ export default function DomainsTab({ orgId }: DomainsTabProps) {
         if (!newDomain.name.trim()) return
 
         try {
-            const response = await fetchWithAuth('/api/domains', {
+            const token = await getAccessToken()
+            const response = await fetch('/api/domains', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
                 body: JSON.stringify({
-                    organizationId: orgId,
+                    organizationId,
                     name: newDomain.name.trim(),
                     verificationMethod: newDomain.verificationMethod,
                 }),
@@ -219,13 +200,15 @@ export default function DomainsTab({ orgId }: DomainsTabProps) {
         }
     }
 
-    async function handleVerifyDomain(domainId: string, recordKey: string) {
-        setCheckingRecord(recordKey)
+    async function handleVerifyDomain(domainId: string) {
+        setIsVerifying(true)
         try {
-            const response = await fetchWithAuth(`/api/domains/${domainId}/verify`, {
+            const token = await getAccessToken()
+            const response = await fetch(`/api/domains/${domainId}/verify`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ record: recordKey }),
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
             })
 
             if (response.ok) {
@@ -244,36 +227,7 @@ export default function DomainsTab({ orgId }: DomainsTabProps) {
         } catch (error) {
             console.error('Error verifying domain:', error)
         } finally {
-            setCheckingRecord(null)
-        }
-    }
-
-    async function handleVerifyAll(domainId: string) {
-        setVerifyingAll(true)
-        try {
-            const response = await fetchWithAuth(`/api/domains/${domainId}/verify`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({}),
-            })
-
-            if (response.ok) {
-                const data = await response.json()
-                setDomains((current) =>
-                    current.map((domain) => domain.id === domainId ? data.domain : domain)
-                )
-                if (selectedDomain?.id === domainId) {
-                    setSelectedDomain(data.domain)
-                }
-                setDnsResults(data.dnsResults || null)
-            } else {
-                const error = await response.json()
-                alert(error.error || 'Verification failed')
-            }
-        } catch (error) {
-            console.error('Error verifying domain:', error)
-        } finally {
-            setVerifyingAll(false)
+            setIsVerifying(false)
         }
     }
 
@@ -281,8 +235,12 @@ export default function DomainsTab({ orgId }: DomainsTabProps) {
         if (!confirm('Are you sure you want to delete this domain?')) return
 
         try {
-            const response = await fetchWithAuth(`/api/domains/${domainId}`, {
+            const token = await getAccessToken()
+            const response = await fetch(`/api/domains/${domainId}`, {
                 method: 'DELETE',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
             })
 
             if (response.ok) {
@@ -313,7 +271,6 @@ export default function DomainsTab({ orgId }: DomainsTabProps) {
 
         return [
             {
-                key: 'verification',
                 label: 'Skale Club Verification',
                 type: 'TXT',
                 name: '@',
@@ -321,7 +278,6 @@ export default function DomainsTab({ orgId }: DomainsTabProps) {
                 status: statusFor(domain.verificationStatus, 'verification'),
             },
             {
-                key: 'spf',
                 label: 'SPF Record',
                 type: 'TXT',
                 name: '@',
@@ -329,32 +285,27 @@ export default function DomainsTab({ orgId }: DomainsTabProps) {
                 status: statusFor(domain.spfStatus, 'spf'),
             },
             {
-                key: 'dkim',
                 label: 'DKIM Record',
                 type: 'TXT',
-                name: 'skaleclub._domainkey',
+                name: `${domain.dkimSelector || 'skaleclub'}._domainkey`,
                 value: domain.dkimPublicKey || '(generated after domain verification)',
-                status: statusFor(domain.dkimStatus, 'dkim'),
+                status: statusFor(null, 'dkim'),
             },
             {
-                key: 'dmarc',
                 label: 'DMARC Record',
                 type: 'TXT',
                 name: '_dmarc',
                 value: `v=DMARC1; p=quarantine; rua=mailto:dmarc@${domain.name}`,
-                status: statusFor(domain.dmarcStatus, 'dmarc'),
+                status: statusFor(null, 'dmarc'),
             },
             {
-                key: 'mx',
                 label: 'MX Record',
                 type: 'MX',
                 name: '@',
-                value: 'mx.skaleclub.com',
-                priority: '10',
+                value: '10 mx.skaleclub.com',
                 status: statusFor(domain.mxStatus, 'mx'),
             },
             {
-                key: 'returnPath',
                 label: 'Return-Path',
                 type: 'CNAME',
                 name: 'rp',
@@ -401,27 +352,14 @@ export default function DomainsTab({ orgId }: DomainsTabProps) {
             ) : (
                 <div className="space-y-3">
                     {filteredDomains.map((domain) => {
-                        const isAuthenticated =
-                            domain.verificationStatus === 'verified' &&
-                            domain.spfStatus === 'verified' &&
-                            domain.dkimStatus === 'verified' &&
-                            domain.dmarcStatus === 'verified' &&
-                            domain.mxStatus === 'verified' &&
-                            domain.returnPathStatus === 'verified'
-                        const isFailed =
-                            !isAuthenticated &&
-                            (domain.verificationStatus === 'failed' ||
-                                domain.spfStatus === 'failed' ||
-                                domain.dkimStatus === 'failed' ||
-                                domain.dmarcStatus === 'failed' ||
-                                domain.mxStatus === 'failed' ||
-                                domain.returnPathStatus === 'failed')
+                        const isAuthenticated = domain.verificationStatus === 'verified'
+                        const isFailed = domain.verificationStatus === 'failed'
                         const isSelected = selectedDomain?.id === domain.id
 
                         return (
                             <Card
                                 key={domain.id}
-                                className="cursor-pointer transition-all hover:shadow-md"
+                                className={`cursor-pointer transition-all hover:shadow-md ${isSelected ? 'ring-2 ring-primary shadow-md' : ''}`}
                                 onClick={() => { setSelectedDomain(isSelected ? null : domain); setDnsResults(null) }}
                             >
                                 <CardContent className="grid gap-4 p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
@@ -474,62 +412,46 @@ export default function DomainsTab({ orgId }: DomainsTabProps) {
                 </div>
             )}
 
-            {/* DNS Records Modal */}
+            {/* DNS Records Panel */}
             {selectedDomain && (
-                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4" onClick={() => { setSelectedDomain(null); setDnsResults(null) }}>
-                    <Card className="w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-                        <CardHeader>
-                            <div className="flex items-start justify-between gap-4">
-                                <div>
-                                    <CardTitle>DNS records for domain authentication</CardTitle>
-                                    <CardDescription className="mt-1.5">
-                                        Add these DNS records to your domain provider to authenticate <strong>{selectedDomain.name}</strong>
-                                    </CardDescription>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => handleVerifyAll(selectedDomain.id)}
-                                        disabled={verifyingAll || checkingRecord !== null}
-                                        className="gap-2 focus-visible:ring-0 focus-visible:ring-offset-0"
-                                    >
-                                        {verifyingAll
-                                            ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Verifying…</>
-                                            : <><RefreshCw className="h-3.5 w-3.5" /> Verify all</>
-                                        }
-                                    </Button>
-                                    <Button variant="ghost" size="icon" className="focus-visible:ring-0 focus-visible:ring-offset-0" onClick={() => { setSelectedDomain(null); setDnsResults(null) }}>
-                                        <X className="h-4 w-4" />
-                                    </Button>
-                                </div>
+                <Card>
+                    <CardHeader>
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <CardTitle>DNS records for domain authentication</CardTitle>
+                                <CardDescription className="mt-1.5">
+                                    Add these DNS records to your domain provider to authenticate <strong>{selectedDomain.name}</strong>
+                                </CardDescription>
                             </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            {getDnsRecords(selectedDomain).map((record) => (
-                                <DnsRecordCard
-                                    key={record.key}
-                                    record={record}
-                                    onCheck={() => handleVerifyDomain(selectedDomain.id, record.key)}
-                                    isChecking={checkingRecord === record.key}
-                                    disabled={verifyingAll || checkingRecord !== null}
-                                />
-                            ))}
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleVerifyDomain(selectedDomain.id)}
+                                disabled={isVerifying}
+                            >
+                                <RefreshCw className={`mr-2 h-4 w-4 ${isVerifying ? 'animate-spin' : ''}`} />
+                                {isVerifying ? 'Verifying...' : 'Check records'}
+                            </Button>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {getDnsRecords(selectedDomain).map((record) => (
+                            <DnsRecordCard key={record.label} record={record} />
+                        ))}
 
-                            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/50">
-                                <p className="text-sm text-blue-800 dark:text-blue-200">
-                                    Need help? After adding these DNS records at your domain provider, click the refresh icon on each record to verify. DNS changes can take up to 48 hours to propagate.
-                                </p>
-                            </div>
+                        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/50">
+                            <p className="text-sm text-blue-800 dark:text-blue-200">
+                                Need help? After adding these DNS records at your domain provider, click "Check records" to verify. DNS changes can take up to 48 hours to propagate.
+                            </p>
+                        </div>
 
-                            <div className="flex justify-end">
-                                <Button variant="outline" onClick={() => { setSelectedDomain(null); setDnsResults(null) }}>
-                                    Close
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
+                        <div className="flex justify-end">
+                            <Button variant="outline" onClick={() => setSelectedDomain(null)}>
+                                Close
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
             )}
 
             {/* Create Domain Modal */}

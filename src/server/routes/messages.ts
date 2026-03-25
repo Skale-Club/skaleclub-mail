@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { eq, and, desc, like, sql } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 import { db } from '../../db'
-import {  messages, organizationUsers, deliveries, templates , organizations } from '../../db/schema'
+import { messages, organizations, organizationUsers, deliveries, templates } from '../../db/schema'
 import { isPlatformAdmin } from '../lib/admin'
 import { injectTracking, incrementStat, fireWebhooks } from '../lib/tracking'
 import { resolveOutlookMailboxForServer, sendMessageWithOutlook } from '../lib/outlook'
@@ -57,12 +57,12 @@ async function checkMessageAccess(userId: string, organizationId: string) {
     if (!organization) return { organization: null, membership: null }
 
     if (await isPlatformAdmin(userId)) {
-        return { organization, membership: { role: "admin" as const } }
+        return { organization, membership: { role: 'admin' as const } }
     }
 
     const membership = await db.query.organizationUsers.findFirst({
         where: and(
-            eq(organizationUsers.organizationId, organization.id),
+            eq(organizationUsers.organizationId, organizationId),
             eq(organizationUsers.userId, userId)
         ),
     })
@@ -200,7 +200,10 @@ router.post('/', async (req: Request, res: Response) => {
             return res.status(403).json({ error: 'Access denied' })
         }
 
-
+        const sendMode = 'smtp'
+        const trackOpens = true
+        const trackClicks = true
+        const privacyMode = false
 
         let subject = data.subject
         let plainBody = data.plainBody
@@ -233,18 +236,18 @@ router.post('/', async (req: Request, res: Response) => {
             htmlBody = render(template.htmlBody, true) || htmlBody
         }
 
-        const outlookMailbox = false
+        const outlookMailbox = sendMode === 'outlook'
             ? await resolveOutlookMailboxForServer(data.organizationId, data.outlookMailboxId)
             : null
 
-        if (false) {
+        if (sendMode === 'outlook') {
             if (!outlookMailbox) {
                 return res.status(400).json({ error: 'No active Outlook mailbox configured for this organization' })
             }
 
-            if (data.from.toLowerCase() !== outlookMailbox!.email.toLowerCase()) {
+            if (data.from.toLowerCase() !== outlookMailbox.email.toLowerCase()) {
                 return res.status(400).json({
-                    error: `Outlook send mode requires the from address to match the connected mailbox (${outlookMailbox!.email})`,
+                    error: `Outlook send mode requires the from address to match the connected mailbox (${outlookMailbox.email})`,
                 })
             }
         }
@@ -255,14 +258,14 @@ router.post('/', async (req: Request, res: Response) => {
 
         const messageToken = uuidv4()
 
-        if (htmlBody) {
+        if (htmlBody && !privacyMode && (trackOpens || trackClicks)) {
             const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 9001}`
-            htmlBody = injectTracking(htmlBody, messageToken, baseUrl, true, true)
+            htmlBody = injectTracking(htmlBody, messageToken, baseUrl, trackOpens, trackClicks)
         }
 
         const [message] = await db.insert(messages).values({
             organizationId: data.organizationId,
-            messageId: `<${uuidv4()}@${'mail.local'}>`,
+            messageId: `<${uuidv4()}@mail.local>`,
             token: messageToken,
             direction: 'outgoing',
             fromAddress: data.from,
@@ -288,11 +291,11 @@ router.post('/', async (req: Request, res: Response) => {
             })
         }
 
-        if (false) {
+        if (sendMode === 'outlook' && outlookMailbox) {
             try {
                 await sendMessageWithOutlook({
                     organizationId: data.organizationId,
-                    mailboxId: outlookMailbox!.id,
+                    mailboxId: outlookMailbox.id,
                     fromAddress: data.from,
                     to: data.to,
                     cc: data.cc,
@@ -325,7 +328,7 @@ router.post('/', async (req: Request, res: Response) => {
                 message.status = 'sent'
                 message.sentAt = sentAt
             } catch (error) {
-                const details = error instanceof Error ? (error as Error).message : 'Outlook send failed'
+                const details = error instanceof Error ? error.message : 'Outlook send failed'
                 const failedAt = new Date()
 
                 await db

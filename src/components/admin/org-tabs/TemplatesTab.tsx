@@ -4,11 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
 import { Label } from '../../ui/label'
-import { fetchWithAuth, generateSlug } from './shared'
+import { generateSlug, getAccessToken } from './shared'
 
 interface Template {
     id: string
-    orgId: string
+    organizationId: string
     name: string
     slug: string
     subject: string
@@ -20,7 +20,7 @@ interface Template {
 }
 
 interface TemplatesTabProps {
-    orgId: string
+    organizationId: string
 }
 
 type TemplateDraft = {
@@ -41,7 +41,7 @@ const emptyTemplate: TemplateDraft = {
     variables: [],
 }
 
-export default function TemplatesTab({ orgId }: TemplatesTabProps) {
+export default function TemplatesTab({ organizationId }: TemplatesTabProps) {
     const [templates, setTemplates] = useState<Template[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
@@ -59,13 +59,18 @@ export default function TemplatesTab({ orgId }: TemplatesTabProps) {
 
     useEffect(() => {
         void fetchTemplates()
-    }, [orgId])
+    }, [organizationId])
 
     async function fetchTemplates() {
         setIsLoading(true)
         try {
-            const params = new URLSearchParams({ orgId })
-            const response = await fetchWithAuth(`/api/templates?${params.toString()}`)
+            const token = await getAccessToken()
+            const params = new URLSearchParams({ organizationId })
+            const response = await fetch(`/api/templates?${params.toString()}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            })
 
             if (response.ok) {
                 const data = await response.json()
@@ -148,12 +153,16 @@ export default function TemplatesTab({ orgId }: TemplatesTabProps) {
 
     async function handleCreateTemplate() {
         try {
-            const response = await fetchWithAuth('/api/templates', {
+            const token = await getAccessToken()
+            const response = await fetch('/api/templates', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
                 body: JSON.stringify({
                     ...draft,
-                    organizationId: orgId,
+                    organizationId,
                     plainBody: draft.plainBody || undefined,
                     htmlBody: draft.htmlBody || undefined,
                 }),
@@ -176,9 +185,13 @@ export default function TemplatesTab({ orgId }: TemplatesTabProps) {
         if (!editingTemplate) return
 
         try {
-            const response = await fetchWithAuth(`/api/templates/${editingTemplate.id}`, {
+            const token = await getAccessToken()
+            const response = await fetch(`/api/templates/${editingTemplate.id}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
                 body: JSON.stringify({
                     ...draft,
                     plainBody: draft.plainBody || undefined,
@@ -205,8 +218,12 @@ export default function TemplatesTab({ orgId }: TemplatesTabProps) {
         if (!confirm('Are you sure you want to delete this template?')) return
 
         try {
-            const response = await fetchWithAuth(`/api/templates/${templateId}`, {
+            const token = await getAccessToken()
+            const response = await fetch(`/api/templates/${templateId}`, {
                 method: 'DELETE',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
             })
 
             if (response.ok) {
@@ -221,9 +238,13 @@ export default function TemplatesTab({ orgId }: TemplatesTabProps) {
         if (!previewTemplate) return
 
         try {
-            const response = await fetchWithAuth(`/api/templates/${previewTemplate.id}/render`, {
+            const token = await getAccessToken()
+            const response = await fetch(`/api/templates/${previewTemplate.id}/render`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
                 body: JSON.stringify({ variables: previewVariables }),
             })
 

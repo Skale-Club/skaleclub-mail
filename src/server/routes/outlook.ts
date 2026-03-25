@@ -24,7 +24,7 @@ const startSchema = z.object({
 
 const sendTestSchema = z.object({
     to: z.string().email(),
-    subject: z.string().min(1).default('Mail Platform Outlook test'),
+    subject: z.string().min(1).default('SkaleClub Mail Outlook test'),
     body: z.string().min(1).default('This is a test message sent through Microsoft Graph.'),
 })
 
@@ -38,7 +38,7 @@ async function checkOutlookAccess(userId: string, organizationId: string) {
     }
 
     if (await isPlatformAdmin(userId)) {
-        return { organization, membership: { role: "admin" as const } }
+        return { organization, membership: { role: 'admin' as const } }
     }
 
     const membership = await db.query.organizationUsers.findFirst({
@@ -52,7 +52,7 @@ async function checkOutlookAccess(userId: string, organizationId: string) {
 }
 
 function buildFrontendRedirect(params: Record<string, string>) {
-    const url = new URL('/admin/organizations', process.env.FRONTEND_URL || 'http://localhost:9000')
+    const url = new URL('/admin/servers', process.env.FRONTEND_URL || 'http://localhost:9000')
 
     for (const [key, value] of Object.entries(params)) {
         url.searchParams.set(key, value)

@@ -39,20 +39,19 @@ async function processDelivery(delivery: typeof deliveries.$inferSelect): Promis
             return
         }
 
-        if (message.held) return // skip held messages
+        if (message.held) return
 
-        const organization = await db.query.organizations.findFirst({
+        const org = await db.query.organizations.findFirst({
             where: eq(organizations.id, message.organizationId),
         })
 
-        if (!organization) {
+        if (!org) {
             await db.update(deliveries)
-                .set({ status: 'failed', details: 'Server not available' })
+                .set({ status: 'failed', details: 'Organization not found' })
                 .where(eq(deliveries.id, delivery.id))
             return
         }
 
-        // Build transporter from env vars (global SMTP config)
         const host = process.env.SMTP_HOST
         const port = parseInt(process.env.SMTP_PORT || '587')
         const user = process.env.SMTP_USER
@@ -71,7 +70,6 @@ async function processDelivery(delivery: typeof deliveries.$inferSelect): Promis
         })
 
         const fromAddress = message.fromAddress || process.env.SMTP_FROM || ''
-        const fromName = message.fromName || ''
 
         const attachments = (message.attachments as any[] || []).map((att) => ({
             filename: att.filename,
@@ -80,7 +78,7 @@ async function processDelivery(delivery: typeof deliveries.$inferSelect): Promis
         }))
 
         const result = await transporter.sendMail({
-            from: fromName ? `"${fromName}" <${fromAddress}>` : fromAddress,
+            from: fromAddress,
             to: delivery.rcptTo,
             subject: message.subject || '',
             text: message.plainBody || undefined,
@@ -101,7 +99,6 @@ async function processDelivery(delivery: typeof deliveries.$inferSelect): Promis
             })
             .where(eq(deliveries.id, delivery.id))
 
-        // Check if all deliveries for this message are now sent
         const remaining = await db.query.deliveries.findMany({
             where: and(
                 eq(deliveries.messageId, message.id),

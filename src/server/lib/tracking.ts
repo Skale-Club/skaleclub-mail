@@ -131,7 +131,7 @@ type WebhookEvent =
     | 'test'
 
 /**
- * Fires all active webhooks subscribed to the given event for a server.
+ * Fires all active webhooks subscribed to the given event for an organization.
  * Signs the payload with HMAC-SHA256 when a secret is configured.
  * Logs every attempt to webhook_requests.
  * Errors are swallowed so tracking never blocks the response.
