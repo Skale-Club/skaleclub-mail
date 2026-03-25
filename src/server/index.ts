@@ -29,7 +29,14 @@ import { createIMAPServer, loadImapBranding } from './imap-server'
 const app = express()
 const PORT = process.env.PORT || 3001
 
-app.use(helmet())
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+            'img-src': ["'self'", 'data:', 'https://ulzqxfeodxkyawfhjtpm.supabase.co'],
+        },
+    },
+}))
 app.use(cors({
     origin: process.env.FRONTEND_URL || 'http://localhost:9000',
     credentials: true,
