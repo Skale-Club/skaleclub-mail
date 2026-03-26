@@ -29,6 +29,7 @@ import { supabaseAnonClient } from './lib/supabase'
 
 const app = express()
 const PORT = process.env.PORT || 3001
+const supabaseOrigin = process.env.SUPABASE_URL ? new URL(process.env.SUPABASE_URL).origin : null
 
 app.set('trust proxy', 1)
 
@@ -36,8 +37,8 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-            'img-src': ["'self'", 'data:', 'https://ulzqxfeodxkyawfhjtpm.supabase.co'],
-            'connect-src': ["'self'", 'https://ulzqxfeodxkyawfhjtpm.supabase.co'],
+            'img-src': ["'self'", 'data:', supabaseOrigin].filter(Boolean) as string[],
+            'connect-src': ["'self'", supabaseOrigin].filter(Boolean) as string[],
         },
     },
 }))
@@ -109,6 +110,19 @@ app.get('/health/auth', async (_req, res) => {
 app.get('/health/ready', async (_req, res) => {
     const readiness = await runReadinessChecks()
     res.status(readiness.ok ? 200 : 503).json(readiness)
+})
+
+app.get('/app-config.js', (_req, res) => {
+    res.type('application/javascript')
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+
+    const publicConfig = {
+        VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '',
+        VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
+        VITE_APP_NAME: process.env.VITE_APP_NAME || process.env.APP_APPLICATION_NAME || 'Skale Club Mail',
+    }
+
+    res.send(`window.__APP_CONFIG__ = ${JSON.stringify(publicConfig)};`)
 })
 
 const PUBLIC_PATHS = [
