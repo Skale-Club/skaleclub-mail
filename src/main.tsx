@@ -253,11 +253,9 @@ function App() {
                             </AdminCheck>
                         </Route>
                         <Route path="/outreach/sequences/new">
-                            <AuthCheck>
-                                <OutreachCheck>
-                                    <NewSequencePage />
-                                </OutreachCheck>
-                            </AuthCheck>
+                            <AdminCheck>
+                                <NewSequencePage />
+                            </AdminCheck>
                         </Route>
                         <Route path="/outreach/analytics">
                             <AdminCheck>
