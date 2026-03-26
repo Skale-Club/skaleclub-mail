@@ -30,10 +30,15 @@ function useProvideAuth(): AuthState {
 
     async function fetchProfile(token?: string) {
         try {
+            const controller = new AbortController()
+            const timeout = window.setTimeout(() => controller.abort(), 10_000)
             const data = await apiFetch<{ user?: { isAdmin?: boolean } }>('/api/users/profile', {
                 auth: !token,
                 headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                signal: controller.signal,
+                retry: false,
             })
+            window.clearTimeout(timeout)
             setIsAdmin(data.user?.isAdmin === true)
         } catch {
             setIsAdmin(false)
@@ -43,7 +48,15 @@ function useProvideAuth(): AuthState {
     useEffect(() => {
         const initializeAuth = async () => {
             try {
-                const { data: { session }, error } = await supabase.auth.getSession()
+                // Race against a timeout so the app never stays on the spinner forever
+                const sessionResult = await Promise.race([
+                    supabase.auth.getSession(),
+                    new Promise<never>((_, reject) =>
+                        window.setTimeout(() => reject(new Error('Session timeout')), 10_000)
+                    ),
+                ])
+
+                const { data: { session }, error } = sessionResult
 
                 if (error) throw error
 
@@ -56,6 +69,8 @@ function useProvideAuth(): AuthState {
                 }
             } catch (error) {
                 console.error('Error getting session:', error)
+                setUser(null)
+                setIsAdmin(false)
             } finally {
                 setIsLoading(false)
             }

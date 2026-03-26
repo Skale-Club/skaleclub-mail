@@ -1,5 +1,6 @@
 import React from 'react'
 import { apiFetch } from '../lib/api-client'
+import { useAuth } from './useAuth'
 
 export interface Mailbox {
     id: string
@@ -24,6 +25,7 @@ interface MailboxContextType {
 const MailboxContext = React.createContext<MailboxContextType | undefined>(undefined)
 
 export function MailboxProvider({ children }: { children: React.ReactNode }) {
+    const { user, isLoading: authLoading } = useAuth()
     const [mailboxes, setMailboxes] = React.useState<Mailbox[]>([])
     const [selectedMailbox, setSelectedMailbox] = React.useState<Mailbox | null>(null)
     const [isLoading, setIsLoading] = React.useState(true)
@@ -48,8 +50,15 @@ export function MailboxProvider({ children }: { children: React.ReactNode }) {
     }, [])
 
     React.useEffect(() => {
+        if (authLoading) return
+        if (!user) {
+            setMailboxes([])
+            setSelectedMailbox(null)
+            setIsLoading(false)
+            return
+        }
         refreshMailboxes()
-    }, [refreshMailboxes])
+    }, [user, authLoading, refreshMailboxes])
 
     const handleSetSelectedMailbox = React.useCallback((mailbox: Mailbox | null) => {
         setSelectedMailbox(mailbox)
