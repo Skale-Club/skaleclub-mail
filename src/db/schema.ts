@@ -406,6 +406,10 @@ export const outlookMailboxesRelations = relations(outlookMailboxes, ({ one }) =
         fields: [outlookMailboxes.organizationId],
         references: [organizations.id],
     }),
+    emailAccount: one(emailAccounts, {
+        fields: [outlookMailboxes.id],
+        references: [emailAccounts.outlookMailboxId],
+    }),
 }))
 
 export const routesRelations = relations(routes, ({ one }) => ({
@@ -597,6 +601,9 @@ export const emailAccountStatusEnum = pgEnum('email_account_status', ['pending',
 // Sequence step type enum
 export const sequenceStepTypeEnum = pgEnum('sequence_step_type', ['email', 'delay', 'condition'])
 
+// Email account provider enum
+export const emailProviderEnum = pgEnum('email_provider', ['smtp', 'outlook'])
+
 // Email Accounts (Inboxes for sending outreach emails)
 export const emailAccounts = pgTable('email_accounts', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -604,17 +611,19 @@ export const emailAccounts = pgTable('email_accounts', {
     // Account details
     email: text('email').notNull(),
     displayName: text('display_name'),
-    // SMTP settings
-    smtpHost: text('smtp_host').notNull(),
-    smtpPort: integer('smtp_port').default(587).notNull(),
-    smtpUsername: text('smtp_username').notNull(),
-    smtpPassword: text('smtp_password').notNull(), // encrypted
-    smtpSecure: boolean('smtp_secure').default(true).notNull(),
+    provider: emailProviderEnum('provider').default('smtp').notNull(),
+    outlookMailboxId: uuid('outlook_mailbox_id').references(() => outlookMailboxes.id),
+    // SMTP settings (optional for OAuth providers)
+    smtpHost: text('smtp_host'),
+    smtpPort: integer('smtp_port').default(587),
+    smtpUsername: text('smtp_username'),
+    smtpPassword: text('smtp_password'),
+    smtpSecure: boolean('smtp_secure').default(true),
     // IMAP settings (for reply tracking)
     imapHost: text('imap_host'),
     imapPort: integer('imap_port').default(993),
     imapUsername: text('imap_username'),
-    imapPassword: text('imap_password'), // encrypted
+    imapPassword: text('imap_password'),
     imapSecure: boolean('imap_secure').default(true),
     // Sending limits (warm-up and daily limits)
     dailySendLimit: integer('daily_send_limit').default(50).notNull(),
@@ -636,6 +645,7 @@ export const emailAccounts = pgTable('email_accounts', {
     totalClicks: integer('total_clicks').default(0).notNull(),
     totalReplies: integer('total_replies').default(0).notNull(),
     totalBounces: integer('total_bounces').default(0).notNull(),
+    lastSentAt: timestamp('last_sent_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
@@ -860,6 +870,10 @@ export const emailAccountsRelations = relations(emailAccounts, ({ one, many }) =
     organization: one(organizations, {
         fields: [emailAccounts.organizationId],
         references: [organizations.id],
+    }),
+    outlookMailbox: one(outlookMailboxes, {
+        fields: [emailAccounts.outlookMailboxId],
+        references: [outlookMailboxes.id],
     }),
     campaignLeads: many(campaignLeads),
     outreachEmails: many(outreachEmails),

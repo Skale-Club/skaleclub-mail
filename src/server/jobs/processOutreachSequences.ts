@@ -91,15 +91,19 @@ async function sendEmail(
     replyTo?: string | null,
     tracking?: { token: string; baseUrl: string; trackOpens: boolean; trackClicks: boolean }
 ): Promise<{ messageId: string; finalHtml: string | null }> {
+    if (!account.smtpHost || !account.smtpPassword) {
+        throw new Error('SMTP credentials not configured for this account')
+    }
+    
     const transporter = nodemailer.createTransport({
         host: account.smtpHost,
-        port: account.smtpPort,
-        secure: account.smtpSecure,
+        port: account.smtpPort || 587,
+        secure: account.smtpSecure ?? true,
         auth: {
-            user: account.smtpUsername,
+            user: account.smtpUsername || account.email,
             pass: decryptSecret(account.smtpPassword)
         }
-    })
+    } as nodemailer.TransportOptions)
 
     let finalHtml = htmlBody
     if (finalHtml && tracking && (tracking.trackOpens || tracking.trackClicks)) {

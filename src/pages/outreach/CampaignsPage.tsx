@@ -75,12 +75,12 @@ function CampaignCard({ campaign, onStatusChange, onDelete }: {
     }
 
     return (
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:border-gray-300 dark:hover:border-gray-600 transition-colors">
+        <div className="bg-card rounded-lg border border-border p-4 hover:border-border transition-colors">
             <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
                     <Link
                         href={`/outreach/campaigns/${campaign.id}`}
-                        className="font-semibold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400"
+                        className="font-semibold text-foreground hover:text-primary"
                     >
                         {campaign.name}
                     </Link>
@@ -88,7 +88,7 @@ function CampaignCard({ campaign, onStatusChange, onDelete }: {
                         <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${statusColors[campaign.status]}`}>
                             {campaign.status}
                         </span>
-                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                        <span className="text-xs text-muted-foreground">
                             Created {new Date(campaign.createdAt).toLocaleDateString()}
                         </span>
                     </div>
@@ -96,9 +96,9 @@ function CampaignCard({ campaign, onStatusChange, onDelete }: {
                 <div className="relative">
                     <button
                         onClick={() => setShowMenu(!showMenu)}
-                        className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                        className="p-1 rounded hover:bg-accent"
                     >
-                        <MoreVertical className="w-5 h-5 text-gray-400" />
+                        <MoreVertical className="w-5 h-5 text-muted-foreground" />
                     </button>
                     {showMenu && (
                         <>
@@ -106,11 +106,11 @@ function CampaignCard({ campaign, onStatusChange, onDelete }: {
                                 className="fixed inset-0 z-10"
                                 onClick={() => setShowMenu(false)}
                             />
-                            <div className="absolute right-0 top-8 z-20 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1">
+                            <div className="absolute right-0 top-8 z-20 w-48 bg-popover rounded-lg shadow-lg border border-border py-1">
                                 {campaign.status === 'active' && (
                                     <button
                                         onClick={() => { onStatusChange(campaign.id, 'paused'); setShowMenu(false) }}
-                                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                                        className="w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
                                     >
                                         <Pause className="w-4 h-4" /> Pause
                                     </button>
@@ -118,7 +118,7 @@ function CampaignCard({ campaign, onStatusChange, onDelete }: {
                                 {campaign.status === 'paused' && (
                                     <button
                                         onClick={() => { onStatusChange(campaign.id, 'active'); setShowMenu(false) }}
-                                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                                        className="w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
                                     >
                                         <Play className="w-4 h-4" /> Resume
                                     </button>
@@ -126,14 +126,14 @@ function CampaignCard({ campaign, onStatusChange, onDelete }: {
                                 {campaign.status === 'draft' && (
                                     <button
                                         onClick={() => { onStatusChange(campaign.id, 'active'); setShowMenu(false) }}
-                                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                                        className="w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
                                     >
                                         <Play className="w-4 h-4" /> Start
                                     </button>
                                 )}
                                 <button
                                     onClick={() => setShowMenu(false)}
-                                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                                    className="w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
                                 >
                                     <Copy className="w-4 h-4" /> Duplicate
                                 </button>
@@ -151,32 +151,32 @@ function CampaignCard({ campaign, onStatusChange, onDelete }: {
 
             <div className="grid grid-cols-4 gap-4 mt-4">
                 <div className="text-center">
-                    <div className="flex items-center justify-center gap-1 text-gray-400 mb-1">
+                    <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
                         <Users className="w-4 h-4" />
                     </div>
-                    <p className="text-lg font-semibold text-gray-900 dark:text-white">{campaign.totalLeads}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Leads</p>
+                    <p className="text-lg font-semibold text-foreground">{campaign.totalLeads}</p>
+                    <p className="text-xs text-muted-foreground">Leads</p>
                 </div>
                 <div className="text-center">
-                    <div className="flex items-center justify-center gap-1 text-gray-400 mb-1">
+                    <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
                         <Mail className="w-4 h-4" />
                     </div>
-                    <p className="text-lg font-semibold text-gray-900 dark:text-white">{campaign.emailsSent}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Sent</p>
+                    <p className="text-lg font-semibold text-foreground">{campaign.emailsSent}</p>
+                    <p className="text-xs text-muted-foreground">Sent</p>
                 </div>
                 <div className="text-center">
-                    <div className="flex items-center justify-center gap-1 text-gray-400 mb-1">
+                    <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
                         <TrendingUp className="w-4 h-4" />
                     </div>
-                    <p className="text-lg font-semibold text-gray-900 dark:text-white">{campaign.openRate.toFixed(1)}%</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Opens</p>
+                    <p className="text-lg font-semibold text-foreground">{campaign.openRate.toFixed(1)}%</p>
+                    <p className="text-xs text-muted-foreground">Opens</p>
                 </div>
                 <div className="text-center">
-                    <div className="flex items-center justify-center gap-1 text-gray-400 mb-1">
+                    <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
                         <Target className="w-4 h-4" />
                     </div>
-                    <p className="text-lg font-semibold text-gray-900 dark:text-white">{campaign.replyRate.toFixed(1)}%</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Replies</p>
+                    <p className="text-lg font-semibold text-foreground">{campaign.replyRate.toFixed(1)}%</p>
+                    <p className="text-xs text-muted-foreground">Replies</p>
                 </div>
             </div>
         </div>
@@ -222,14 +222,14 @@ export function CampaignsPage() {
                 {/* Header */}
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Campaigns</h1>
-                        <p className="text-gray-500 dark:text-gray-400 mt-1">
+                        <h1 className="text-2xl font-bold text-foreground">Campaigns</h1>
+                        <p className="text-muted-foreground mt-1">
                             Manage your cold email outreach campaigns
                         </p>
                     </div>
                     <Link
                         href="/outreach/campaigns/new"
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
                     >
                         <Plus className="w-5 h-5" />
                         New Campaign
@@ -239,21 +239,21 @@ export function CampaignsPage() {
                 {/* Filters */}
                 <div className="flex flex-col sm:flex-row gap-4">
                     <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                         <input
                             type="text"
                             placeholder="Search campaigns..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="w-full pl-10 pr-4 py-2 border border-input rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
                         />
                     </div>
                     <div className="flex items-center gap-2">
-                        <Filter className="w-5 h-5 text-gray-400" />
+                        <Filter className="w-5 h-5 text-muted-foreground" />
                         <select
                             value={statusFilter}
                             onChange={(e) => setStatusFilter(e.target.value)}
-                            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                            className="px-3 py-2 border border-input rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary"
                         >
                             <option value="all">All Status</option>
                             <option value="draft">Draft</option>
@@ -269,14 +269,14 @@ export function CampaignsPage() {
                 {isLoading ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {[...Array(6)].map((_, i) => (
-                            <div key={i} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 animate-pulse">
-                                <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-2/3 mb-2"></div>
-                                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4"></div>
+                            <div key={i} className="bg-card rounded-lg border border-border p-4 animate-pulse">
+                                <div className="h-5 bg-muted rounded w-2/3 mb-2"></div>
+                                <div className="h-4 bg-muted rounded w-1/3 mb-4"></div>
                                 <div className="grid grid-cols-4 gap-4">
                                     {[...Array(4)].map((_, j) => (
                                         <div key={j} className="text-center">
-                                            <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded mx-auto w-12 mb-1"></div>
-                                            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded mx-auto w-8"></div>
+                                            <div className="h-6 bg-muted rounded mx-auto w-12 mb-1"></div>
+                                            <div className="h-3 bg-muted rounded mx-auto w-8"></div>
                                         </div>
                                     ))}
                                 </div>
@@ -295,12 +295,12 @@ export function CampaignsPage() {
                         ))}
                     </div>
                 ) : (
-                    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-12 text-center">
-                        <Target className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                    <div className="bg-card rounded-lg border border-border p-12 text-center">
+                        <Target className="w-16 h-16 text-muted-foreground/50 mx-auto mb-4" />
+                        <h3 className="text-lg font-medium text-foreground mb-2">
                             {search || statusFilter !== 'all' ? 'No campaigns found' : 'No campaigns yet'}
                         </h3>
-                        <p className="text-gray-500 dark:text-gray-400 mb-4">
+                        <p className="text-muted-foreground mb-4">
                             {search || statusFilter !== 'all'
                                 ? 'Try adjusting your search or filter criteria'
                                 : 'Create your first campaign to start reaching out to leads'
@@ -309,7 +309,7 @@ export function CampaignsPage() {
                         {!search && statusFilter === 'all' && (
                             <Link
                                 href="/outreach/campaigns/new"
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
                             >
                                 <Plus className="w-5 h-5" />
                                 Create Campaign

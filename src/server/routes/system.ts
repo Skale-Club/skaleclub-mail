@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { statfs } from 'node:fs/promises'
-import { db } from '../../db'
+import { db, checkDatabaseHealth, getPoolStats } from '../../db'
 import { sql } from 'drizzle-orm'
 import { systemBranding, users, organizations } from '../../db/schema'
 import { eq } from 'drizzle-orm'
@@ -450,6 +450,66 @@ router.put('/outreach', async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Error updating outreach status:', error)
         res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+// GET /api/system/db-stats - Get database connection stats and health
+router.get('/db-stats', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        const { isPlatformAdmin } = await import('../lib/admin')
+        if (!await isPlatformAdmin(userId)) {
+            return res.status(403).json({ error: 'Forbidden' })
+        }
+
+        // Run health check and pool stats in parallel
+        const [health, poolStats] = await Promise.all([
+            checkDatabaseHealth(),
+            getPoolStats(),
+        ])
+
+        res.json({
+            health,
+            ...poolStats,
+            timestamp: new Date().toISOString(),
+        })
+    } catch (error) {
+        console.error('Error fetching database stats:', error)
+        res.status(500).json({ 
+            error: 'Internal server error',
+            message: error instanceof Error ? error.message : 'Unknown error'
+        })
+    }
+})
+
+// GET /api/system/db-health - Quick health check endpoint (lighter, for monitoring)
+router.get('/db-health', async (req: Request, res: Response) => {
+    try {
+        const health = await checkDatabaseHealth()
+        
+        if (health.ok) {
+            res.json({ 
+                status: 'healthy',
+                latencyMs: health.latencyMs,
+                timestamp: health.timestamp
+            })
+        } else {
+            res.status(503).json({ 
+                status: 'unhealthy',
+                latencyMs: health.latencyMs,
+                error: health.error,
+                timestamp: health.timestamp
+            })
+        }
+    } catch (error) {
+        res.status(503).json({ 
+            status: 'unhealthy',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        })
     }
 })
 

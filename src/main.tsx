@@ -26,6 +26,7 @@ import { OutreachDashboard } from './pages/outreach/OutreachDashboard'
 import { CampaignsPage } from './pages/outreach/CampaignsPage'
 import { LeadsPage } from './pages/outreach/LeadsPage'
 import { InboxesPage } from './pages/outreach/InboxesPage'
+import { NewInboxPage } from './pages/outreach/inboxes/NewInboxPage'
 import { SequencesPage } from './pages/outreach/SequencesPage'
 import { NewSequencePage } from './pages/outreach/sequences/NewSequencePage'
 import { AnalyticsPage as OutreachAnalyticsPage } from './pages/outreach/AnalyticsPage'
@@ -246,6 +247,11 @@ function App() {
                         <Route path="/outreach/inboxes">
                             <AdminCheck>
                                 <InboxesPage />
+                            </AdminCheck>
+                        </Route>
+                        <Route path="/outreach/inboxes/new">
+                            <AdminCheck>
+                                <NewInboxPage />
                             </AdminCheck>
                         </Route>
                         <Route path="/outreach/sequences">

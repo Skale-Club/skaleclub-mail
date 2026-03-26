@@ -91,33 +91,33 @@ function InboxCard({ account, onVerify, onDelete }: {
     const dailyUsage = (account.sentToday / account.dailyLimit) * 100
 
     return (
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        <div className="bg-card rounded-lg border border-border p-4">
             <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                        <Mail className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Mail className="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                        <p className="font-medium text-gray-900 dark:text-white">{account.email}</p>
+                        <p className="font-medium text-foreground">{account.email}</p>
                         {account.displayName && (
-                            <p className="text-sm text-gray-500 dark:text-gray-400">{account.displayName}</p>
+                            <p className="text-sm text-muted-foreground">{account.displayName}</p>
                         )}
                     </div>
                 </div>
                 <div className="relative">
                     <button
                         onClick={() => setShowMenu(!showMenu)}
-                        className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                        className="p-1 rounded hover:bg-accent"
                     >
                         <MoreVertical className="w-5 h-5 text-gray-400" />
                     </button>
                     {showMenu && (
                         <>
                             <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
-                            <div className="absolute right-0 top-8 z-20 w-44 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1">
+                            <div className="absolute right-0 top-8 z-20 w-44 bg-popover rounded-lg shadow-lg border border-border py-1">
                                 <Link
                                     href={`/outreach/inboxes/${account.id}`}
-                                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                                    className="w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
                                     onClick={() => setShowMenu(false)}
                                 >
                                     <Settings className="w-4 h-4" /> Settings
@@ -125,7 +125,7 @@ function InboxCard({ account, onVerify, onDelete }: {
                                 {account.status === 'pending' && (
                                     <button
                                         onClick={() => { onVerify(account.id); setShowMenu(false) }}
-                                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                                        className="w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
                                     >
                                         <RefreshCw className="w-4 h-4" /> Verify
                                     </button>
@@ -147,18 +147,18 @@ function InboxCard({ account, onVerify, onDelete }: {
                     {status.icon}
                     {status.label}
                 </span>
-                <span className="text-xs text-gray-500 dark:text-gray-400 capitalize">{account.provider}</span>
+                <span className="text-xs text-muted-foreground capitalize">{account.provider}</span>
             </div>
 
             {/* Daily Usage */}
             <div className="mb-3">
                 <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="text-gray-500 dark:text-gray-400">Daily Usage</span>
-                    <span className="text-gray-900 dark:text-white font-medium">
+                    <span className="text-muted-foreground">Daily Usage</span>
+                    <span className="text-foreground font-medium">
                         {account.sentToday} / {account.dailyLimit}
                     </span>
                 </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                <div className="w-full bg-muted rounded-full h-2">
                     <div
                         className={`h-2 rounded-full ${dailyUsage >= 90 ? 'bg-red-500' : dailyUsage >= 70 ? 'bg-yellow-500' : 'bg-green-500'}`}
                         style={{ width: `${Math.min(dailyUsage, 100)}%` }}
@@ -170,14 +170,14 @@ function InboxCard({ account, onVerify, onDelete }: {
             {account.warmupEnabled && (
                 <div className="mb-3">
                     <div className="flex items-center justify-between text-sm mb-1">
-                        <span className="text-gray-500 dark:text-gray-400">Warmup Progress</span>
-                        <span className="text-gray-900 dark:text-white font-medium">
+                        <span className="text-muted-foreground">Warmup Progress</span>
+                        <span className="text-foreground font-medium">
                             Day {account.warmupDay}
                         </span>
                     </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div className="w-full bg-muted rounded-full h-2">
                         <div
-                            className="h-2 rounded-full bg-blue-500"
+                            className="h-2 rounded-full bg-primary"
                             style={{ width: `${account.warmupProgress}%` }}
                         />
                     </div>
@@ -185,14 +185,14 @@ function InboxCard({ account, onVerify, onDelete }: {
             )}
 
             {/* Stats */}
-            <div className="grid grid-cols-2 gap-2 pt-3 border-t border-gray-100 dark:border-gray-700">
+            <div className="grid grid-cols-2 gap-2 pt-3 border-t border-border">
                 <div className="text-center">
-                    <p className="text-lg font-semibold text-gray-900 dark:text-white">{account.sentToday}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Sent Today</p>
+                    <p className="text-lg font-semibold text-foreground">{account.sentToday}</p>
+                    <p className="text-xs text-muted-foreground">Sent Today</p>
                 </div>
                 <div className="text-center">
-                    <p className="text-lg font-semibold text-gray-900 dark:text-white">{account.dailyLimit}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Daily Limit</p>
+                    <p className="text-lg font-semibold text-foreground">{account.dailyLimit}</p>
+                    <p className="text-xs text-muted-foreground">Daily Limit</p>
                 </div>
             </div>
         </div>
@@ -242,14 +242,14 @@ export function InboxesPage() {
                 {/* Header */}
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Inboxes</h1>
-                        <p className="text-gray-500 dark:text-gray-400 mt-1">
+                        <h1 className="text-2xl font-bold text-foreground">Inboxes</h1>
+                        <p className="text-muted-foreground mt-1">
                             Manage your email accounts for cold outreach
                         </p>
                     </div>
                     <Link
                         href="/outreach/inboxes/new"
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
                     >
                         <Plus className="w-5 h-5" />
                         Add Inbox
@@ -258,47 +258,47 @@ export function InboxesPage() {
 
                 {/* Stats */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                    <div className="bg-card rounded-lg p-4 border border-border">
                         <div className="flex items-center gap-3">
-                            <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                                <Inbox className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                            <div className="p-2 bg-primary/10 rounded-lg">
+                                <Inbox className="w-5 h-5 text-primary" />
                             </div>
                             <div>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">Total Inboxes</p>
-                                <p className="text-xl font-semibold text-gray-900 dark:text-white">{totalAccounts}</p>
+                                <p className="text-sm text-muted-foreground">Total Inboxes</p>
+                                <p className="text-xl font-semibold text-foreground">{totalAccounts}</p>
                             </div>
                         </div>
                     </div>
-                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                    <div className="bg-card rounded-lg p-4 border border-border">
                         <div className="flex items-center gap-3">
                             <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
                                 <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
                             </div>
                             <div>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">Verified</p>
-                                <p className="text-xl font-semibold text-gray-900 dark:text-white">{verifiedAccounts}</p>
+                                <p className="text-sm text-muted-foreground">Verified</p>
+                                <p className="text-xl font-semibold text-foreground">{verifiedAccounts}</p>
                             </div>
                         </div>
                     </div>
-                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                    <div className="bg-card rounded-lg p-4 border border-border">
                         <div className="flex items-center gap-3">
                             <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
                                 <Send className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                             </div>
                             <div>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">Sent Today</p>
-                                <p className="text-xl font-semibold text-gray-900 dark:text-white">{totalSentToday}</p>
+                                <p className="text-sm text-muted-foreground">Sent Today</p>
+                                <p className="text-xl font-semibold text-foreground">{totalSentToday}</p>
                             </div>
                         </div>
                     </div>
-                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                    <div className="bg-card rounded-lg p-4 border border-border">
                         <div className="flex items-center gap-3">
                             <div className="p-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
                                 <Mail className="w-5 h-5 text-orange-600 dark:text-orange-400" />
                             </div>
                             <div>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">Daily Limit</p>
-                                <p className="text-xl font-semibold text-gray-900 dark:text-white">{totalDailyLimit}</p>
+                                <p className="text-sm text-muted-foreground">Daily Limit</p>
+                                <p className="text-xl font-semibold text-foreground">{totalDailyLimit}</p>
                             </div>
                         </div>
                     </div>
@@ -308,16 +308,16 @@ export function InboxesPage() {
                 {isLoading ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {[...Array(3)].map((_, i) => (
-                            <div key={i} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 animate-pulse">
+                            <div key={i} className="bg-card rounded-lg border border-border p-4 animate-pulse">
                                 <div className="flex items-center gap-3 mb-3">
-                                    <div className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+                                    <div className="w-10 h-10 bg-muted rounded-full"></div>
                                     <div className="flex-1">
-                                        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-2/3 mb-1"></div>
-                                        <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
+                                        <div className="h-4 bg-muted rounded w-2/3 mb-1"></div>
+                                        <div className="h-3 bg-muted rounded w-1/2"></div>
                                     </div>
                                 </div>
-                                <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded mb-3"></div>
-                                <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+                                <div className="h-2 bg-muted rounded mb-3"></div>
+                                <div className="h-2 bg-muted rounded w-3/4"></div>
                             </div>
                         ))}
                     </div>
@@ -333,18 +333,18 @@ export function InboxesPage() {
                         ))}
                     </div>
                 ) : (
-                    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-12 text-center">
+                    <div className="bg-card rounded-lg border border-border p-12 text-center">
                         <Mail className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                        <h3 className="text-lg font-medium text-foreground mb-2">
                             No inboxes connected
                         </h3>
-                        <p className="text-gray-500 dark:text-gray-400 mb-4 max-w-md mx-auto">
+                        <p className="text-muted-foreground mb-4 max-w-md mx-auto">
                             Connect your email accounts to start sending cold emails. You can add Gmail, Outlook,
                             or custom SMTP accounts.
                         </p>
                         <Link
                             href="/outreach/inboxes/new"
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
                         >
                             <Plus className="w-5 h-5" />
                             Add Your First Inbox
@@ -353,11 +353,11 @@ export function InboxesPage() {
                 )}
 
                 {/* Help Section */}
-                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-                    <h3 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
+                <div className="bg-primary/10 rounded-lg p-4">
+                    <h3 className="font-medium text-primary mb-2">
                         💡 Tips for Better Deliverability
                     </h3>
-                    <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
+                    <ul className="text-sm text-primary space-y-1">
                         <li>• Enable warmup for new email accounts to build sender reputation</li>
                         <li>• Keep daily sending limits reasonable (50-100 emails per day per account)</li>
                         <li>• Use multiple inboxes to distribute sending load</li>

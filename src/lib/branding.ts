@@ -11,7 +11,7 @@ export interface BrandingSettings {
 
 export const defaultBranding: BrandingSettings = {
     companyName: '',
-    applicationName: 'Mail Platform',
+    applicationName: 'Skale Club Mail',
     logoUrl: '/brand-mark.svg',
     faviconUrl: '/favicon.svg',
     mailHost: 'mx.skaleclub.com',

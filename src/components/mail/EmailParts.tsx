@@ -26,7 +26,7 @@ export function EmailHeader({ subject, from, to, cc, date, starred, onStar }: Em
 
     return (
         <>
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-4">
+            <h1 className="text-xl sm:text-2xl font-bold text-foreground mb-4">
                 {subject}
             </h1>
 
@@ -37,15 +37,15 @@ export function EmailHeader({ subject, from, to, cc, date, starred, onStar }: Em
                 <div className="flex-1 min-w-0">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
                         <div>
-                            <p className="font-semibold text-gray-900 dark:text-white">
+                            <p className="font-semibold text-foreground">
                                 {from.name || from.email}
                             </p>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                            <p className="text-sm text-muted-foreground">
                                 {from.email}
                             </p>
                         </div>
                         <div className="flex items-center gap-2">
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                            <p className="text-sm text-muted-foreground">
                                 {formatDate(date, 'MMM d, yyyy h:mm a')}
                             </p>
                             {onStar && (
@@ -54,7 +54,7 @@ export function EmailHeader({ subject, from, to, cc, date, starred, onStar }: Em
                                     className={`p-1 rounded transition-colors ${
                                         starred
                                             ? 'text-yellow-500 hover:text-yellow-600'
-                                            : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                                            : 'text-muted-foreground hover:text-foreground'
                                     }`}
                                 >
                                     <Star className={`w-4 h-4 ${starred ? 'fill-current' : ''}`} />
@@ -63,11 +63,11 @@ export function EmailHeader({ subject, from, to, cc, date, starred, onStar }: Em
                         </div>
                     </div>
                     <div className="mt-1">
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                        <p className="text-sm text-muted-foreground">
                             To: {to.map(t => t.name || t.email).join(', ')}
                         </p>
                         {cc && cc.length > 0 && (
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                            <p className="text-sm text-muted-foreground">
                                 Cc: {cc.map(c => c.name || c.email).join(', ')}
                             </p>
                         )}
@@ -86,7 +86,7 @@ interface EmailBodyProps {
 export function EmailBody({ body, className = '' }: EmailBodyProps) {
     return (
         <div className={`prose dark:prose-invert max-w-none ${className}`}>
-            <div className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
+            <div className="text-foreground whitespace-pre-wrap leading-relaxed">
                 {body}
             </div>
         </div>
@@ -102,7 +102,7 @@ export function EmailAttachments({ attachments }: EmailAttachmentsProps) {
 
     return (
         <div className="mt-8">
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+            <h3 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
                 <Paperclip className="w-4 h-4" />
                 Attachments ({attachments.length})
             </h3>
@@ -110,16 +110,16 @@ export function EmailAttachments({ attachments }: EmailAttachmentsProps) {
                 {attachments.map((attachment, index) => (
                     <div
                         key={index}
-                        className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-slate-800 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                        className="flex items-center gap-2 px-3 py-2 bg-muted rounded-lg hover:bg-accent transition-colors cursor-pointer"
                     >
-                        <Paperclip className="w-4 h-4 text-gray-500" />
+                        <Paperclip className="w-4 h-4 text-muted-foreground" />
                         <div>
-                            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                            <p className="text-sm font-medium text-foreground">
                                 {attachment.name}
                             </p>
-                            <p className="text-xs text-gray-500">{attachment.size}</p>
+                            <p className="text-xs text-muted-foreground">{attachment.size}</p>
                         </div>
-                        <Download className="w-4 h-4 text-gray-400 ml-2" />
+                        <Download className="w-4 h-4 text-muted-foreground ml-2" />
                     </div>
                 ))}
             </div>
@@ -142,7 +142,7 @@ export function EmailActions({ onReply, onReplyAll, onForward, replyHref, replyA
             return (
                 <Link
                     href={href}
-                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors"
                 >
                     {children}
                 </Link>
@@ -151,7 +151,7 @@ export function EmailActions({ onReply, onReplyAll, onForward, replyHref, replyA
         return (
             <button
                 onClick={onClick}
-                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors"
             >
                 {children}
             </button>
@@ -159,7 +159,7 @@ export function EmailActions({ onReply, onReplyAll, onForward, replyHref, replyA
     }
 
     return (
-        <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+        <div className="mt-8 pt-6 border-t border-border">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
                 <ButtonWrapper href={replyHref} onClick={onReply}>
                     <Reply className="w-4 h-4" />
@@ -168,7 +168,7 @@ export function EmailActions({ onReply, onReplyAll, onForward, replyHref, replyA
                 <Link
                     href={replyAllHref || '#'}
                     onClick={onReplyAll}
-                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors"
+                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-lg font-medium transition-colors"
                 >
                     <ReplyAll className="w-4 h-4" />
                     Reply All
@@ -176,7 +176,7 @@ export function EmailActions({ onReply, onReplyAll, onForward, replyHref, replyA
                 <Link
                     href={forwardHref || '#'}
                     onClick={onForward}
-                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors"
+                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-lg font-medium transition-colors"
                 >
                     <Forward className="w-4 h-4" />
                     Forward
@@ -195,11 +195,11 @@ interface EmptyStateProps {
 
 export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
     return (
-        <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400 py-20">
-            <div className="w-20 h-20 mb-4 rounded-full bg-gray-100 dark:bg-slate-800 flex items-center justify-center">
+        <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-20">
+            <div className="w-20 h-20 mb-4 rounded-full bg-muted flex items-center justify-center">
                 {icon}
             </div>
-            <p className="text-lg font-medium">{title}</p>
+            <p className="text-lg font-medium text-foreground">{title}</p>
             {description && <p className="text-sm mt-1">{description}</p>}
             {action && <div className="mt-4">{action}</div>}
         </div>
@@ -214,8 +214,8 @@ export function LoadingState({ message = 'Loading...' }: LoadingStateProps) {
     return (
         <div className="flex items-center justify-center h-full">
             <div className="flex flex-col items-center gap-4">
-                <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                <p className="text-gray-500 dark:text-gray-400">{message}</p>
+                <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                <p className="text-muted-foreground">{message}</p>
             </div>
         </div>
     )
@@ -232,15 +232,15 @@ export function ErrorState({ title = 'Error', message, onRetry, onBack }: ErrorS
     return (
         <div className="flex items-center justify-center h-full">
             <div className="text-center">
-                <p className="text-lg font-medium text-gray-900 dark:text-white">{title}</p>
+                <p className="text-lg font-medium text-foreground">{title}</p>
                 {message && (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">{message}</p>
+                    <p className="text-sm text-muted-foreground mt-2">{message}</p>
                 )}
                 <div className="mt-4 flex items-center justify-center gap-3">
                     {onBack && (
                         <button
                             onClick={onBack}
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-lg font-medium transition-colors"
                         >
                             Go Back
                         </button>
@@ -248,7 +248,7 @@ export function ErrorState({ title = 'Error', message, onRetry, onBack }: ErrorS
                     {onRetry && (
                         <button
                             onClick={onRetry}
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors"
                         >
                             Try Again
                         </button>

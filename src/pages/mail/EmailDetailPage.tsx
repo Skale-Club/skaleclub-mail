@@ -24,10 +24,10 @@ import {
 
 const mockEmails: Record<string, { subject: string; body: string; from: { name: string; email: string }; to: { name: string; email: string }[]; date: Date; starred: boolean; attachments?: { name: string; size: string; type: string }[] }> = {
     '1': {
-        subject: 'Welcome to SkaleClub Mail!',
+        subject: 'Welcome to Skale Club Mail!',
         body: `Dear User,
 
-Thank you for using SkaleClub Mail! We are thrilled to have you as part of our growing community.
+Thank you for using Skale Club Mail! We are thrilled to have you as part of our growing community.
 
 Here's what you can do with your new email account:
 
@@ -40,13 +40,13 @@ Here's what you can do with your new email account:
 If you have any questions or need assistance, don't hesitate to reach out to our support team.
 
 Best regards,
-The SkaleClub Team
+The Skale Club Team
 
 ---
-SkaleClub Mail - Professional Email Made Simple
+Skale Club Mail - Professional Email Made Simple
 Website: https://skaleclub.com
 Support: support@skaleclub.com`,
-        from: { name: 'SkaleClub Team', email: 'noreply@skaleclub.com' },
+        from: { name: 'Skale Club Team', email: 'noreply@skaleclub.com' },
         to: [{ name: 'User', email: 'user@skaleclub.com' }],
         date: new Date(),
         starred: true,
@@ -276,7 +276,7 @@ export default function EmailDetailPage() {
                         </p>
                         <Link
                             href="/mail/settings"
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors"
                         >
                             Add Email Account
                         </Link>
@@ -291,8 +291,8 @@ export default function EmailDetailPage() {
             <MailLayout>
                 <div className="flex items-center justify-center h-full">
                     <div className="flex flex-col items-center gap-4">
-                        <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
-                        <p className="text-gray-500 dark:text-gray-400">Loading email...</p>
+                        <Loader2 className="w-10 h-10 text-primary animate-spin" />
+                        <p className="text-muted-foreground">Loading email...</p>
                     </div>
                 </div>
             </MailLayout>
@@ -304,14 +304,14 @@ export default function EmailDetailPage() {
             <MailLayout>
                 <div className="flex items-center justify-center h-full">
                     <div className="text-center">
-                        <AlertCircle className="w-16 h-16 mx-auto mb-4 text-red-500" />
-                        <p className="text-lg font-medium text-gray-900 dark:text-white">Email not found</p>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                        <AlertCircle className="w-16 h-16 mx-auto mb-4 text-destructive" />
+                        <p className="text-lg font-medium text-foreground">Email not found</p>
+                        <p className="text-sm text-muted-foreground mt-2">
                             {error?.message || 'This email may have been deleted or moved.'}
                         </p>
                         <Link
                             href="/mail/inbox"
-                            className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                            className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors"
                         >
                             <ArrowLeft className="w-4 h-4" />
                             Back to Inbox
@@ -484,30 +484,30 @@ function SingleEmailView({
         <div className="flex-1 overflow-y-auto">
             <div className="p-4 sm:p-6">
                 <div className="max-w-3xl mx-auto">
-                    <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-4">
+                    <h1 className="text-xl sm:text-2xl font-bold text-foreground mb-4">
                         {message.subject}
                     </h1>
 
                     <div className="flex items-start gap-3 sm:gap-4 mb-6">
-                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-base sm:text-lg flex-shrink-0">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-semibold text-base sm:text-lg flex-shrink-0">
                             {message.from.name?.[0]?.toUpperCase() || message.from.email[0].toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
                                 <div>
-                                    <p className="font-semibold text-gray-900 dark:text-white">
+                                    <p className="font-semibold text-foreground">
                                         {message.from.name || message.from.email}
                                     </p>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    <p className="text-sm text-muted-foreground">
                                         {message.from.email}
                                     </p>
                                 </div>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                <p className="text-sm text-muted-foreground">
                                     {message.date.toLocaleString()}
                                 </p>
                             </div>
                             <div className="mt-1">
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                <p className="text-sm text-muted-foreground">
                                     To: {message.to.map(t => t.name || t.email).join(', ')}
                                 </p>
                             </div>
@@ -546,25 +546,25 @@ function SingleEmailView({
                         </div>
                     )}
 
-                    <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+                    <div className="mt-8 pt-6 border-t border-border">
                         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
                             <button
                                 onClick={onReply}
-                                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors"
                             >
                                 <Reply className="w-4 h-4" />
                                 Reply
                             </button>
                             <button
                                 onClick={onReplyAll}
-                                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors"
+                                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-lg font-medium transition-colors"
                             >
                                 <ReplyAll className="w-4 h-4" />
                                 Reply All
                             </button>
                             <button
                                 onClick={onForward}
-                                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors"
+                                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-lg font-medium transition-colors"
                             >
                                 <Forward className="w-4 h-4" />
                                 Forward

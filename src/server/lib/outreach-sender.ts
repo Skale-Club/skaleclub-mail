@@ -1,15 +1,16 @@
 /**
  * Outreach Email Sender
- * Handles sending outreach emails through SMTP accounts
+ * Handles sending outreach emails through SMTP or Outlook OAuth
  */
 
 import nodemailer from 'nodemailer'
 import { db } from '../../db'
-import { campaigns, sequences, sequenceSteps, campaignLeads, leads, emailAccounts, outreachEmails } from '../../db/schema'
-import { eq, and, lte, gt, sql } from 'drizzle-orm'
+import { campaigns, sequenceSteps, campaignLeads, leads, emailAccounts, outreachEmails } from '../../db/schema'
+import { eq, sql } from 'drizzle-orm'
 import { decryptSecret } from './crypto'
 import { interpolateTemplate, type LeadForTemplate } from './template-variables'
 import { injectTracking } from './tracking'
+import { sendMessageWithOutlook } from './outlook'
 
 interface SendOutreachEmailParams {
     account: typeof emailAccounts.$inferSelect
@@ -32,12 +33,16 @@ interface SendResult {
 }
 
 export function createSmtpTransporter(account: typeof emailAccounts.$inferSelect): nodemailer.Transporter {
+    if (!account.smtpHost || !account.smtpPassword || !account.smtpUsername) {
+        throw new Error('SMTP account missing required fields')
+    }
+    
     const decryptedPassword = decryptSecret(account.smtpPassword)
 
     return nodemailer.createTransport({
         host: account.smtpHost,
-        port: account.smtpPort,
-        secure: account.smtpSecure,
+        port: account.smtpPort || 587,
+        secure: account.smtpSecure ?? true,
         auth: {
             user: account.smtpUsername,
             pass: decryptedPassword,
@@ -99,8 +104,6 @@ export async function sendOutreachEmail(params: SendOutreachEmailParams): Promis
     const { account, lead, campaign, step, campaignLeadId, trackOpens, trackClicks, trackingBaseUrl, abVariant } = params
 
     try {
-        const transporter = createSmtpTransporter(account)
-
         const subjectTemplate = abVariant === 'b' && step.subjectB ? step.subjectB : step.subject
         const htmlTemplate = abVariant === 'b' && step.htmlBodyB ? step.htmlBodyB : step.htmlBody
         const plainTemplate = abVariant === 'b' && step.plainBodyB ? step.plainBodyB : step.plainBody
@@ -129,6 +132,26 @@ export async function sendOutreachEmail(params: SendOutreachEmailParams): Promis
             const trackingToken = campaignLeadId
             html = injectTracking(html, trackingToken, baseUrl, trackOpens ?? false, trackClicks ?? false)
         }
+
+        if (account.provider === 'outlook' && account.outlookMailboxId) {
+            await sendMessageWithOutlook({
+                organizationId: account.organizationId,
+                mailboxId: account.outlookMailboxId,
+                fromAddress: account.email,
+                to: [lead.email],
+                subject,
+                htmlBody: html,
+                plainBody: text,
+            })
+
+            return {
+                success: true,
+                finalHtml: html,
+                finalText: text,
+            }
+        }
+
+        const transporter = createSmtpTransporter(account)
 
         const fromName = campaign.fromName || account.displayName || ''
         const fromAddress = fromName ? `"${fromName}" <${account.email}>` : account.email

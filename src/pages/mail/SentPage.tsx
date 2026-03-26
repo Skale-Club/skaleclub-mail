@@ -102,7 +102,7 @@ export default function SentPage() {
                         </p>
                         <Link
                             href="/mail/settings"
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors"
                         >
                             Add Email Account
                         </Link>
@@ -115,13 +115,13 @@ export default function SentPage() {
     return (
         <MailLayout>
             <div className="flex h-full">
-                <div className={`w-full ${!isMobile ? 'lg:w-1/2 xl:w-2/5 border-r border-gray-200 dark:border-gray-800' : ''} flex flex-col bg-white dark:bg-slate-900`}>
-                    <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+                <div className={`w-full ${!isMobile ? 'lg:w-1/2 xl:w-2/5 border-r border-border' : ''} flex flex-col bg-background`}>
+                    <div className="px-5 py-4 border-b border-border">
                         <div className="flex items-center gap-3">
-                            <Send className="w-6 h-6 text-gray-600 dark:text-gray-400" />
+                            <Send className="w-6 h-6 text-muted-foreground" />
                             <div>
-                                <h1 className="text-xl font-bold text-gray-900 dark:text-white">Sent</h1>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                <h1 className="text-xl font-bold text-foreground">Sent</h1>
+                                <p className="text-sm text-muted-foreground">
                                     {emails.length} sent {emails.length === 1 ? 'email' : 'emails'}
                                 </p>
                             </div>

@@ -201,7 +201,7 @@ export default function ComposePage() {
                         </p>
                         <Link
                             href="/mail/settings"
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors"
                         >
                             Add Email Account
                         </Link>
@@ -250,7 +250,7 @@ export default function ComposePage() {
                         <button
                             onClick={handleSend}
                             disabled={sendEmail.isPending}
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg font-medium transition-colors"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-lg font-medium transition-colors"
                             title="Send (Ctrl+Enter)"
                         >
                             {sendEmail.isPending ? (
@@ -287,7 +287,7 @@ export default function ComposePage() {
                                     value={email.to}
                                     onChange={(e) => setEmail({ ...email, to: e.target.value })}
                                     placeholder="recipient@example.com"
-                                    className="flex-1 px-3 py-2 bg-transparent border-0 border-b border-gray-200 dark:border-gray-700 focus:border-blue-500 focus:ring-0 text-gray-900 dark:text-white placeholder-gray-400 text-sm sm:text-base"
+                                    className="flex-1 px-3 py-2 bg-transparent border-0 border-b border-border focus:border-primary focus:ring-0 text-foreground placeholder-muted-foreground text-sm sm:text-base"
                                 />
                                 <button
                                     onClick={() => setShowCc(!showCc)}
@@ -313,7 +313,7 @@ export default function ComposePage() {
                                         value={email.cc}
                                         onChange={(e) => setEmail({ ...email, cc: e.target.value })}
                                         placeholder="cc@example.com"
-                                        className="flex-1 px-3 py-2 bg-transparent border-0 border-b border-gray-200 dark:border-gray-700 focus:border-blue-500 focus:ring-0 text-gray-900 dark:text-white placeholder-gray-400 text-sm sm:text-base"
+                                        className="flex-1 px-3 py-2 bg-transparent border-0 border-b border-border focus:border-primary focus:ring-0 text-foreground placeholder-muted-foreground text-sm sm:text-base"
                                     />
                                 </div>
                             )}
@@ -328,7 +328,7 @@ export default function ComposePage() {
                                         value={email.bcc}
                                         onChange={(e) => setEmail({ ...email, bcc: e.target.value })}
                                         placeholder="bcc@example.com"
-                                        className="flex-1 px-3 py-2 bg-transparent border-0 border-b border-gray-200 dark:border-gray-700 focus:border-blue-500 focus:ring-0 text-gray-900 dark:text-white placeholder-gray-400 text-sm sm:text-base"
+                                        className="flex-1 px-3 py-2 bg-transparent border-0 border-b border-border focus:border-primary focus:ring-0 text-foreground placeholder-muted-foreground text-sm sm:text-base"
                                     />
                                 </div>
                             )}

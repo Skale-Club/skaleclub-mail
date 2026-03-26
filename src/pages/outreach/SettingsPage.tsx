@@ -112,8 +112,8 @@ export function SettingsPage() {
                 {/* Header */}
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
-                        <p className="text-gray-500 dark:text-gray-400 mt-1">
+                        <h1 className="text-2xl font-bold text-foreground">Settings</h1>
+                        <p className="text-muted-foreground mt-1">
                             Configure your cold email outreach preferences
                         </p>
                     </div>
@@ -124,11 +124,11 @@ export function SettingsPage() {
                 </div>
 
                 {/* General Settings */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                    <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                <div className="bg-card rounded-lg border border-border">
+                    <div className="p-4 border-b border-border">
                         <div className="flex items-center gap-2">
                             <Globe className="w-5 h-5 text-gray-500" />
-                            <h3 className="font-semibold text-gray-900 dark:text-white">General Settings</h3>
+                            <h3 className="font-semibold text-foreground">General Settings</h3>
                         </div>
                     </div>
                     <div className="p-4 space-y-4">
@@ -206,11 +206,11 @@ export function SettingsPage() {
                 </div>
 
                 {/* Sending Settings */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                    <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                <div className="bg-card rounded-lg border border-border">
+                    <div className="p-4 border-b border-border">
                         <div className="flex items-center gap-2">
                             <Mail className="w-5 h-5 text-gray-500" />
-                            <h3 className="font-semibold text-gray-900 dark:text-white">Sending Settings</h3>
+                            <h3 className="font-semibold text-foreground">Sending Settings</h3>
                         </div>
                     </div>
                     <div className="p-4 space-y-4">
@@ -242,8 +242,8 @@ export function SettingsPage() {
                                 <p className="text-xs text-gray-500 mt-1">Minimum wait time between sends</p>
                             </div>
                         </div>
-                        <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-                            <h4 className="font-medium text-gray-900 dark:text-white mb-3">Warmup Settings</h4>
+                        <div className="border-t border-border pt-4">
+                            <h4 className="font-medium text-foreground mb-3">Warmup Settings</h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <label className="flex items-center gap-2 cursor-pointer">
                                     <input
@@ -272,11 +272,11 @@ export function SettingsPage() {
                 </div>
 
                 {/* Notification Settings */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                    <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                <div className="bg-card rounded-lg border border-border">
+                    <div className="p-4 border-b border-border">
                         <div className="flex items-center gap-2">
                             <Bell className="w-5 h-5 text-gray-500" />
-                            <h3 className="font-semibold text-gray-900 dark:text-white">Notifications</h3>
+                            <h3 className="font-semibold text-foreground">Notifications</h3>
                         </div>
                     </div>
                     <div className="p-4 space-y-3">
@@ -320,20 +320,20 @@ export function SettingsPage() {
                 </div>
 
                 {/* API Keys Section */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                    <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                <div className="bg-card rounded-lg border border-border">
+                    <div className="p-4 border-b border-border">
                         <div className="flex items-center gap-2">
                             <Key className="w-5 h-5 text-gray-500" />
-                            <h3 className="font-semibold text-gray-900 dark:text-white">API Access</h3>
+                            <h3 className="font-semibold text-foreground">API Access</h3>
                         </div>
                     </div>
                     <div className="p-4">
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                        <p className="text-sm text-muted-foreground mb-4">
                             Use our API to integrate cold email outreach into your own applications.
                         </p>
                         <div className="bg-gray-100 dark:bg-gray-900 rounded-lg p-3 font-mono text-sm">
-                            <p className="text-gray-500 dark:text-gray-400">API Key:</p>
-                            <p className="text-gray-900 dark:text-white">sk_test_****************************</p>
+                            <p className="text-muted-foreground">API Key:</p>
+                            <p className="text-foreground">sk_test_****************************</p>
                         </div>
                         <div className="mt-4 flex gap-2">
                             <Button variant="outline" size="sm">Regenerate Key</Button>

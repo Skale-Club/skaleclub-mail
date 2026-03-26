@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { db } from '../../../db'
 import { emailAccounts, organizationUsers } from '../../../db/schema'
 import { eq, and } from 'drizzle-orm'
-import { encrypt, decrypt } from '../../../lib/crypto'
+import { encryptSecret, decryptSecret } from '../../lib/crypto'
 import nodemailer from 'nodemailer'
 import { ImapFlow } from 'imapflow'
 
@@ -64,8 +64,8 @@ async function checkOrgMembership(userId: string, organizationId: string) {
 // Helper to get decrypted SMTP credentials
 function getDecryptedCredentials(account: typeof emailAccounts.$inferSelect) {
     return {
-        smtpPassword: decrypt(account.smtpPassword),
-        imapPassword: account.imapPassword ? decrypt(account.imapPassword) : null,
+        smtpPassword: account.smtpPassword ? decryptSecret(account.smtpPassword) : null,
+        imapPassword: account.imapPassword ? decryptSecret(account.imapPassword) : null,
     }
 }
 
@@ -183,12 +183,12 @@ router.post('/', async (req: Request, res: Response) => {
             smtpHost: validatedData.smtpHost,
             smtpPort: validatedData.smtpPort,
             smtpUsername: validatedData.smtpUsername,
-            smtpPassword: encrypt(validatedData.smtpPassword),
+            smtpPassword: encryptSecret(validatedData.smtpPassword),
             smtpSecure: validatedData.smtpSecure,
             imapHost: validatedData.imapHost,
             imapPort: validatedData.imapPort,
             imapUsername: validatedData.imapUsername,
-            imapPassword: validatedData.imapPassword ? encrypt(validatedData.imapPassword) : null,
+            imapPassword: validatedData.imapPassword ? encryptSecret(validatedData.imapPassword) : null,
             imapSecure: validatedData.imapSecure,
             dailySendLimit: validatedData.dailySendLimit,
             minMinutesBetweenEmails: validatedData.minMinutesBetweenEmails,
@@ -247,12 +247,12 @@ router.put('/:id', async (req: Request, res: Response) => {
         if (validatedData.smtpHost !== undefined) updateValues.smtpHost = validatedData.smtpHost
         if (validatedData.smtpPort !== undefined) updateValues.smtpPort = validatedData.smtpPort
         if (validatedData.smtpUsername !== undefined) updateValues.smtpUsername = validatedData.smtpUsername
-        if (validatedData.smtpPassword !== undefined) updateValues.smtpPassword = encrypt(validatedData.smtpPassword)
+        if (validatedData.smtpPassword !== undefined) updateValues.smtpPassword = encryptSecret(validatedData.smtpPassword)
         if (validatedData.smtpSecure !== undefined) updateValues.smtpSecure = validatedData.smtpSecure
         if (validatedData.imapHost !== undefined) updateValues.imapHost = validatedData.imapHost
         if (validatedData.imapPort !== undefined) updateValues.imapPort = validatedData.imapPort
         if (validatedData.imapUsername !== undefined) updateValues.imapUsername = validatedData.imapUsername
-        if (validatedData.imapPassword !== undefined) updateValues.imapPassword = validatedData.imapPassword ? encrypt(validatedData.imapPassword) : null
+        if (validatedData.imapPassword !== undefined) updateValues.imapPassword = validatedData.imapPassword ? encryptSecret(validatedData.imapPassword) : null
         if (validatedData.imapSecure !== undefined) updateValues.imapSecure = validatedData.imapSecure
         if (validatedData.dailySendLimit !== undefined) updateValues.dailySendLimit = validatedData.dailySendLimit
         if (validatedData.minMinutesBetweenEmails !== undefined) updateValues.minMinutesBetweenEmails = validatedData.minMinutesBetweenEmails
@@ -337,22 +337,50 @@ router.post('/:id/verify', async (req: Request, res: Response) => {
             return res.status(403).json({ error: 'Access denied' })
         }
 
-        const smtpPassword = decrypt(account.smtpPassword)
+        const smtpPassword = account.smtpPassword ? decryptSecret(account.smtpPassword) : null
         const errors: string[] = []
+
+        if (account.provider === 'outlook') {
+            const [updatedAccount] = await db.update(emailAccounts)
+                .set({
+                    status: 'verified',
+                    verifiedAt: new Date(),
+                    lastError: null,
+                    updatedAt: new Date(),
+                })
+                .where(eq(emailAccounts.id, accountId))
+                .returning()
+
+            return res.json({
+                emailAccount: {
+                    ...updatedAccount,
+                    smtpPassword: undefined,
+                    imapPassword: undefined,
+                },
+                verified: true,
+            })
+        }
+
+        if (!account.smtpHost || !smtpPassword) {
+            return res.status(400).json({
+                error: 'SMTP credentials not configured',
+                verified: false,
+            })
+        }
 
         // Test SMTP connection
         try {
             const smtpTransporter = nodemailer.createTransport({
                 host: account.smtpHost,
-                port: account.smtpPort,
-                secure: account.smtpSecure,
+                port: account.smtpPort || 587,
+                secure: account.smtpSecure ?? true,
                 auth: {
-                    user: account.smtpUsername,
+                    user: account.smtpUsername || account.email,
                     pass: smtpPassword,
                 },
                 connectionTimeout: 10_000,
                 greetingTimeout: 10_000,
-            })
+            } as nodemailer.TransportOptions)
 
             await smtpTransporter.verify()
             smtpTransporter.close()
@@ -364,7 +392,7 @@ router.post('/:id/verify', async (req: Request, res: Response) => {
         // Test IMAP connection (if configured)
         if (account.imapHost && account.imapUsername && account.imapPassword) {
             try {
-                const imapPassword = decrypt(account.imapPassword)
+                const imapPassword = decryptSecret(account.imapPassword)
                 const imapClient = new ImapFlow({
                     host: account.imapHost,
                     port: account.imapPort || 993,

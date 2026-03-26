@@ -179,7 +179,7 @@ export default function SearchPage() {
                         </p>
                         <Link
                             href="/mail/settings"
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors"
                         >
                             Add Email Account
                         </Link>
@@ -192,16 +192,16 @@ export default function SearchPage() {
     return (
         <MailLayout>
             <div className="flex h-full">
-                <div className={`w-full ${!isMobile ? 'lg:w-1/2 xl:w-2/5 border-r border-gray-200 dark:border-gray-800' : ''} flex flex-col bg-white dark:bg-slate-900`}>
-                    <div className="px-4 sm:px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+                <div className={`w-full ${!isMobile ? 'lg:w-1/2 xl:w-2/5 border-r border-border' : ''} flex flex-col bg-background`}>
+                    <div className="px-4 sm:px-5 py-4 border-b border-border">
                         <form onSubmit={handleSearch} className="relative">
-                            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                             <input
                                 type="text"
                                 placeholder="Search emails..."
                                 value={filters.query}
                                 onChange={(e) => setFilters({ ...filters, query: e.target.value })}
-                                className="w-full pl-10 pr-12 py-2.5 bg-gray-100 dark:bg-slate-800 border-0 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white placeholder-gray-400"
+                                className="w-full pl-10 pr-12 py-2.5 bg-muted border-0 rounded-xl text-sm focus:ring-2 focus:ring-primary text-foreground placeholder-muted-foreground"
                                 autoFocus
                             />
                             <button

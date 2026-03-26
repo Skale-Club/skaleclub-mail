@@ -61,17 +61,17 @@ function StatCard({
 }) {
     const colorClasses = {
         blue: 'bg-primary/10 text-primary',
-        green: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300',
-        purple: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300',
-        orange: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300',
+        green: 'bg-muted text-muted-foreground',
+        purple: 'bg-muted text-muted-foreground',
+        orange: 'bg-muted text-muted-foreground',
     }
 
     return (
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="bg-card rounded-lg p-6 shadow-sm border border-border">
             <div className="flex items-center justify-between">
                 <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{title}</p>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{value}</p>
+                    <p className="text-sm text-muted-foreground">{title}</p>
+                    <p className="text-2xl font-bold text-foreground mt-1">{value}</p>
                     {trend && (
                         <p className="text-sm text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
                             <TrendingUp className="w-4 h-4" />
@@ -96,16 +96,16 @@ function QuickAction({ title, description, href, icon }: {
     return (
         <Link
             href={href}
-            className="flex items-center gap-4 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600 transition-colors group"
+            className="flex items-center gap-4 p-4 bg-card rounded-lg border border-border hover:border-primary/50 transition-colors group"
         >
-            <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600 dark:text-blue-400">
+            <div className="p-2 bg-primary/10 rounded-lg text-primary">
                 {icon}
             </div>
             <div className="flex-1">
-                <h3 className="font-medium text-gray-900 dark:text-white">{title}</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{description}</p>
+                <h3 className="font-medium text-foreground">{title}</h3>
+                <p className="text-sm text-muted-foreground">{description}</p>
             </div>
-            <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors" />
+            <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-primary transition-colors" />
         </Link>
     )
 }
@@ -115,15 +115,15 @@ function CampaignRow({ campaign }: { campaign: RecentCampaign }) {
         active: 'bg-primary/10 text-primary',
         paused: 'bg-secondary text-secondary-foreground',
         draft: 'bg-muted text-muted-foreground',
-        completed: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300',
+        completed: 'bg-muted text-muted-foreground',
     }
 
     return (
-        <tr className="border-b border-gray-100 dark:border-gray-700 last:border-0">
+        <tr className="border-b border-border last:border-0">
             <td className="py-3">
                 <Link
                     href={`/outreach/campaigns/${campaign.id}`}
-                    className="font-medium text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400"
+                    className="font-medium text-foreground hover:text-primary"
                 >
                     {campaign.name}
                 </Link>
@@ -133,10 +133,10 @@ function CampaignRow({ campaign }: { campaign: RecentCampaign }) {
                     {campaign.status}
                 </span>
             </td>
-            <td className="py-3 text-sm text-gray-600 dark:text-gray-400">{campaign.leads}</td>
-            <td className="py-3 text-sm text-gray-600 dark:text-gray-400">{campaign.emailsSent}</td>
-            <td className="py-3 text-sm text-gray-600 dark:text-gray-400">{campaign.openRate.toFixed(1)}%</td>
-            <td className="py-3 text-sm text-gray-600 dark:text-gray-400">{campaign.replyRate.toFixed(1)}%</td>
+            <td className="py-3 text-sm text-muted-foreground">{campaign.leads}</td>
+            <td className="py-3 text-sm text-muted-foreground">{campaign.emailsSent}</td>
+            <td className="py-3 text-sm text-muted-foreground">{campaign.openRate.toFixed(1)}%</td>
+            <td className="py-3 text-sm text-muted-foreground">{campaign.replyRate.toFixed(1)}%</td>
         </tr>
     )
 }
@@ -158,14 +158,14 @@ export function OutreachDashboard() {
                 {/* Header */}
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Outreach Dashboard</h1>
-                        <p className="text-gray-500 dark:text-gray-400 mt-1">
+                        <h1 className="text-2xl font-bold text-foreground">Outreach Dashboard</h1>
+                        <p className="text-muted-foreground mt-1">
                             Manage your cold email campaigns and track performance
                         </p>
                     </div>
                     <Link
                         href="/outreach/campaigns/new"
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
                     >
                         <Plus className="w-5 h-5" />
                         New Campaign
@@ -176,9 +176,9 @@ export function OutreachDashboard() {
                 {statsLoading ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         {[...Array(4)].map((_, i) => (
-                            <div key={i} className="bg-white dark:bg-gray-800 rounded-lg p-6 animate-pulse">
-                                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-2"></div>
-                                <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+                            <div key={i} className="bg-card rounded-lg p-6 animate-pulse">
+                                <div className="h-4 bg-muted rounded w-1/2 mb-2"></div>
+                                <div className="h-8 bg-muted rounded w-3/4"></div>
                             </div>
                         ))}
                     </div>
@@ -214,30 +214,30 @@ export function OutreachDashboard() {
                 {/* Secondary Stats */}
                 {stats && (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                        <div className="bg-card rounded-lg p-4 border border-border">
                             <div className="flex items-center gap-3">
-                                <MousePointer className="w-5 h-5 text-blue-500" />
+                                <MousePointer className="w-5 h-5 text-primary" />
                                 <div>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">Click Rate</p>
-                                    <p className="text-lg font-semibold text-gray-900 dark:text-white">{stats.clickRate.toFixed(1)}%</p>
+                                    <p className="text-sm text-muted-foreground">Click Rate</p>
+                                    <p className="text-lg font-semibold text-foreground">{stats.clickRate.toFixed(1)}%</p>
                                 </div>
                             </div>
                         </div>
-                        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                        <div className="bg-card rounded-lg p-4 border border-border">
                             <div className="flex items-center gap-3">
                                 <Reply className="w-5 h-5 text-green-500" />
                                 <div>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">Reply Rate</p>
-                                    <p className="text-lg font-semibold text-gray-900 dark:text-white">{stats.replyRate.toFixed(1)}%</p>
+                                    <p className="text-sm text-muted-foreground">Reply Rate</p>
+                                    <p className="text-lg font-semibold text-foreground">{stats.replyRate.toFixed(1)}%</p>
                                 </div>
                             </div>
                         </div>
-                        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                        <div className="bg-card rounded-lg p-4 border border-border">
                             <div className="flex items-center gap-3">
                                 <Mail className="w-5 h-5 text-red-500" />
                                 <div>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">Bounce Rate</p>
-                                    <p className="text-lg font-semibold text-gray-900 dark:text-white">{stats.bounceRate.toFixed(1)}%</p>
+                                    <p className="text-sm text-muted-foreground">Bounce Rate</p>
+                                    <p className="text-lg font-semibold text-foreground">{stats.bounceRate.toFixed(1)}%</p>
                                 </div>
                             </div>
                         </div>
@@ -246,7 +246,7 @@ export function OutreachDashboard() {
 
                 {/* Quick Actions */}
                 <div>
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Quick Actions</h2>
+                    <h2 className="text-lg font-semibold text-foreground mb-4">Quick Actions</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         <QuickAction
                             title="Create Campaign"
@@ -276,12 +276,12 @@ export function OutreachDashboard() {
                 </div>
 
                 {/* Recent Campaigns */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                    <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Campaigns</h2>
+                <div className="bg-card rounded-lg border border-border">
+                    <div className="p-4 border-b border-border flex items-center justify-between">
+                        <h2 className="text-lg font-semibold text-foreground">Recent Campaigns</h2>
                         <Link
                             href="/outreach/campaigns"
-                            className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                            className="text-sm text-primary hover:underline"
                         >
                             View all
                         </Link>
@@ -290,16 +290,16 @@ export function OutreachDashboard() {
                         <div className="p-4 space-y-3">
                             {[...Array(3)].map((_, i) => (
                                 <div key={i} className="animate-pulse flex gap-4">
-                                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3"></div>
-                                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-16"></div>
-                                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-16"></div>
+                                    <div className="h-4 bg-muted rounded w-1/3"></div>
+                                    <div className="h-4 bg-muted rounded w-16"></div>
+                                    <div className="h-4 bg-muted rounded w-16"></div>
                                 </div>
                             ))}
                         </div>
                     ) : campaigns && campaigns.length > 0 ? (
                         <table className="w-full">
                             <thead>
-                                <tr className="text-left text-sm text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">
+                                <tr className="text-left text-sm text-muted-foreground border-b border-border">
                                     <th className="px-4 py-3 font-medium">Campaign</th>
                                     <th className="px-4 py-3 font-medium">Status</th>
                                     <th className="px-4 py-3 font-medium">Leads</th>
@@ -317,10 +317,10 @@ export function OutreachDashboard() {
                     ) : (
                         <div className="p-8 text-center">
                             <Target className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-                            <p className="text-gray-500 dark:text-gray-400 mb-4">No campaigns yet</p>
+                            <p className="text-muted-foreground mb-4">No campaigns yet</p>
                             <Link
                                 href="/outreach/campaigns/new"
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
                             >
                                 <Plus className="w-5 h-5" />
                                 Create your first campaign

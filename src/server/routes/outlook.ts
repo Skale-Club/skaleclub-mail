@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express'
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '../../db'
-import { organizationUsers, outlookMailboxes, organizations } from '../../db/schema'
+import { organizationUsers, organizations, outlookMailboxes, emailAccounts } from '../../db/schema'
 import { isPlatformAdmin } from '../lib/admin'
 import {
     buildOutlookOauthUrl,
@@ -51,8 +51,9 @@ async function checkOutlookAccess(userId: string, organizationId: string) {
     return { organization, membership }
 }
 
-function buildFrontendRedirect(params: Record<string, string>) {
-    const url = new URL('/admin/servers', process.env.FRONTEND_URL || 'http://localhost:9000')
+function buildFrontendRedirect(params: Record<string, string>, redirectDestination?: string) {
+    const dest = redirectDestination || '/admin/servers'
+    const url = new URL(dest, process.env.FRONTEND_URL || 'http://localhost:9000')
 
     for (const [key, value] of Object.entries(params)) {
         url.searchParams.set(key, value)
@@ -158,16 +159,45 @@ router.get('/callback', async (req: Request, res: Response) => {
                 .returning()
             : await db.insert(outlookMailboxes).values(payload).returning()
 
+        const dest = '/outreach/inboxes'
+        const existingEmailAccount = await db.query.emailAccounts.findFirst({
+            where: eq(emailAccounts.outlookMailboxId, mailbox.id),
+        })
+
+        if (!existingEmailAccount) {
+            await db.insert(emailAccounts).values({
+                organizationId: state.organizationId,
+                email: mailboxEmail,
+                displayName: connection.profile.displayName || mailbox.displayName,
+                provider: 'outlook',
+                outlookMailboxId: mailbox.id,
+                status: 'verified',
+                verifiedAt: new Date(),
+                dailySendLimit: 50,
+                warmupEnabled: true,
+                warmupDays: 14,
+            })
+        } else {
+            await db.update(emailAccounts)
+                .set({
+                    displayName: connection.profile.displayName || mailbox.displayName,
+                    status: 'verified',
+                    verifiedAt: new Date(),
+                    updatedAt: new Date(),
+                })
+                .where(eq(emailAccounts.id, existingEmailAccount.id))
+        }
+
         return res.redirect(buildFrontendRedirect({
             outlook: 'connected',
             mailbox: mailbox.email,
-        }))
+        }, dest))
     } catch (error) {
         console.error('Error completing Outlook OAuth:', error)
         return res.redirect(buildFrontendRedirect({
             outlook: 'error',
             reason: error instanceof Error ? error.message : 'callback_failed',
-        }))
+        }, '/admin/servers'))
     }
 })
 
