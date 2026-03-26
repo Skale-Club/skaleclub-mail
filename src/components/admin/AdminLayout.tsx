@@ -159,7 +159,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                             onClick={() => navigate('/outreach')}
                         >
                             <Target className="w-4 h-4" />
-                            <span className="hidden sm:inline">Entrar no Outreach</span>
+                            <span className="hidden sm:inline">Open Outreach</span>
                             <ArrowRight className="w-4 h-4 hidden sm:inline" />
                         </Button>
                         <ModeToggle />

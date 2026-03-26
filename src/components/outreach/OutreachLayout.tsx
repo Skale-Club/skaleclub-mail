@@ -76,63 +76,67 @@ export function OutreachLayout({ children }: OutreachLayoutProps) {
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         lg:translate-x-0
       `}>
-                {/* Logo */}
-                <div className="flex items-center justify-between h-16 px-4 border-b border-border">
-                    <Link href="/outreach" className="flex items-center gap-3">
-                        <AppLogo className="h-9 w-9 shrink-0" />
-                        <div>
-                            <span className="block text-base font-bold leading-tight text-foreground">{branding.applicationName}</span>
-                            <span className="block text-xs text-muted-foreground">Outreach</span>
-                        </div>
-                    </Link>
-                    <button
-                        className="lg:hidden p-2 rounded-md hover:bg-accent text-muted-foreground transition-colors"
-                        onClick={() => setSidebarOpen(false)}
-                    >
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>
-
-                {/* Navigation */}
-                <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
-                    {navItems.map((item) => (
-                        <Link
-                            key={item.href}
-                            href={item.href}
-                            className={`
-                flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200
-                ${isActiveRoute(item.href)
-                                    ? 'bg-accent text-accent-foreground'
-                                    : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                                }
-              `}
+                <div className="flex h-full flex-col">
+                    {/* Logo */}
+                    <div className="flex h-16 items-center justify-between px-4 border-b">
+                        <Link href="/outreach" className="flex items-center gap-3">
+                            <AppLogo className="h-9 w-9 shrink-0" />
+                            <div className="min-w-0">
+                                <span className="block text-base font-bold leading-tight text-foreground">{branding.applicationName}</span>
+                                <span className="block text-xs text-muted-foreground">Outreach</span>
+                            </div>
+                        </Link>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="lg:hidden"
                             onClick={() => setSidebarOpen(false)}
                         >
-                            {item.icon}
-                            {item.label}
-                        </Link>
-                    ))}
-                </nav>
-
-                {/* User section */}
-                <div className="border-t p-4">
-                    <div className="flex items-center gap-3 mb-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold">
-                            {user?.email?.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{user?.email}</p>
-                            <p className="text-xs text-muted-foreground">Administrator</p>
-                        </div>
+                            <X className="w-5 h-5" />
+                        </Button>
                     </div>
-                    <Button
-                        variant="ghost"
-                        className="w-full justify-start text-muted-foreground border border-border/50"
-                        onClick={handleSignOut}
-                    >
-                        <LogOut className="w-4 h-4 mr-2" />
-                        Logout
-                    </Button>
+
+                    {/* Navigation */}
+                    <nav className="flex-1 overflow-y-auto p-4">
+                        <div className="space-y-1">
+                            {navItems.map((item) => (
+                                <Link
+                                    key={item.href}
+                                    href={item.href}
+                                    className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                                        isActiveRoute(item.href)
+                                            ? 'bg-accent text-accent-foreground'
+                                            : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                                    }`}
+                                    onClick={() => setSidebarOpen(false)}
+                                >
+                                    {item.icon}
+                                    {item.label}
+                                </Link>
+                            ))}
+                        </div>
+                    </nav>
+
+                    {/* User section */}
+                    <div className="border-t p-4">
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold">
+                                {user?.email?.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{user?.email}</p>
+                                <p className="text-xs text-muted-foreground">Administrator</p>
+                            </div>
+                        </div>
+                        <Button
+                            variant="ghost"
+                            className="w-full justify-start text-muted-foreground border border-border/50"
+                            onClick={handleSignOut}
+                        >
+                            <LogOut className="w-4 h-4 mr-2" />
+                            Logout
+                        </Button>
+                    </div>
                 </div>
             </aside>
 
@@ -149,15 +153,12 @@ export function OutreachLayout({ children }: OutreachLayoutProps) {
                         </button>
                         <div className="flex-1" />
                         <div className="flex items-center gap-4">
-                            <span className="text-sm text-muted-foreground hidden sm:inline-block">
-                                Cold Email Outreach Platform
-                            </span>
                             <button
                                 onClick={() => navigate('/admin')}
                                 className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                             >
                                 <ArrowLeft className="w-4 h-4" />
-                                <span className="hidden sm:inline">Sair do Outreach</span>
+                                <span className="hidden sm:inline">Exit Outreach</span>
                             </button>
                             <ModeToggle />
                         </div>
