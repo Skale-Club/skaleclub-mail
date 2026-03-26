@@ -5,7 +5,7 @@ import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
 import { Label } from '../../ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../ui/Table'
-import { getAccessToken } from './shared'
+import { apiFetch, apiRequest } from './shared'
 
 interface Message {
     id: string
@@ -46,21 +46,12 @@ export default function MessagesTab({ organizationId }: MessagesTabProps) {
     async function fetchMessages() {
         setIsLoading(true)
         try {
-            const token = await getAccessToken()
             const params = new URLSearchParams({ organizationId })
             if (statusFilter !== 'all') params.set('status', statusFilter)
             if (directionFilter !== 'all') params.set('direction', directionFilter)
 
-            const response = await fetch(`/api/messages?${params.toString()}`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            })
-
-            if (response.ok) {
-                const data = await response.json()
-                setMessages(data.messages || [])
-            }
+            const data = await apiFetch<{ messages: Message[] }>(`/api/messages?${params.toString()}`)
+            setMessages(data.messages || [])
         } catch (error) {
             console.error('Error fetching messages:', error)
         } finally {
@@ -80,19 +71,13 @@ export default function MessagesTab({ organizationId }: MessagesTabProps) {
         if (!confirm('Are you sure you want to delete this message? This action cannot be undone.')) return
 
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/messages/${messageId}`, {
+            await apiRequest(`/api/messages/${messageId}`, {
                 method: 'DELETE',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
             })
 
-            if (response.ok) {
-                setMessages((current) => current.filter((message) => message.id !== messageId))
-                if (selectedMessage?.id === messageId) {
-                    setSelectedMessage(null)
-                }
+            setMessages((current) => current.filter((message) => message.id !== messageId))
+            if (selectedMessage?.id === messageId) {
+                setSelectedMessage(null)
             }
         } catch (error) {
             console.error('Error deleting message:', error)
@@ -101,20 +86,13 @@ export default function MessagesTab({ organizationId }: MessagesTabProps) {
 
     async function handleReleaseHeld(messageId: string) {
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/messages/${messageId}/release`, {
+            const data = await apiFetch<{ message: Message }>(`/api/messages/${messageId}/release`, {
                 method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
             })
 
-            if (response.ok) {
-                const data = await response.json()
-                setMessages((current) => current.map((message) => message.id === messageId ? data.message : message))
-                if (selectedMessage?.id === messageId) {
-                    setSelectedMessage(data.message)
-                }
+            setMessages((current) => current.map((message) => message.id === messageId ? data.message : message))
+            if (selectedMessage?.id === messageId) {
+                setSelectedMessage(data.message)
             }
         } catch (error) {
             console.error('Error releasing message:', error)

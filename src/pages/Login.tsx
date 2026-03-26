@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react'
-import { useBranding } from '../lib/branding'
+import { defaultBranding, useBranding } from '../lib/branding'
+import { apiFetch } from '../lib/api-client'
 import { supabase } from '../lib/supabase'
 import { AppLogo } from '../components/AppLogo'
 import { Button } from '../components/ui/button'
@@ -10,6 +11,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../co
 
 export default function Login() {
     const { branding } = useBranding()
+    const applicationName =
+        branding.applicationName === defaultBranding.applicationName
+            ? 'Skale Club Mail'
+            : branding.applicationName
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [isLoading, setIsLoading] = useState(false)
@@ -27,19 +32,9 @@ export default function Login() {
             if (error) {
                 setError(error.message)
             } else {
-                // Fetch profile to determine role, then redirect
                 try {
-                    const { data: { session } } = await supabase.auth.getSession()
-                    if (session) {
-                        const profileRes = await fetch('/api/users/profile', {
-                            cache: 'no-store',
-                            headers: { Authorization: `Bearer ${session.access_token}` },
-                        })
-                        const profileData = profileRes.ok ? await profileRes.json() : null
-                        window.location.href = profileData?.user?.isAdmin ? '/admin' : '/mail/inbox'
-                    } else {
-                        window.location.href = '/mail/inbox'
-                    }
+                    const profileData = await apiFetch<{ user?: { isAdmin?: boolean } }>('/api/users/profile')
+                    window.location.href = profileData?.user?.isAdmin ? '/admin' : '/mail/inbox'
                 } catch {
                     window.location.href = '/mail/inbox'
                 }
@@ -55,15 +50,13 @@ export default function Login() {
         <div className="flex min-h-screen items-center justify-center bg-background p-6">
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-secondary via-background to-background -z-10" />
             <div className="w-full max-w-md z-10">
-                <div className="mb-8 flex flex-col items-center justify-center gap-3">
-                    <AppLogo className="h-16 w-16 shadow-sm-soft" />
-                    <span className="text-2xl font-semibold tracking-tight text-foreground">{branding.applicationName}</span>
-                </div>
-
                 <Card className="shadow-lg-soft border-border/40">
-                    <CardHeader className="space-y-1 text-center pb-8">
-                        <CardTitle className="text-2xl font-semibold tracking-tight">Welcome back</CardTitle>
-                        <CardDescription>Sign in to your account to continue</CardDescription>
+                    <CardHeader className="space-y-0 text-center pb-6">
+                        <div className="flex flex-col items-center justify-center gap-1">
+                            <AppLogo className="h-16 w-16 shadow-sm-soft" alt={`${applicationName} logo`} />
+                            <CardTitle className="text-2xl font-semibold tracking-tight">{applicationName}</CardTitle>
+                            <CardDescription>Sign in to your account to continue</CardDescription>
+                        </div>
                     </CardHeader>
                     <CardContent>
                         <form onSubmit={handleLogin} className="space-y-5">

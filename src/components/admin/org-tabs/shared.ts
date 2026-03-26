@@ -1,12 +1,6 @@
-import { supabase } from '../../../lib/supabase'
-
+import { apiFetch, apiRequest, getAccessToken } from '../../../lib/api-client'
 export { fetchWithAuth } from '../../../lib/api'
-
-export async function getAccessToken() {
-    const { data: { session } } = await supabase.auth.getSession()
-    return session?.access_token
-}
-
+export { apiFetch, apiRequest, getAccessToken }
 export function generateSlug(value: string) {
     return value
         .toLowerCase()

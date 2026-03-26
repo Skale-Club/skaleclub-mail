@@ -6,7 +6,7 @@ import { useMailbox } from '../../hooks/useMailbox'
 import { useSendEmail, useSaveDraft } from '../../hooks/useMail'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import { RichTextEditor, htmlToPlainText } from '../../components/mail/RichTextEditor'
-import { apiFetch } from '../../lib/api'
+import { apiFetch } from '../../lib/api-client'
 import {
     ArrowLeft,
     Send,

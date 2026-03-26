@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { TrendingUp, Mail, Users, Target, Eye, MousePointer } from 'lucide-react'
 import { OutreachLayout } from '../../components/outreach/OutreachLayout'
+import { apiFetch } from '../../lib/api-client'
 
 interface AnalyticsData {
     overview: {
@@ -31,15 +32,11 @@ type DailyStat = {
 type StatColor = 'blue' | 'green' | 'purple' | 'orange' | 'red'
 
 async function fetchAnalytics(): Promise<AnalyticsData> {
-    const response = await fetch('/api/outreach/campaigns/analytics', { cache: 'no-store' })
-    if (!response.ok) throw new Error('Failed to fetch analytics')
-    return response.json()
+    return apiFetch<AnalyticsData>('/api/outreach/campaigns/analytics')
 }
 
 async function fetchDailyStats(): Promise<DailyStat[]> {
-    const response = await fetch('/api/outreach/campaigns/analytics/daily', { cache: 'no-store' })
-    if (!response.ok) throw new Error('Failed to fetch daily stats')
-    return response.json()
+    return apiFetch<DailyStat[]>('/api/outreach/campaigns/analytics/daily')
 }
 
 function StatCard({

@@ -14,6 +14,7 @@ import {
     Reply
 } from 'lucide-react'
 import { OutreachLayout } from '../../components/outreach/OutreachLayout'
+import { apiFetch } from '../../lib/api-client'
 
 interface DashboardStats {
     totalCampaigns: number
@@ -37,15 +38,11 @@ interface RecentCampaign {
 }
 
 async function fetchDashboardStats(): Promise<DashboardStats> {
-    const response = await fetch('/api/outreach/campaigns/stats', { cache: 'no-store' })
-    if (!response.ok) throw new Error('Failed to fetch stats')
-    return response.json()
+    return apiFetch<DashboardStats>('/api/outreach/campaigns/stats')
 }
 
 async function fetchRecentCampaigns(): Promise<RecentCampaign[]> {
-    const response = await fetch('/api/outreach/campaigns?limit=5', { cache: 'no-store' })
-    if (!response.ok) throw new Error('Failed to fetch campaigns')
-    const data = await response.json()
+    const data = await apiFetch<{ campaigns?: RecentCampaign[] }>('/api/outreach/campaigns?limit=5')
     return data.campaigns || []
 }
 

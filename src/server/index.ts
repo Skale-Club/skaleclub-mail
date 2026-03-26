@@ -5,9 +5,8 @@ import { join } from 'path'
 import { existsSync } from 'fs'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
-import { createClient } from '@supabase/supabase-js'
 import { eq } from 'drizzle-orm'
-import { db } from '../db'
+import { closeDatabaseConnection, db } from '../db'
 import { users } from '../db/schema'
 import authRoutes from './routes/auth'
 import userRoutes from './routes/users'
@@ -25,6 +24,8 @@ import outlookRoutes from './routes/outlook'
 import mailRoutes from './routes/mail'
 import { createSMTPServer } from './smtp-server'
 import { createIMAPServer, loadImapBranding } from './imap-server'
+import { runReadinessChecks } from './lib/health'
+import { supabaseAnonClient } from './lib/supabase'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -83,10 +84,32 @@ app.get('/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
-const supabase = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_ANON_KEY!
-)
+app.get('/health/db', async (_req, res) => {
+    const readiness = await runReadinessChecks()
+    const statusCode = readiness.services.database.ok ? 200 : 503
+
+    res.status(statusCode).json({
+        status: readiness.services.database.ok ? 'ok' : 'error',
+        checkedAt: readiness.checkedAt,
+        database: readiness.services.database,
+    })
+})
+
+app.get('/health/auth', async (_req, res) => {
+    const readiness = await runReadinessChecks()
+    const statusCode = readiness.services.auth.ok ? 200 : 503
+
+    res.status(statusCode).json({
+        status: readiness.services.auth.ok ? 'ok' : 'error',
+        checkedAt: readiness.checkedAt,
+        auth: readiness.services.auth,
+    })
+})
+
+app.get('/health/ready', async (_req, res) => {
+    const readiness = await runReadinessChecks()
+    res.status(readiness.ok ? 200 : 503).json(readiness)
+})
 
 const PUBLIC_PATHS = [
     '/api/auth/login',
@@ -110,31 +133,28 @@ app.use('/api', async (req, res, next) => {
     }
 
     const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error } = await supabase.auth.getUser(token)
+    const { data: { user }, error } = await supabaseAnonClient.auth.getUser(token)
 
     if (error || !user) {
         return res.status(401).json({ error: 'Invalid or expired token' })
     }
 
     req.headers['x-user-id'] = user.id
-
-    const existing = await db.query.users.findFirst({
-        where: eq(users.id, user.id),
-    })
-
-    if (!existing) {
-        await db.insert(users).values({
-            id: user.id,
-            email: user.email!,
-            firstName: user.user_metadata?.firstName || null,
-            lastName: user.user_metadata?.lastName || null,
-            isAdmin: false,
-            emailVerified: true,
-        })
-    }
+    req.headers['x-user-email'] = user.email || ''
+    req.headers['x-user-first-name'] = user.user_metadata?.firstName || ''
+    req.headers['x-user-last-name'] = user.user_metadata?.lastName || ''
+    req.headers['x-user-email-verified'] = String(Boolean(user.email_confirmed_at || user.confirmed_at))
 
     next()
 })
+
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    process.on(signal, () => {
+        void closeDatabaseConnection().finally(() => {
+            process.exit(0)
+        })
+    })
+}
 
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)

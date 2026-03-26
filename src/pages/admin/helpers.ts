@@ -1,5 +1,6 @@
-export { apiFetch } from '../../lib/api'
-import { apiFetch } from '../../lib/api'
+import { apiFetch, getAccessToken } from '../../lib/api-client'
+
+export { apiFetch, getAccessToken }
 
 export interface OrganizationOption {
     id: string

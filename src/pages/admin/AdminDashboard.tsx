@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Building2, Globe, Users, Mail, HardDrive, Send } from 'lucide-react'
+import { Building2, Globe, Users, Mail, HardDrive } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
 import { Button } from '../../components/ui/button'
 import { Progress } from '../../components/ui/progress'
-import { apiFetch } from './helpers'
-import { Switch } from '../../components/ui/switch'
+import { apiFetch, loadDomains } from './helpers'
 
 interface DashboardStats {
     organizations: number
@@ -31,14 +30,9 @@ interface SystemUsage {
     storage: {
         used: number
         limit: number
+        path?: string
     }
     users: UserUsage[]
-}
-
-interface OutreachStatus {
-    outreach_enabled: boolean
-    enabled_count: number
-    total_count: number
 }
 
 function formatBytes(bytes: number): string {
@@ -56,41 +50,13 @@ export default function AdminDashboard() {
         messages: { sent: 0, delivered: 0, bounced: 0, pending: 0 },
     })
     const [systemUsage, setSystemUsage] = useState<SystemUsage | null>(null)
-    const [outreachStatus, setOutreachStatus] = useState<OutreachStatus | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [usageLoading, setUsageLoading] = useState(true)
-    const [outreachLoading, setOutreachLoading] = useState(false)
 
     useEffect(() => {
         void fetchStats()
         void fetchUsage()
-        void fetchOutreachStatus()
     }, [])
-
-    async function fetchOutreachStatus() {
-        try {
-            const data = await apiFetch<OutreachStatus>('/api/system/outreach')
-            setOutreachStatus(data)
-        } catch (error) {
-            console.error('Error fetching outreach status:', error)
-        }
-    }
-
-    async function toggleOutreach(enabled: boolean) {
-        setOutreachLoading(true)
-        try {
-            await apiFetch('/api/system/outreach', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ enabled }),
-            })
-            setOutreachStatus(prev => prev ? { ...prev, outreach_enabled: enabled } : null)
-        } catch (error) {
-            console.error('Error toggling outreach:', error)
-        } finally {
-            setOutreachLoading(false)
-        }
-    }
 
     async function fetchStats() {
         try {
@@ -98,10 +64,17 @@ export default function AdminDashboard() {
                 apiFetch<{ organizations: { id: string }[] }>('/api/organizations').catch(() => ({ organizations: [] })),
                 apiFetch<{ users: unknown[] }>('/api/users').catch(() => ({ users: [] })),
             ])
+            const organizations = orgPayload.organizations || []
+            const domainLists = await Promise.all(
+                organizations.map((organization) => loadDomains(organization.id).catch(() => []))
+            )
+            const verifiedDomains = domainLists
+                .flat()
+                .filter((domain) => domain.verificationStatus === 'verified').length
 
             setStats({
-                organizations: (orgPayload.organizations || []).length,
-                domains: 0,
+                organizations: organizations.length,
+                domains: verifiedDomains,
                 users: (userPayload.users || []).length,
                 messages: { sent: 0, delivered: 0, bounced: 0, pending: 0 },
             })
@@ -231,7 +204,7 @@ export default function AdminDashboard() {
                                     <HardDrive className="h-5 w-5 text-muted-foreground" />
                                     System Storage
                                 </CardTitle>
-                                <CardDescription>Global object usage</CardDescription>
+                                <CardDescription>Server disk usage</CardDescription>
                             </CardHeader>
                             <CardContent>
                                 {usageLoading ? (
@@ -249,6 +222,11 @@ export default function AdminDashboard() {
                                                 <p className="text-sm text-muted-foreground mt-1">
                                                     of {systemUsage ? formatBytes(systemUsage.storage.limit) : '10 GB'} limit
                                                 </p>
+                                                {systemUsage?.storage.path && (
+                                                    <p className="text-xs text-muted-foreground mt-1">
+                                                        Path: {systemUsage.storage.path}
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="space-y-2">
@@ -273,39 +251,6 @@ export default function AdminDashboard() {
                             </CardContent>
                         </Card>
                     </div>
-
-                    {/* Outreach Toggle Card */}
-                    <Card>
-                        <CardHeader className="pb-4">
-                            <CardTitle className="text-lg font-medium flex items-center gap-2">
-                                <Send className="h-5 w-5 text-muted-foreground" />
-                                Outreach System
-                            </CardTitle>
-                            <CardDescription>Enable or disable cold email outreach for all organizations</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="flex items-center justify-between">
-                                <div className="space-y-1">
-                                    <p className="text-sm font-medium">System Status</p>
-                                    <p className="text-xs text-muted-foreground">
-                                        {outreachStatus 
-                                            ? `${outreachStatus.enabled_count} of ${outreachStatus.total_count} organizations enabled`
-                                            : 'Loading...'}
-                                    </p>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <span className="text-sm text-muted-foreground">
-                                        {outreachStatus?.outreach_enabled ? 'Enabled' : 'Disabled'}
-                                    </span>
-                                    <Switch
-                                        checked={outreachStatus?.outreach_enabled ?? false}
-                                        onCheckedChange={toggleOutreach}
-                                        disabled={outreachLoading}
-                                    />
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
 
                     {/* Bottom Section: User Usage List */}
                     <Card>

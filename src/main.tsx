@@ -30,7 +30,6 @@ import { SequencesPage } from './pages/outreach/SequencesPage'
 import { NewSequencePage } from './pages/outreach/sequences/NewSequencePage'
 import { AnalyticsPage as OutreachAnalyticsPage } from './pages/outreach/AnalyticsPage'
 import { SettingsPage as OutreachSettingsPage } from './pages/outreach/SettingsPage'
-import { OutreachCheck } from './components/OutreachCheck'
 
 import InboxPage from './pages/mail/InboxPage'
 import SentPage from './pages/mail/SentPage'
@@ -93,6 +92,24 @@ function AdminCheck({ children }: { children: React.ReactNode }) {
 
     if (!isAdmin) {
         window.location.href = '/mail/inbox'
+        return null
+    }
+
+    return <>{children}</>
+}
+
+function MailCheck({ children }: { children: React.ReactNode }) {
+    const { user, isAdmin, isLoading } = useAuth()
+
+    if (isLoading) return <Spinner />
+
+    if (!user) {
+        window.location.href = '/login'
+        return null
+    }
+
+    if (isAdmin) {
+        window.location.href = '/admin'
         return null
     }
 
@@ -211,39 +228,29 @@ function App() {
                         </Route>
 
                         <Route path="/outreach">
-                            <AuthCheck>
-                                <OutreachCheck>
-                                    <OutreachDashboard />
-                                </OutreachCheck>
-                            </AuthCheck>
+                            <AdminCheck>
+                                <OutreachDashboard />
+                            </AdminCheck>
                         </Route>
                         <Route path="/outreach/campaigns">
-                            <AuthCheck>
-                                <OutreachCheck>
-                                    <CampaignsPage />
-                                </OutreachCheck>
-                            </AuthCheck>
+                            <AdminCheck>
+                                <CampaignsPage />
+                            </AdminCheck>
                         </Route>
                         <Route path="/outreach/leads">
-                            <AuthCheck>
-                                <OutreachCheck>
-                                    <LeadsPage />
-                                </OutreachCheck>
-                            </AuthCheck>
+                            <AdminCheck>
+                                <LeadsPage />
+                            </AdminCheck>
                         </Route>
                         <Route path="/outreach/inboxes">
-                            <AuthCheck>
-                                <OutreachCheck>
-                                    <InboxesPage />
-                                </OutreachCheck>
-                            </AuthCheck>
+                            <AdminCheck>
+                                <InboxesPage />
+                            </AdminCheck>
                         </Route>
                         <Route path="/outreach/sequences">
-                            <AuthCheck>
-                                <OutreachCheck>
-                                    <SequencesPage />
-                                </OutreachCheck>
-                            </AuthCheck>
+                            <AdminCheck>
+                                <SequencesPage />
+                            </AdminCheck>
                         </Route>
                         <Route path="/outreach/sequences/new">
                             <AuthCheck>
@@ -253,69 +260,65 @@ function App() {
                             </AuthCheck>
                         </Route>
                         <Route path="/outreach/analytics">
-                            <AuthCheck>
-                                <OutreachCheck>
-                                    <OutreachAnalyticsPage />
-                                </OutreachCheck>
-                            </AuthCheck>
+                            <AdminCheck>
+                                <OutreachAnalyticsPage />
+                            </AdminCheck>
                         </Route>
                         <Route path="/outreach/settings">
-                            <AuthCheck>
-                                <OutreachCheck>
-                                    <OutreachSettingsPage />
-                                </OutreachCheck>
-                            </AuthCheck>
+                            <AdminCheck>
+                                <OutreachSettingsPage />
+                            </AdminCheck>
                         </Route>
 
                         <Route path="/mail/inbox">
-                            <AuthCheck>
+                            <MailCheck>
                                 <InboxPage />
-                            </AuthCheck>
+                            </MailCheck>
                         </Route>
                         <Route path="/mail/sent">
-                            <AuthCheck>
+                            <MailCheck>
                                 <SentPage />
-                            </AuthCheck>
+                            </MailCheck>
                         </Route>
                         <Route path="/mail/drafts">
-                            <AuthCheck>
+                            <MailCheck>
                                 <DraftsPage />
-                            </AuthCheck>
+                            </MailCheck>
                         </Route>
                         <Route path="/mail/trash">
-                            <AuthCheck>
+                            <MailCheck>
                                 <TrashPage />
-                            </AuthCheck>
+                            </MailCheck>
                         </Route>
                         <Route path="/mail/starred">
-                            <AuthCheck>
+                            <MailCheck>
                                 <StarredPage />
-                            </AuthCheck>
+                            </MailCheck>
                         </Route>
                         <Route path="/mail/:folder/:id">
-                            <AuthCheck>
+                            <MailCheck>
                                 <EmailDetailPage />
-                            </AuthCheck>
+                            </MailCheck>
                         </Route>
                         <Route path="/mail/compose">
-                            <AuthCheck>
+                            <MailCheck>
                                 <ComposePage />
-                            </AuthCheck>
+                            </MailCheck>
                         </Route>
                         <Route path="/mail/settings">
-                            <AuthCheck>
+                            <MailCheck>
                                 <MailSettingsPage />
-                            </AuthCheck>
+                            </MailCheck>
                         </Route>
                         <Route path="/mail/search">
-                            <AuthCheck>
+                            <MailCheck>
                                 <SearchPage />
-                            </AuthCheck>
+                            </MailCheck>
                         </Route>
                         <Route path="/mail">
-                            <AuthCheck>
+                            <MailCheck>
                                 <InboxPage />
-                            </AuthCheck>
+                            </MailCheck>
                         </Route>
 
                         <Route path="/">

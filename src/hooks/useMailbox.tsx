@@ -1,5 +1,5 @@
 import React from 'react'
-import { apiFetch } from '../lib/api'
+import { apiFetch } from '../lib/api-client'
 
 export interface Mailbox {
     id: string

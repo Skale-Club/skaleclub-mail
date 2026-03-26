@@ -1,19 +1,14 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
-import { createClient } from '@supabase/supabase-js'
 import { db } from '../../db'
 import { users, organizationUsers, organizations } from '../../db/schema'
 import { eq, and } from 'drizzle-orm'
 import { isPlatformAdmin } from '../lib/admin'
 import { hashPassword, createUserMailbox, validateEmailDomainForOrg, deleteUserMailbox } from '../lib/native-mail'
+import { supabaseAdminClient } from '../lib/supabase'
+import { ensureLocalUser, getAuthenticatedUserFromRequest } from '../lib/user-sync'
 
 const router = Router()
-
-// Supabase admin client for user creation
-const supabaseAdmin = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 function mapAdminUser(user: {
     id: string
@@ -82,25 +77,21 @@ async function getAdminUserRecord(userId: string) {
 // Get current user profile
 router.get('/profile', async (req: Request, res: Response) => {
     try {
-        const userId = req.headers['x-user-id'] as string
+        const authUser = getAuthenticatedUserFromRequest(req)
 
-        if (!userId) {
+        if (!authUser) {
             return res.status(401).json({ error: 'Unauthorized' })
         }
 
-        const user = await db.query.users.findFirst({
-            where: eq(users.id, userId),
-            columns: {
-                passwordHash: false,
-                twoFactorSecret: false,
+        const user = await ensureLocalUser(authUser)
+
+        res.json({
+            user: {
+                ...user,
+                passwordHash: undefined,
+                twoFactorSecret: undefined,
             },
         })
-
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' })
-        }
-
-        res.json({ user })
     } catch (error) {
         console.error('Error fetching user:', error)
         res.status(500).json({ error: 'Internal server error' })
@@ -110,11 +101,13 @@ router.get('/profile', async (req: Request, res: Response) => {
 // Update current user profile
 router.patch('/profile', async (req: Request, res: Response) => {
     try {
-        const userId = req.headers['x-user-id'] as string
+        const authUser = getAuthenticatedUserFromRequest(req)
 
-        if (!userId) {
+        if (!authUser) {
             return res.status(401).json({ error: 'Unauthorized' })
         }
+
+        await ensureLocalUser(authUser)
 
         const updateSchema = z.object({
             firstName: z.string().optional(),
@@ -130,7 +123,7 @@ router.patch('/profile', async (req: Request, res: Response) => {
                 ...updates,
                 updatedAt: new Date(),
             })
-            .where(eq(users.id, userId))
+            .where(eq(users.id, authUser.id))
             .returning()
 
         if (!updatedUser) {
@@ -150,14 +143,16 @@ router.patch('/profile', async (req: Request, res: Response) => {
 // Get user's organizations
 router.get('/organizations', async (req: Request, res: Response) => {
     try {
-        const userId = req.headers['x-user-id'] as string
+        const authUser = getAuthenticatedUserFromRequest(req)
 
-        if (!userId) {
+        if (!authUser) {
             return res.status(401).json({ error: 'Unauthorized' })
         }
 
+        await ensureLocalUser(authUser)
+
         const memberships = await db.query.organizationUsers.findMany({
-            where: eq(organizationUsers.userId, userId),
+            where: eq(organizationUsers.userId, authUser.id),
             with: {
                 organization: true,
             },
@@ -250,7 +245,7 @@ router.post('/', async (req: Request, res: Response) => {
         }
 
         // Create user in Supabase Auth
-        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        const { data: authData, error: authError } = await supabaseAdminClient.auth.admin.createUser({
             email: userData.email,
             password: userData.sendInvite ? undefined : userData.password,
             email_confirm: true,
@@ -301,7 +296,7 @@ router.post('/', async (req: Request, res: Response) => {
 
         // If sendInvite is true, send password reset email
         if (userData.sendInvite) {
-            await supabaseAdmin.auth.admin.generateLink({
+            await supabaseAdminClient.auth.admin.generateLink({
                 type: 'recovery',
                 email: userData.email,
                 options: {
@@ -459,7 +454,7 @@ router.post('/:id/resend-invite', async (req: Request, res: Response) => {
         }
 
         // Send password reset email as invitation
-        const { error } = await supabaseAdmin.auth.admin.generateLink({
+        const { error } = await supabaseAdminClient.auth.admin.generateLink({
             type: 'recovery',
             email: targetUser.email,
             options: {
@@ -517,7 +512,7 @@ router.put('/:id/password', async (req: Request, res: Response) => {
             password: z.string().min(6, 'Password must be at least 6 characters'),
         }).parse(req.body)
 
-        const { error } = await supabaseAdmin.auth.admin.updateUserById(targetUserId, { password })
+        const { error } = await supabaseAdminClient.auth.admin.updateUserById(targetUserId, { password })
 
         if (error) {
             return res.status(400).json({ error: error.message })
@@ -570,7 +565,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
         }
 
         // Delete from Supabase Auth
-        const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(targetUserId)
+        const { error: authError } = await supabaseAdminClient.auth.admin.deleteUser(targetUserId)
         if (authError) {
             console.error('Error deleting user from auth:', authError)
         }
@@ -591,15 +586,17 @@ router.delete('/:id', async (req: Request, res: Response) => {
 // Self-service: change own password (syncs Supabase Auth + users.passwordHash)
 router.post('/me/change-password', async (req: Request, res: Response) => {
     try {
-        const userId = req.headers['x-user-id'] as string
-        if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+        const authUser = getAuthenticatedUserFromRequest(req)
+        if (!authUser) return res.status(401).json({ error: 'Unauthorized' })
+
+        await ensureLocalUser(authUser)
 
         const { currentPassword, newPassword } = z.object({
             currentPassword: z.string(),
             newPassword: z.string().min(8, 'Password must be at least 8 characters'),
         }).parse(req.body)
 
-        const user = await db.query.users.findFirst({ where: eq(users.id, userId) })
+        const user = await db.query.users.findFirst({ where: eq(users.id, authUser.id) })
         if (!user) return res.status(404).json({ error: 'User not found' })
         if (user.isAdmin) return res.status(403).json({ error: 'Platform admins cannot use this endpoint' })
         if (!user.passwordHash) return res.status(400).json({ error: 'No password set on this account' })
@@ -608,13 +605,13 @@ router.post('/me/change-password', async (req: Request, res: Response) => {
         const valid = await bcrypt.default.compare(currentPassword, user.passwordHash)
         if (!valid) return res.status(400).json({ error: 'Current password is incorrect' })
 
-        const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, { password: newPassword })
+        const { error } = await supabaseAdminClient.auth.admin.updateUserById(authUser.id, { password: newPassword })
         if (error) return res.status(400).json({ error: error.message })
 
         const newHash = await hashPassword(newPassword)
         await db.update(users)
             .set({ passwordHash: newHash, updatedAt: new Date() })
-            .where(eq(users.id, userId))
+            .where(eq(users.id, authUser.id))
 
         res.json({ message: 'Password changed successfully' })
     } catch (error) {

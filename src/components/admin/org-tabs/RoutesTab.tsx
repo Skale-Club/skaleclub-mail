@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
 import { Label } from '../../ui/label'
-import { getAccessToken } from './shared'
+import { apiFetch, apiRequest } from './shared'
 
 interface RouteConfig {
     id: string
@@ -46,17 +46,8 @@ export default function RoutesTab({ organizationId }: RoutesTabProps) {
     async function fetchRoutes() {
         setIsLoading(true)
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/routes?organizationId=${organizationId}`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            })
-
-            if (response.ok) {
-                const data = await response.json()
-                setRoutes(data.routes || [])
-            }
+            const data = await apiFetch<{ routes: RouteConfig[] }>(`/api/routes?organizationId=${organizationId}`)
+            setRoutes(data.routes || [])
         } catch (error) {
             console.error('Error fetching routes:', error)
         } finally {
@@ -73,27 +64,17 @@ export default function RoutesTab({ organizationId }: RoutesTabProps) {
 
     async function handleCreateRoute() {
         try {
-            const token = await getAccessToken()
-            const response = await fetch('/api/routes', {
+            const data = await apiFetch<{ route: RouteConfig }>('/api/routes', {
                 method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({ ...newRoute, organizationId }),
             })
 
-            if (response.ok) {
-                const data = await response.json()
-                setRoutes((current) => [data.route, ...current])
-                setNewRoute(emptyRoute)
-                setShowCreateModal(false)
-            } else {
-                const error = await response.json()
-                alert(error.error || 'Failed to create route')
-            }
+            setRoutes((current) => [data.route, ...current])
+            setNewRoute(emptyRoute)
+            setShowCreateModal(false)
         } catch (error) {
             console.error('Error creating route:', error)
+            alert(error instanceof Error ? error.message : 'Failed to create route')
         }
     }
 
@@ -101,24 +82,17 @@ export default function RoutesTab({ organizationId }: RoutesTabProps) {
         if (!selectedRoute) return
 
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/routes/${selectedRoute.id}`, {
+            const data = await apiFetch<{ route: RouteConfig }>(`/api/routes/${selectedRoute.id}`, {
                 method: 'PUT',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify(editData),
             })
 
-            if (response.ok) {
-                const data = await response.json()
-                setRoutes((current) => current.map((route) => route.id === selectedRoute.id ? data.route : route))
-                setSelectedRoute(null)
-                setShowEditModal(false)
-            }
+            setRoutes((current) => current.map((route) => route.id === selectedRoute.id ? data.route : route))
+            setSelectedRoute(null)
+            setShowEditModal(false)
         } catch (error) {
             console.error('Error updating route:', error)
+            alert(error instanceof Error ? error.message : 'Failed to update route')
         }
     }
 
@@ -126,17 +100,11 @@ export default function RoutesTab({ organizationId }: RoutesTabProps) {
         if (!confirm('Are you sure you want to delete this route? This action cannot be undone.')) return
 
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/routes/${routeId}`, {
+            await apiRequest(`/api/routes/${routeId}`, {
                 method: 'DELETE',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
             })
 
-            if (response.ok) {
-                setRoutes((current) => current.filter((route) => route.id !== routeId))
-            }
+            setRoutes((current) => current.filter((route) => route.id !== routeId))
         } catch (error) {
             console.error('Error deleting route:', error)
         }

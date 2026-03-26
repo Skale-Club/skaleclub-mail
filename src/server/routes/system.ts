@@ -1,11 +1,12 @@
 import { Router, Request, Response } from 'express'
-import { createClient } from '@supabase/supabase-js'
+import { statfs } from 'node:fs/promises'
 import { db } from '../../db'
 import { sql } from 'drizzle-orm'
 import { systemBranding, users, organizations } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { readBranding as readBrandingFromDB, clearBrandingCache } from '../lib/serverBranding'
+import { supabaseAdminClient } from '../lib/supabase'
 
 const router = Router()
 
@@ -17,11 +18,6 @@ const brandingSchema = z.object({
     applicationName: z.string().trim().min(1).max(160).optional(),
     mailHost: z.string().trim().min(1).max(253).optional(),
 })
-
-const supabaseAdmin = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 function getRequestingUser(req: Request) {
     const requestingUserId = req.headers['x-user-id'] as string | undefined
@@ -65,6 +61,26 @@ function getFaviconPublicUrl(storage: string | null): string {
 
     const [bucket, path] = storage.split('/')
     return `${process.env.SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`
+}
+
+async function readServerDiskUsage() {
+    const storagePath =
+        process.env.HETZNER_STORAGE_PATH ||
+        process.env.SYSTEM_STORAGE_PATH ||
+        process.env.MAIL_STORAGE_PATH ||
+        process.cwd()
+
+    const stats = await statfs(storagePath)
+    const blockSize = Number(stats.bsize)
+    const totalBytes = Number(stats.blocks) * blockSize
+    const freeBytes = Number(stats.bavail) * blockSize
+    const usedBytes = Math.max(0, totalBytes - freeBytes)
+
+    return {
+        path: storagePath,
+        used: usedBytes,
+        limit: totalBytes,
+    }
 }
 
 router.get('/branding', async (_req: Request, res: Response) => {
@@ -193,7 +209,7 @@ router.post('/branding/upload', async (req: Request, res: Response) => {
         const storagePath = `${fieldName}-${timestamp}-${filename}`
         const storageKey = `${BUCKET_NAME}/${storagePath}`
 
-        const { data: uploadData, error: uploadError } = await supabaseAdmin
+        const { data: uploadData, error: uploadError } = await supabaseAdminClient
             .storage
             .from(BUCKET_NAME)
             .upload(storagePath, fileBuffer, {
@@ -306,13 +322,7 @@ router.get('/usage', async (req: Request, res: Response) => {
             return res.status(403).json({ error: 'Forbidden' })
         }
 
-        const storageResult = await db.execute(sql`
-            SELECT COALESCE(SUM((metadata->>'size')::bigint), 0)::bigint AS total_bytes
-            FROM storage.objects
-            WHERE metadata->>'size' IS NOT NULL
-        `)
-        const totalStorageBytes = Number((storageResult as any)[0]?.total_bytes ?? 0)
-        const storageLimitBytes = Number(process.env.STORAGE_LIMIT_BYTES) || 10 * 1024 * 1024 * 1024
+        const diskUsage = await readServerDiskUsage()
 
         const userUsageResult = await db.execute(sql`
             SELECT
@@ -345,8 +355,9 @@ router.get('/usage', async (req: Request, res: Response) => {
 
         res.json({
             storage: {
-                used: totalStorageBytes,
-                limit: storageLimitBytes,
+                used: diskUsage.used,
+                limit: diskUsage.limit,
+                path: diskUsage.path,
             },
             users: (userUsageResult as any[]).map((row) => ({
                 id: row.id,

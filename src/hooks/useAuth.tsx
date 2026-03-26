@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { useState, useEffect } from 'react'
+import { apiFetch } from '../lib/api-client'
 
 interface User {
     id: string
@@ -21,30 +22,30 @@ export function useAuth(): AuthState {
     const [isAdmin, setIsAdmin] = useState(false)
     const [isLoading, setIsLoading] = useState(true)
 
-    async function fetchProfile(token: string) {
+    async function fetchProfile() {
         try {
-            const res = await fetch('/api/users/profile', {
-                cache: 'no-store',
-                headers: { Authorization: `Bearer ${token}` },
-            })
-            if (res.ok) {
-                const data = await res.json()
-                setIsAdmin(data.user?.isAdmin === true)
-            } else {
-                setIsAdmin(false)
-            }
+            const data = await apiFetch<{ user?: { isAdmin?: boolean } }>('/api/users/profile')
+            setIsAdmin(data.user?.isAdmin === true)
         } catch {
             setIsAdmin(false)
         }
     }
 
     useEffect(() => {
-        const getSession = async () => {
+        const initializeAuth = async () => {
             try {
-                const { data: { session } } = await supabase.auth.getSession()
-                if (session?.user) {
-                    setUser(session.user as User)
-                    await fetchProfile(session.access_token)
+                const { data: { user: authUser }, error } = await supabase.auth.getUser()
+
+                if (error) {
+                    throw error
+                }
+
+                if (authUser) {
+                    setUser(authUser as User)
+                    await fetchProfile()
+                } else {
+                    setUser(null)
+                    setIsAdmin(false)
                 }
             } catch (error) {
                 console.error('Error getting session:', error)
@@ -53,13 +54,13 @@ export function useAuth(): AuthState {
             }
         }
 
-        getSession()
+        void initializeAuth()
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (event, session) => {
                 if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
                     setUser(session.user as User)
-                    await fetchProfile(session.access_token)
+                    await fetchProfile()
                 } else if (event === 'SIGNED_OUT') {
                     setUser(null)
                     setIsAdmin(false)

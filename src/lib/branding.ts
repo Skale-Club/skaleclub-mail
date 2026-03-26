@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { apiFetch } from './api-client'
 
 export interface BrandingSettings {
     companyName: string
@@ -27,13 +28,7 @@ function normalizeBranding(payload: Partial<BrandingSettings> | null | undefined
 }
 
 export async function fetchBranding(): Promise<BrandingSettings> {
-    const response = await fetch('/api/system/branding', { cache: 'no-store' })
-
-    if (!response.ok) {
-        throw new Error('Failed to fetch branding settings')
-    }
-
-    const payload = await response.json() as Partial<BrandingSettings>
+    const payload = await apiFetch<Partial<BrandingSettings>>('/api/system/branding', { auth: false })
     return normalizeBranding(payload)
 }
 

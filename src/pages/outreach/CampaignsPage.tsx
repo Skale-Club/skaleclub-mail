@@ -16,6 +16,7 @@ import {
     TrendingUp
 } from 'lucide-react'
 import { OutreachLayout } from '../../components/outreach/OutreachLayout'
+import { apiFetch, apiRequest } from '../../lib/api-client'
 
 interface Campaign {
     id: string
@@ -41,27 +42,21 @@ async function fetchCampaigns(params: { status?: string; search?: string }): Pro
     if (params.status && params.status !== 'all') query.set('status', params.status)
     if (params.search) query.set('search', params.search)
 
-    const response = await fetch(`/api/outreach/campaigns?${query.toString()}`, { cache: 'no-store' })
-    if (!response.ok) throw new Error('Failed to fetch campaigns')
-    return response.json()
+    return apiFetch<CampaignsResponse>(`/api/outreach/campaigns?${query.toString()}`)
 }
 
 async function updateCampaignStatus(id: string, status: string): Promise<void> {
-    const response = await fetch(`/api/outreach/campaigns/${id}/status`, {
-        cache: 'no-store',
+    await apiRequest(`/api/outreach/campaigns/${id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
     })
-    if (!response.ok) throw new Error('Failed to update campaign')
 }
 
 async function deleteCampaign(id: string): Promise<void> {
-    const response = await fetch(`/api/outreach/campaigns/${id}`, {
-        cache: 'no-store',
+    await apiRequest(`/api/outreach/campaigns/${id}`, {
         method: 'DELETE',
     })
-    if (!response.ok) throw new Error('Failed to delete campaign')
 }
 
 function CampaignCard({ campaign, onStatusChange, onDelete }: {

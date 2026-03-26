@@ -367,14 +367,6 @@ export function MailLayout({ children }: MailLayoutProps) {
                                                 <User className="w-4 h-4" />
                                                 Profile & Settings
                                             </Link>
-                                            <Link
-                                                href="/outreach"
-                                                className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-accent hover:text-accent-foreground"
-                                                onClick={() => setUserMenuOpen(false)}
-                                            >
-                                                <Settings className="w-4 h-4" />
-                                                Outreach Dashboard
-                                            </Link>
                                             <div className="border-t border-border mt-2 pt-2">
                                                 <button
                                                     onClick={handleSignOut}

@@ -16,6 +16,7 @@ import {
     AlertCircle
 } from 'lucide-react'
 import { OutreachLayout } from '../../components/outreach/OutreachLayout'
+import { apiFetch, apiRequest } from '../../lib/api-client'
 
 interface EmailAccount {
     id: string
@@ -38,25 +39,23 @@ interface EmailAccountsResponse {
 }
 
 async function fetchEmailAccounts(): Promise<EmailAccountsResponse> {
-    const response = await fetch('/api/outreach/email-accounts', { cache: 'no-store' })
-    if (!response.ok) throw new Error('Failed to fetch email accounts')
-    return response.json()
+    const data = await apiFetch<{ emailAccounts?: EmailAccount[] }>('/api/outreach/email-accounts')
+    return {
+        accounts: data.emailAccounts || [],
+        total: (data.emailAccounts || []).length,
+    }
 }
 
 async function verifyEmailAccount(id: string): Promise<void> {
-    const response = await fetch(`/api/outreach/email-accounts/${id}/verify`, {
-        cache: 'no-store',
+    await apiRequest(`/api/outreach/email-accounts/${id}/verify`, {
         method: 'POST',
     })
-    if (!response.ok) throw new Error('Failed to verify email account')
 }
 
 async function deleteEmailAccount(id: string): Promise<void> {
-    const response = await fetch(`/api/outreach/email-accounts/${id}`, {
-        cache: 'no-store',
+    await apiRequest(`/api/outreach/email-accounts/${id}`, {
         method: 'DELETE',
     })
-    if (!response.ok) throw new Error('Failed to delete email account')
 }
 
 const statusConfig: Record<string, { color: string; icon: React.ReactNode; label: string }> = {

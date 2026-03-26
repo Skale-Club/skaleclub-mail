@@ -11,7 +11,7 @@ import {
     Users,
 } from 'lucide-react'
 import { Button } from '../../components/ui/button'
-import { getAccessToken } from '../../components/admin/org-tabs/shared'
+import { apiFetch } from '../../components/admin/org-tabs/shared'
 import DomainsTab from '../../components/admin/org-tabs/DomainsTab'
 import TemplatesTab from '../../components/admin/org-tabs/TemplatesTab'
 import MessagesTab from '../../components/admin/org-tabs/MessagesTab'
@@ -70,18 +70,9 @@ export default function OrganizationDetailPage() {
     async function fetchOrganization() {
         setIsLoading(true)
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/organizations/${orgId}`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            })
-
-            if (response.ok) {
-                const data = await response.json()
-                setOrg(data.organization)
-                setRole(data.role)
-            }
+            const data = await apiFetch<{ organization: Organization; role: string }>(`/api/organizations/${orgId}`)
+            setOrg(data.organization)
+            setRole(data.role)
         } catch (error) {
             console.error('Error fetching organization:', error)
         } finally {

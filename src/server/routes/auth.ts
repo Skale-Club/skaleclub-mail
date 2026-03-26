@@ -1,16 +1,12 @@
 import { Router, Request, Response } from 'express'
-import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { db } from '../../db'
 import { users } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import { hashPassword, createUserMailbox } from '../lib/native-mail'
+import { createSupabaseUserClient, supabaseAnonClient } from '../lib/supabase'
 
 const router = Router()
-
-const supabaseUrl = process.env.SUPABASE_URL!
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY!
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 const REFRESH_TOKEN_COOKIE_NAME = 'sb_refresh_token'
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000
@@ -75,7 +71,7 @@ router.post('/login', async (req: Request, res: Response) => {
     try {
         const { email, password } = loginSchema.parse(req.body)
 
-        const { data, error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabaseAnonClient.auth.signInWithPassword({
             email,
             password,
         })
@@ -107,8 +103,8 @@ router.post('/logout', async (req: Request, res: Response) => {
 
         if (refreshToken) {
             try {
-                await supabase.auth.refreshSession({ refresh_token: refreshToken })
-                await supabase.auth.signOut()
+                await supabaseAnonClient.auth.refreshSession({ refresh_token: refreshToken })
+                await supabaseAnonClient.auth.signOut()
             } catch {
                 // Ignore errors during cleanup
             }
@@ -131,7 +127,7 @@ router.get('/me', async (req: Request, res: Response) => {
 
         const token = authHeader.replace('Bearer ', '')
 
-        const { data, error } = await supabase.auth.getUser(token)
+        const { data, error } = await supabaseAnonClient.auth.getUser(token)
 
         if (error) {
             return res.status(401).json({ error: error.message })
@@ -147,7 +143,7 @@ router.post('/reset-password', async (req: Request, res: Response) => {
     try {
         const { email } = resetPasswordSchema.parse(req.body)
 
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        const { error } = await supabaseAnonClient.auth.resetPasswordForEmail(email, {
             redirectTo: `${process.env.FRONTEND_URL}/reset-password`,
         })
 
@@ -175,11 +171,7 @@ router.post('/update-password', async (req: Request, res: Response) => {
 
         const token = authHeader.replace('Bearer ', '')
 
-        const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-            global: {
-                headers: { Authorization: `Bearer ${token}` },
-            },
-        })
+        const userClient = createSupabaseUserClient(token)
 
         const { error, data: updatedData } = await userClient.auth.updateUser({ password })
 
@@ -224,7 +216,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Refresh token required' })
         }
 
-        const { data, error } = await supabase.auth.refreshSession({
+        const { data, error } = await supabaseAnonClient.auth.refreshSession({
             refresh_token: refreshToken,
         })
 

@@ -12,6 +12,7 @@ import { OutreachLayout } from '../../components/outreach/OutreachLayout'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
+import { apiFetch, apiRequest } from '../../lib/api-client'
 
 interface OutreachSettings {
     general: {
@@ -37,19 +38,15 @@ interface OutreachSettings {
 }
 
 async function fetchSettings(): Promise<OutreachSettings> {
-    const response = await fetch('/api/outreach/settings', { cache: 'no-store' })
-    if (!response.ok) throw new Error('Failed to fetch settings')
-    return response.json()
+    return apiFetch<OutreachSettings>('/api/outreach/settings')
 }
 
 async function updateSettings(settings: Partial<OutreachSettings>): Promise<void> {
-    const response = await fetch('/api/outreach/settings', {
-        cache: 'no-store',
+    await apiRequest('/api/outreach/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)
     })
-    if (!response.ok) throw new Error('Failed to update settings')
 }
 
 export function SettingsPage() {

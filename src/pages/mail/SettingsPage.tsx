@@ -23,7 +23,7 @@ import {
     Trash,
     PenTool
 } from 'lucide-react'
-import { apiFetch } from '../../lib/api'
+import { apiFetch } from '../../lib/api-client'
 
 type TabId = 'profile' | 'notifications' | 'security' | 'appearance' | 'accounts' | 'filters' | 'signatures'
 

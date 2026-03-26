@@ -5,9 +5,8 @@ import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
-import { apiFetch } from './helpers'
+import { apiFetch, getAccessToken } from './helpers'
 import { defaultBranding, type BrandingSettings } from '../../lib/branding'
-import { supabase } from '../../lib/supabase'
 
 export default function BrandingPage() {
     const queryClient = useQueryClient()
@@ -54,21 +53,13 @@ export default function BrandingPage() {
             const formData = new FormData()
             formData.append(field, file)
 
-            const response = await fetch('/api/system/branding/upload', {
-                cache: 'no-store',
+            const data = await apiFetch<{ logoUrl: string; faviconUrl: string }>('/api/system/branding/upload', {
                 method: 'POST',
                 headers: {
                     Authorization: `Bearer ${await getAccessToken()}`,
                 },
                 body: formData,
             })
-
-            if (!response.ok) {
-                const error = await response.json()
-                throw new Error(error.error || 'Upload failed')
-            }
-
-            const data = await response.json()
 
             setForm((current) => ({
                 ...current,
@@ -87,11 +78,6 @@ export default function BrandingPage() {
                 setIsUploadingFavicon(false)
             }
         }
-    }
-
-    async function getAccessToken() {
-        const { data: { session } } = await supabase.auth.getSession()
-        return session?.access_token || ''
     }
 
     function handleFileDrop(field: 'logo' | 'favicon', e: React.DragEvent) {

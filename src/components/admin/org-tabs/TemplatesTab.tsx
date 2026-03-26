@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
 import { Label } from '../../ui/label'
-import { generateSlug, getAccessToken } from './shared'
+import { apiFetch, apiRequest, generateSlug } from './shared'
 
 interface Template {
     id: string
@@ -64,18 +64,9 @@ export default function TemplatesTab({ organizationId }: TemplatesTabProps) {
     async function fetchTemplates() {
         setIsLoading(true)
         try {
-            const token = await getAccessToken()
             const params = new URLSearchParams({ organizationId })
-            const response = await fetch(`/api/templates?${params.toString()}`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            })
-
-            if (response.ok) {
-                const data = await response.json()
-                setTemplates(data.templates || [])
-            }
+            const data = await apiFetch<{ templates: Template[] }>(`/api/templates?${params.toString()}`)
+            setTemplates(data.templates || [])
         } catch (error) {
             console.error('Error fetching templates:', error)
         } finally {
@@ -153,13 +144,8 @@ export default function TemplatesTab({ organizationId }: TemplatesTabProps) {
 
     async function handleCreateTemplate() {
         try {
-            const token = await getAccessToken()
-            const response = await fetch('/api/templates', {
+            const data = await apiFetch<{ template: Template }>('/api/templates', {
                 method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({
                     ...draft,
                     organizationId,
@@ -168,16 +154,11 @@ export default function TemplatesTab({ organizationId }: TemplatesTabProps) {
                 }),
             })
 
-            if (response.ok) {
-                const data = await response.json()
-                setTemplates((current) => [data.template, ...current])
-                resetForm()
-            } else {
-                const error = await response.json()
-                alert(error.error || 'Failed to create template')
-            }
+            setTemplates((current) => [data.template, ...current])
+            resetForm()
         } catch (error) {
             console.error('Error creating template:', error)
+            alert(error instanceof Error ? error.message : 'Failed to create template')
         }
     }
 
@@ -185,13 +166,8 @@ export default function TemplatesTab({ organizationId }: TemplatesTabProps) {
         if (!editingTemplate) return
 
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/templates/${editingTemplate.id}`, {
+            const data = await apiFetch<{ template: Template }>(`/api/templates/${editingTemplate.id}`, {
                 method: 'PUT',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({
                     ...draft,
                     plainBody: draft.plainBody || undefined,
@@ -199,18 +175,13 @@ export default function TemplatesTab({ organizationId }: TemplatesTabProps) {
                 }),
             })
 
-            if (response.ok) {
-                const data = await response.json()
-                setTemplates((current) => current.map((template) => (
-                    template.id === editingTemplate.id ? data.template : template
-                )))
-                resetForm()
-            } else {
-                const error = await response.json()
-                alert(error.error || 'Failed to update template')
-            }
+            setTemplates((current) => current.map((template) => (
+                template.id === editingTemplate.id ? data.template : template
+            )))
+            resetForm()
         } catch (error) {
             console.error('Error updating template:', error)
+            alert(error instanceof Error ? error.message : 'Failed to update template')
         }
     }
 
@@ -218,17 +189,11 @@ export default function TemplatesTab({ organizationId }: TemplatesTabProps) {
         if (!confirm('Are you sure you want to delete this template?')) return
 
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/templates/${templateId}`, {
+            await apiRequest(`/api/templates/${templateId}`, {
                 method: 'DELETE',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
             })
 
-            if (response.ok) {
-                setTemplates((current) => current.filter((template) => template.id !== templateId))
-            }
+            setTemplates((current) => current.filter((template) => template.id !== templateId))
         } catch (error) {
             console.error('Error deleting template:', error)
         }
@@ -238,25 +203,19 @@ export default function TemplatesTab({ organizationId }: TemplatesTabProps) {
         if (!previewTemplate) return
 
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/templates/${previewTemplate.id}/render`, {
+            const data = await apiFetch<{
+                subject: string | null
+                plainBody: string | null
+                htmlBody: string | null
+            }>(`/api/templates/${previewTemplate.id}/render`, {
                 method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({ variables: previewVariables }),
             })
 
-            if (response.ok) {
-                const data = await response.json()
-                setPreviewResult(data)
-            } else {
-                const error = await response.json()
-                alert(error.error || 'Failed to preview template')
-            }
+            setPreviewResult(data)
         } catch (error) {
             console.error('Error previewing template:', error)
+            alert(error instanceof Error ? error.message : 'Failed to preview template')
         }
     }
 

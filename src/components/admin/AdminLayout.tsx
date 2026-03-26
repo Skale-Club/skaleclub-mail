@@ -14,6 +14,7 @@ import {
     X,
     Home,
     Palette,
+    Target,
 } from 'lucide-react'
 
 interface NavItem {
@@ -25,6 +26,7 @@ interface NavItem {
 const navItems: NavItem[] = [
     { label: 'Dashboard', href: '/admin', icon: <Home className="w-5 h-5" /> },
     { label: 'Organizations', href: '/admin/organizations', icon: <Building2 className="w-5 h-5" /> },
+    { label: 'Outreach', href: '/outreach', icon: <Target className="w-5 h-5" /> },
     { label: 'Admins', href: '/admin/admins', icon: <Shield className="w-5 h-5" /> },
     { label: 'Branding', href: '/admin/branding', icon: <Palette className="w-5 h-5" /> },
 ]

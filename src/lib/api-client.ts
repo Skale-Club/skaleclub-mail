@@ -1,0 +1,181 @@
+import { supabase } from './supabase'
+
+type ApiMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD'
+
+export interface ApiRequestOptions extends RequestInit {
+    auth?: boolean
+    retry?: boolean
+}
+
+export class ApiClientError extends Error {
+    status: number
+    path: string
+    details?: unknown
+    code?: string
+
+    constructor(message: string, options: { status: number; path: string; details?: unknown; code?: string }) {
+        super(message)
+        this.name = 'ApiClientError'
+        this.status = options.status
+        this.path = options.path
+        this.details = options.details
+        this.code = options.code
+    }
+}
+
+function sleep(ms: number) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+function isRetryableMethod(method: string | undefined) {
+    const normalized = (method || 'GET').toUpperCase() as ApiMethod
+    return normalized === 'GET' || normalized === 'HEAD'
+}
+
+function shouldSetJsonContentType(body: BodyInit | null | undefined) {
+    return typeof body === 'string'
+}
+
+function getErrorMessage(payload: unknown, fallback: string) {
+    if (typeof payload === 'object' && payload) {
+        if ('error' in payload) {
+            const error = payload.error
+            if (typeof error === 'string') {
+                return error
+            }
+            if (typeof error === 'object' && error && 'message' in error && typeof error.message === 'string') {
+                return error.message
+            }
+        }
+        if ('message' in payload && typeof payload.message === 'string') {
+            return payload.message
+        }
+    }
+
+    if (typeof payload === 'string' && payload.trim()) {
+        return payload
+    }
+
+    return fallback
+}
+
+async function parseResponsePayload(response: Response): Promise<unknown> {
+    if (response.status === 204) {
+        return null
+    }
+
+    const contentType = response.headers.get('content-type') || ''
+    if (contentType.includes('application/json')) {
+        return response.json()
+    }
+
+    return response.text()
+}
+
+async function getValidSession() {
+    const { data, error } = await supabase.auth.getSession()
+
+    if (error) {
+        throw new ApiClientError(error.message, {
+            status: 401,
+            path: 'session',
+            code: 'session_error',
+        })
+    }
+
+    let session = data.session
+    const expiresSoon = session?.expires_at ? (session.expires_at * 1000) - Date.now() < 60_000 : false
+
+    if (expiresSoon) {
+        const refreshed = await supabase.auth.refreshSession()
+        if (refreshed.error) {
+            throw new ApiClientError(refreshed.error.message, {
+                status: 401,
+                path: 'session',
+                code: 'session_refresh_failed',
+            })
+        }
+        session = refreshed.data.session
+    }
+
+    return session
+}
+
+export async function getAccessToken() {
+    const session = await getValidSession()
+    return session?.access_token
+}
+
+async function executeRequest(path: string, init: RequestInit, token?: string | null) {
+    const headers = new Headers(init.headers || {})
+
+    if (token) {
+        headers.set('Authorization', `Bearer ${token}`)
+    }
+
+    if (shouldSetJsonContentType(init.body) && !headers.has('Content-Type')) {
+        headers.set('Content-Type', 'application/json')
+    }
+
+    return fetch(path, {
+        cache: 'no-store',
+        ...init,
+        headers,
+    })
+}
+
+export async function apiRequest(path: string, options: ApiRequestOptions = {}): Promise<Response> {
+    const { auth = true, retry = true, ...init } = options
+    const method = (init.method || 'GET').toUpperCase()
+    let token = auth ? await getAccessToken() : null
+
+    try {
+        let response = await executeRequest(path, init, token)
+
+        if (response.status === 401 && auth) {
+            const refreshed = await supabase.auth.refreshSession()
+            if (refreshed.error || !refreshed.data.session?.access_token) {
+                throw new ApiClientError(refreshed.error?.message || 'Unauthorized', {
+                    status: 401,
+                    path,
+                    code: 'unauthorized',
+                })
+            }
+
+            token = refreshed.data.session.access_token
+            response = await executeRequest(path, init, token)
+        }
+
+        if (!response.ok) {
+            const payload = await parseResponsePayload(response)
+            throw new ApiClientError(getErrorMessage(payload, response.statusText || 'Request failed'), {
+                status: response.status,
+                path,
+                details: payload,
+            })
+        }
+
+        return response
+    } catch (error) {
+        if (error instanceof ApiClientError) {
+            throw error
+        }
+
+        if (retry && isRetryableMethod(method)) {
+            await sleep(250)
+            return apiRequest(path, { ...options, retry: false })
+        }
+
+        throw new ApiClientError(error instanceof Error ? error.message : 'Network request failed', {
+            status: 0,
+            path,
+            code: 'network_error',
+        })
+    }
+}
+
+export async function apiFetch<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+    const response = await apiRequest(path, options)
+    const payload = await parseResponsePayload(response)
+    return payload as T
+}

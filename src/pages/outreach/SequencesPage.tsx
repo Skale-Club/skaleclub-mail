@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'wouter'
 import { Plus, Mail, ChevronDown } from 'lucide-react'
 import { OutreachLayout } from '../../components/outreach/OutreachLayout'
+import { apiFetch } from '../../lib/api-client'
 
 interface Sequence {
     id: string
@@ -21,9 +22,7 @@ interface Sequence {
 }
 
 async function fetchSequences(): Promise<Sequence[]> {
-    const response = await fetch('/api/outreach/campaigns/sequences', { cache: 'no-store' })
-    if (!response.ok) throw new Error('Failed to fetch sequences')
-    const data = await response.json()
+    const data = await apiFetch<{ sequences?: Sequence[] }>('/api/outreach/campaigns/sequences')
     return data.sequences || []
 }
 

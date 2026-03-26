@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
 import { Label } from '../../ui/label'
-import { getAccessToken } from './shared'
+import { apiFetch, apiRequest } from './shared'
 
 interface WebhookConfig {
     id: string
@@ -57,17 +57,8 @@ export default function WebhooksTab({ organizationId }: WebhooksTabProps) {
     async function fetchWebhooks() {
         setIsLoading(true)
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/webhooks?organizationId=${organizationId}`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            })
-
-            if (response.ok) {
-                const data = await response.json()
-                setWebhooks(data.webhooks || [])
-            }
+            const data = await apiFetch<{ webhooks: WebhookConfig[] }>(`/api/webhooks?organizationId=${organizationId}`)
+            setWebhooks(data.webhooks || [])
         } catch (error) {
             console.error('Error fetching webhooks:', error)
         } finally {
@@ -84,30 +75,20 @@ export default function WebhooksTab({ organizationId }: WebhooksTabProps) {
 
     async function handleCreateWebhook() {
         try {
-            const token = await getAccessToken()
-            const response = await fetch('/api/webhooks', {
+            const data = await apiFetch<{ webhook: WebhookConfig }>('/api/webhooks', {
                 method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({
                     ...newWebhook,
                     organizationId,
                 }),
             })
 
-            if (response.ok) {
-                const data = await response.json()
-                setWebhooks((current) => [data.webhook, ...current])
-                setNewWebhook(emptyWebhook)
-                setShowCreateModal(false)
-            } else {
-                const error = await response.json()
-                alert(error.error || 'Failed to create webhook')
-            }
+            setWebhooks((current) => [data.webhook, ...current])
+            setNewWebhook(emptyWebhook)
+            setShowCreateModal(false)
         } catch (error) {
             console.error('Error creating webhook:', error)
+            alert(error instanceof Error ? error.message : 'Failed to create webhook')
         }
     }
 
@@ -115,27 +96,17 @@ export default function WebhooksTab({ organizationId }: WebhooksTabProps) {
         if (!selectedWebhook) return
 
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/webhooks/${selectedWebhook.id}`, {
+            const data = await apiFetch<{ webhook: WebhookConfig }>(`/api/webhooks/${selectedWebhook.id}`, {
                 method: 'PATCH',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify(editData),
             })
 
-            if (response.ok) {
-                const data = await response.json()
-                setWebhooks((current) => current.map((webhook) => webhook.id === selectedWebhook.id ? data.webhook : webhook))
-                setSelectedWebhook(null)
-                setShowEditModal(false)
-            } else {
-                const error = await response.json()
-                alert(error.error || 'Failed to update webhook')
-            }
+            setWebhooks((current) => current.map((webhook) => webhook.id === selectedWebhook.id ? data.webhook : webhook))
+            setSelectedWebhook(null)
+            setShowEditModal(false)
         } catch (error) {
             console.error('Error updating webhook:', error)
+            alert(error instanceof Error ? error.message : 'Failed to update webhook')
         }
     }
 
@@ -143,17 +114,11 @@ export default function WebhooksTab({ organizationId }: WebhooksTabProps) {
         if (!confirm('Are you sure you want to delete this webhook?')) return
 
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/webhooks/${webhookId}`, {
+            await apiRequest(`/api/webhooks/${webhookId}`, {
                 method: 'DELETE',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
             })
 
-            if (response.ok) {
-                setWebhooks((current) => current.filter((webhook) => webhook.id !== webhookId))
-            }
+            setWebhooks((current) => current.filter((webhook) => webhook.id !== webhookId))
         } catch (error) {
             console.error('Error deleting webhook:', error)
         }
@@ -161,23 +126,14 @@ export default function WebhooksTab({ organizationId }: WebhooksTabProps) {
 
     async function handleTestWebhook(webhookId: string) {
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/webhooks/${webhookId}/test`, {
+            const data = await apiFetch<{ success?: boolean }>(`/api/webhooks/${webhookId}/test`, {
                 method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
             })
 
-            const data = await response.json()
-            if (response.ok) {
-                alert(data.success ? 'Webhook test successful' : 'Webhook test failed')
-            } else {
-                alert(data.error || 'Failed to test webhook')
-            }
+            alert(data.success ? 'Webhook test successful' : 'Webhook test failed')
         } catch (error) {
             console.error('Error testing webhook:', error)
-            alert('Failed to test webhook')
+            alert(error instanceof Error ? error.message : 'Failed to test webhook')
         }
     }
 

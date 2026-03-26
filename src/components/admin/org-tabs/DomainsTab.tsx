@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
 import { Label } from '../../ui/label'
-import { getAccessToken } from './shared'
+import { apiFetch, apiRequest } from './shared'
 
 interface Domain {
     id: string
@@ -143,17 +143,8 @@ export default function DomainsTab({ organizationId }: DomainsTabProps) {
     async function fetchDomains() {
         setIsLoading(true)
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/domains?organizationId=${organizationId}`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            })
-
-            if (response.ok) {
-                const data = await response.json()
-                setDomains(data.domains || [])
-            }
+            const data = await apiFetch<{ domains: Domain[] }>(`/api/domains?organizationId=${organizationId}`)
+            setDomains(data.domains || [])
         } catch (error) {
             console.error('Error fetching domains:', error)
         } finally {
@@ -171,13 +162,8 @@ export default function DomainsTab({ organizationId }: DomainsTabProps) {
         if (!newDomain.name.trim()) return
 
         try {
-            const token = await getAccessToken()
-            const response = await fetch('/api/domains', {
+            const data = await apiFetch<{ domain: Domain }>('/api/domains', {
                 method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({
                     organizationId,
                     name: newDomain.name.trim(),
@@ -185,47 +171,33 @@ export default function DomainsTab({ organizationId }: DomainsTabProps) {
                 }),
             })
 
-            if (response.ok) {
-                const data = await response.json()
-                setDomains((current) => [data.domain, ...current])
-                setNewDomain({ name: '', verificationMethod: 'dns' })
-                setShowCreateModal(false)
-                setSelectedDomain(data.domain)
-            } else {
-                const error = await response.json()
-                alert(error.error || 'Failed to create domain')
-            }
+            setDomains((current) => [data.domain, ...current])
+            setNewDomain({ name: '', verificationMethod: 'dns' })
+            setShowCreateModal(false)
+            setSelectedDomain(data.domain)
         } catch (error) {
             console.error('Error creating domain:', error)
+            alert(error instanceof Error ? error.message : 'Failed to create domain')
         }
     }
 
     async function handleVerifyDomain(domainId: string) {
         setIsVerifying(true)
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/domains/${domainId}/verify`, {
+            const data = await apiFetch<{ domain: Domain; dnsResults?: DnsResults }>(`/api/domains/${domainId}/verify`, {
                 method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
             })
 
-            if (response.ok) {
-                const data = await response.json()
-                setDomains((current) =>
-                    current.map((domain) => domain.id === domainId ? data.domain : domain)
-                )
-                if (selectedDomain?.id === domainId) {
-                    setSelectedDomain(data.domain)
-                }
-                setDnsResults(data.dnsResults || null)
-            } else {
-                const error = await response.json()
-                alert(error.error || 'Verification failed')
+            setDomains((current) =>
+                current.map((domain) => domain.id === domainId ? data.domain : domain)
+            )
+            if (selectedDomain?.id === domainId) {
+                setSelectedDomain(data.domain)
             }
+            setDnsResults(data.dnsResults || null)
         } catch (error) {
             console.error('Error verifying domain:', error)
+            alert(error instanceof Error ? error.message : 'Verification failed')
         } finally {
             setIsVerifying(false)
         }
@@ -235,19 +207,13 @@ export default function DomainsTab({ organizationId }: DomainsTabProps) {
         if (!confirm('Are you sure you want to delete this domain?')) return
 
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/domains/${domainId}`, {
+            await apiRequest(`/api/domains/${domainId}`, {
                 method: 'DELETE',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
             })
 
-            if (response.ok) {
-                setDomains((current) => current.filter((domain) => domain.id !== domainId))
-                if (selectedDomain?.id === domainId) {
-                    setSelectedDomain(null)
-                }
+            setDomains((current) => current.filter((domain) => domain.id !== domainId))
+            if (selectedDomain?.id === domainId) {
+                setSelectedDomain(null)
             }
         } catch (error) {
             console.error('Error deleting domain:', error)

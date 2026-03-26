@@ -15,6 +15,7 @@ import {
     FileText
 } from 'lucide-react'
 import { OutreachLayout } from '../../components/outreach/OutreachLayout'
+import { apiFetch, apiRequest } from '../../lib/api-client'
 
 interface Lead {
     id: string
@@ -52,23 +53,22 @@ async function fetchLeads(params: { status?: string; listId?: string; search?: s
     if (params.listId && params.listId !== 'all') query.set('listId', params.listId)
     if (params.search) query.set('search', params.search)
 
-    const response = await fetch(`/api/outreach/leads?${query.toString()}`, { cache: 'no-store' })
-    if (!response.ok) throw new Error('Failed to fetch leads')
-    return response.json()
+    const data = await apiFetch<{ leads?: Lead[]; pagination?: { total?: number } }>(`/api/outreach/leads?${query.toString()}`)
+    return {
+        leads: data.leads || [],
+        total: data.pagination?.total || 0,
+    }
 }
 
 async function fetchLeadLists(): Promise<LeadList[]> {
-    const response = await fetch('/api/outreach/leads/lists', { cache: 'no-store' })
-    if (!response.ok) throw new Error('Failed to fetch lead lists')
-    return response.json()
+    const data = await apiFetch<{ leadLists?: LeadList[] }>('/api/outreach/leads/lists')
+    return data.leadLists || []
 }
 
 async function deleteLead(id: string): Promise<void> {
-    const response = await fetch(`/api/outreach/leads/${id}`, {
-        cache: 'no-store',
+    await apiRequest(`/api/outreach/leads/${id}`, {
         method: 'DELETE',
     })
-    if (!response.ok) throw new Error('Failed to delete lead')
 }
 
 const statusColors: Record<string, string> = {

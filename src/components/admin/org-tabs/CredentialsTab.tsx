@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
 import { Label } from '../../ui/label'
-import { getAccessToken } from './shared'
+import { apiFetch, apiRequest } from './shared'
 
 interface Credential {
     id: string
@@ -39,17 +39,8 @@ export default function CredentialsTab({ organizationId }: CredentialsTabProps) 
     async function fetchCredentials() {
         setIsLoading(true)
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/credentials?organizationId=${organizationId}`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            })
-
-            if (response.ok) {
-                const data = await response.json()
-                setCredentials(data.credentials || [])
-            }
+            const data = await apiFetch<{ credentials: Credential[] }>(`/api/credentials?organizationId=${organizationId}`)
+            setCredentials(data.credentials || [])
         } catch (error) {
             console.error('Error fetching credentials:', error)
         } finally {
@@ -68,13 +59,8 @@ export default function CredentialsTab({ organizationId }: CredentialsTabProps) 
         if (!newCredential.name.trim()) return
 
         try {
-            const token = await getAccessToken()
-            const response = await fetch('/api/credentials', {
+            const data = await apiFetch<{ credential: Credential }>('/api/credentials', {
                 method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({
                     organizationId,
                     name: newCredential.name.trim(),
@@ -83,18 +69,13 @@ export default function CredentialsTab({ organizationId }: CredentialsTabProps) 
                 }),
             })
 
-            if (response.ok) {
-                const data = await response.json()
-                setCredentials((current) => [data.credential, ...current])
-                setNewCredential({ name: '', type: 'smtp' })
-                setShowCreateModal(false)
-                setVisibleKeyId(data.credential.id)
-            } else {
-                const error = await response.json()
-                alert(error.error || 'Failed to create credential')
-            }
+            setCredentials((current) => [data.credential, ...current])
+            setNewCredential({ name: '', type: 'smtp' })
+            setShowCreateModal(false)
+            setVisibleKeyId(data.credential.id)
         } catch (error) {
             console.error('Error creating credential:', error)
+            alert(error instanceof Error ? error.message : 'Failed to create credential')
         }
     }
 
@@ -102,19 +83,13 @@ export default function CredentialsTab({ organizationId }: CredentialsTabProps) 
         if (!confirm('Are you sure you want to delete this credential? This action cannot be undone.')) return
 
         try {
-            const token = await getAccessToken()
-            const response = await fetch(`/api/credentials/${credentialId}`, {
+            await apiRequest(`/api/credentials/${credentialId}`, {
                 method: 'DELETE',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
             })
 
-            if (response.ok) {
-                setCredentials((current) => current.filter((credential) => credential.id !== credentialId))
-                if (visibleKeyId === credentialId) {
-                    setVisibleKeyId(null)
-                }
+            setCredentials((current) => current.filter((credential) => credential.id !== credentialId))
+            if (visibleKeyId === credentialId) {
+                setVisibleKeyId(null)
             }
         } catch (error) {
             console.error('Error deleting credential:', error)
