@@ -1,6 +1,6 @@
-import { supabase } from '../lib/supabase'
-import { useState, useEffect } from 'react'
+import React, { createContext, useContext, useEffect, useState } from 'react'
 import { apiFetch } from '../lib/api-client'
+import { supabase } from '../lib/supabase'
 
 interface User {
     id: string
@@ -17,14 +17,23 @@ interface AuthState {
     isLoading: boolean
 }
 
-export function useAuth(): AuthState {
+const AuthContext = createContext<AuthState>({
+    user: null,
+    isAdmin: false,
+    isLoading: true,
+})
+
+function useProvideAuth(): AuthState {
     const [user, setUser] = useState<User | null>(null)
     const [isAdmin, setIsAdmin] = useState(false)
     const [isLoading, setIsLoading] = useState(true)
 
-    async function fetchProfile() {
+    async function fetchProfile(token?: string) {
         try {
-            const data = await apiFetch<{ user?: { isAdmin?: boolean } }>('/api/users/profile')
+            const data = await apiFetch<{ user?: { isAdmin?: boolean } }>('/api/users/profile', {
+                auth: !token,
+                headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+            })
             setIsAdmin(data.user?.isAdmin === true)
         } catch {
             setIsAdmin(false)
@@ -34,15 +43,13 @@ export function useAuth(): AuthState {
     useEffect(() => {
         const initializeAuth = async () => {
             try {
-                const { data: { user: authUser }, error } = await supabase.auth.getUser()
+                const { data: { session }, error } = await supabase.auth.getSession()
 
-                if (error) {
-                    throw error
-                }
+                if (error) throw error
 
-                if (authUser) {
-                    setUser(authUser as User)
-                    await fetchProfile()
+                if (session?.user) {
+                    setUser(session.user as User)
+                    await fetchProfile(session.access_token)
                 } else {
                     setUser(null)
                     setIsAdmin(false)
@@ -60,11 +67,13 @@ export function useAuth(): AuthState {
             async (event, session) => {
                 if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
                     setUser(session.user as User)
-                    await fetchProfile()
+                    await fetchProfile(session.access_token)
                 } else if (event === 'SIGNED_OUT') {
                     setUser(null)
                     setIsAdmin(false)
                 }
+
+                setIsLoading(false)
             }
         )
 
@@ -76,23 +85,12 @@ export function useAuth(): AuthState {
     return { user, isAdmin, isLoading }
 }
 
-// Context for providing auth state
-import { createContext, useContext } from 'react'
-
-interface AuthContextType {
-    user: User | null
-    isAdmin: boolean
-    isLoading: boolean
+export function useAuth(): AuthState {
+    return useContext(AuthContext)
 }
 
-const AuthContext = createContext<AuthContextType>({
-    user: null,
-    isAdmin: false,
-    isLoading: true,
-})
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-    const auth = useAuth()
+    const auth = useProvideAuth()
     return (
         <AuthContext.Provider value={auth}>
             {children}
@@ -101,5 +99,5 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useAuthContext() {
-    return useContext(AuthContext)
+    return useAuth()
 }

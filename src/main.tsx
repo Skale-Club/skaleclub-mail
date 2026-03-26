@@ -4,8 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Route, Switch } from 'wouter'
 import { Toaster } from './components/ui/toaster'
 import { ThemeProvider } from './components/theme-provider'
+import { AuthProvider, useAuth } from './hooks/useAuth'
 import { MailboxProvider } from './hooks/useMailbox'
-import { useAuth } from './hooks/useAuth'
 import { useBranding } from './lib/branding'
 import AdminLayout from './components/admin/AdminLayout'
 import './index.css'
@@ -155,10 +155,11 @@ function App() {
     return (
         <ThemeProvider defaultTheme="system">
             <QueryClientProvider client={queryClient}>
-                <MailboxProvider>
-                    <BrandingHead />
-                    <div className="min-h-screen bg-background">
-                        <Switch>
+                <AuthProvider>
+                    <MailboxProvider>
+                        <BrandingHead />
+                        <div className="min-h-screen bg-background">
+                            <Switch>
                         <Route path="/login">
                             <Login />
                         </Route>
@@ -322,10 +323,11 @@ function App() {
                         <Route path="/">
                             <RootRedirect />
                         </Route>
-                    </Switch>
-                    <Toaster />
-                </div>
-                </MailboxProvider>
+                            </Switch>
+                            <Toaster />
+                        </div>
+                    </MailboxProvider>
+                </AuthProvider>
             </QueryClientProvider>
         </ThemeProvider>
     )
