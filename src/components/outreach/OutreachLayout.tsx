@@ -5,6 +5,7 @@ import { useBranding } from '../../lib/branding'
 import { supabase } from '../../lib/supabase'
 import { AppLogo } from '../AppLogo'
 import {
+    ArrowLeft,
     LayoutDashboard,
     Mail,
     Users,
@@ -42,7 +43,7 @@ const navItems: NavItem[] = [
 export function OutreachLayout({ children }: OutreachLayoutProps) {
     const { user } = useAuth()
     const { branding } = useBranding()
-    const [location] = useLocation()
+    const [location, navigate] = useLocation()
     const [sidebarOpen, setSidebarOpen] = React.useState(false)
 
     const handleSignOut = async () => {
@@ -125,15 +126,9 @@ export function OutreachLayout({ children }: OutreachLayoutProps) {
                         </div>
                     </div>
                     <div className="flex gap-2">
-                        <Link
-                            href="/admin"
-                            className="flex-1 px-3 py-2 text-xs text-center rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
-                        >
-                            Admin
-                        </Link>
                         <button
                             onClick={handleSignOut}
-                            className="flex items-center justify-center gap-1 px-3 py-2 text-xs rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+                            className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-xs rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
                         >
                             <LogOut className="w-3 h-3" />
                             Sign Out
@@ -158,6 +153,13 @@ export function OutreachLayout({ children }: OutreachLayoutProps) {
                             <span className="text-sm text-muted-foreground hidden sm:inline-block">
                                 Cold Email Outreach Platform
                             </span>
+                            <button
+                                onClick={() => navigate('/admin')}
+                                className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                            >
+                                <ArrowLeft className="w-4 h-4" />
+                                <span className="hidden sm:inline">Sair do Outreach</span>
+                            </button>
                             <ModeToggle />
                         </div>
                     </div>

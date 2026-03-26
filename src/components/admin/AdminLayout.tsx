@@ -7,6 +7,7 @@ import { AppLogo } from '../AppLogo'
 import { Button } from '../ui/button'
 import { ModeToggle } from '../mode-toggle'
 import {
+    ArrowRight,
     Building2,
     Shield,
     LogOut,
@@ -26,7 +27,6 @@ interface NavItem {
 const navItems: NavItem[] = [
     { label: 'Dashboard', href: '/admin', icon: <Home className="w-5 h-5" /> },
     { label: 'Organizations', href: '/admin/organizations', icon: <Building2 className="w-5 h-5" /> },
-    { label: 'Outreach', href: '/outreach', icon: <Target className="w-5 h-5" /> },
     { label: 'Admins', href: '/admin/admins', icon: <Shield className="w-5 h-5" /> },
     { label: 'Branding', href: '/admin/branding', icon: <Palette className="w-5 h-5" /> },
 ]
@@ -152,6 +152,16 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                         </h1>
                     </div>
                     <div className="flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-2"
+                            onClick={() => navigate('/outreach')}
+                        >
+                            <Target className="w-4 h-4" />
+                            <span className="hidden sm:inline">Entrar no Outreach</span>
+                            <ArrowRight className="w-4 h-4 hidden sm:inline" />
+                        </Button>
                         <ModeToggle />
                     </div>
                 </header>
