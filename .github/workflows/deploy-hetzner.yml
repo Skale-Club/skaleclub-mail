@@ -5,52 +5,16 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  build-and-push:
+  deploy:
     runs-on: ubuntu-latest
-    outputs:
-      image-tag: ${{ steps.meta.outputs.tags }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}/app
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix=
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
-            VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
-            VITE_APP_NAME=Skale Club Mail
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  deploy:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    steps:
       - name: Deploy to Hetzner
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -58,21 +22,38 @@ jobs:
           username: root
           key: ${{ secrets.HETZNER_SSH_KEY }}
           script: |
-            IMAGE=${{ needs.build-and-push.outputs.image-tag }}
-            
+            REPO_URL="https://github.com/Skale-Club/skaleclub-mail.git"
+            DEPLOY_DIR="/opt/skaleclub-mail"
+
             # Install Docker if not present
             if ! command -v docker &> /dev/null; then
               curl -fsSL https://get.docker.com | sh
               systemctl start docker
               systemctl enable docker
             fi
-            
+
+            # Clone or pull latest code
+            if [ -d "$DEPLOY_DIR/.git" ]; then
+              cd "$DEPLOY_DIR"
+              git fetch origin main
+              git reset --hard origin/main
+            else
+              git clone "$REPO_URL" "$DEPLOY_DIR"
+              cd "$DEPLOY_DIR"
+            fi
+
+            # Build the image
+            docker build \
+              --build-arg VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }} \
+              --build-arg VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }} \
+              --build-arg VITE_APP_NAME="Skale Club Mail" \
+              -t skaleclub-mail:latest .
+
             # Stop and remove old container
             docker stop skaleclub-mail || true
             docker rm skaleclub-mail || true
-            
-            # Pull and run new image
-            docker pull $IMAGE
+
+            # Run new container
             docker run -d \
               --name skaleclub-mail \
               --restart unless-stopped \
@@ -98,4 +79,7 @@ jobs:
               -e SMTP_SUBMISSION_PORT=587 \
               -e IMAP_PORT=993 \
               -e ENABLE_MAIL_SERVER=true \
-              $IMAGE
+              skaleclub-mail:latest
+
+            # Prune old images
+            docker image prune -f
