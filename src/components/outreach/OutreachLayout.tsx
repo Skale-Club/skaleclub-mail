@@ -4,6 +4,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useBranding } from '../../lib/branding'
 import { supabase } from '../../lib/supabase'
 import { AppLogo } from '../AppLogo'
+import { Button } from '../ui/button'
 import {
     ArrowLeft,
     LayoutDashboard,
@@ -48,7 +49,7 @@ export function OutreachLayout({ children }: OutreachLayoutProps) {
 
     const handleSignOut = async () => {
         await supabase.auth.signOut()
-        window.location.href = '/login'
+        navigate('/login')
     }
 
     const isActiveRoute = (href: string) => {
@@ -114,26 +115,24 @@ export function OutreachLayout({ children }: OutreachLayoutProps) {
                 </nav>
 
                 {/* User section */}
-                <div className="border-t border-border p-4">
+                <div className="border-t p-4">
                     <div className="flex items-center gap-3 mb-3">
-                        <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-medium">
-                            {user?.email?.charAt(0).toUpperCase() || 'U'}
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold">
+                            {user?.email?.charAt(0).toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-foreground truncate">
-                                {user?.email || 'User'}
-                            </p>
+                            <p className="text-sm font-medium truncate">{user?.email}</p>
+                            <p className="text-xs text-muted-foreground">Administrator</p>
                         </div>
                     </div>
-                    <div className="flex gap-2">
-                        <button
-                            onClick={handleSignOut}
-                            className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-xs rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
-                        >
-                            <LogOut className="w-3 h-3" />
-                            Sign Out
-                        </button>
-                    </div>
+                    <Button
+                        variant="ghost"
+                        className="w-full justify-start text-muted-foreground border border-border/50"
+                        onClick={handleSignOut}
+                    >
+                        <LogOut className="w-4 h-4 mr-2" />
+                        Logout
+                    </Button>
                 </div>
             </aside>
 
