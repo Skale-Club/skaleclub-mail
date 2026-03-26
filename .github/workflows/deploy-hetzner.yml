@@ -76,6 +76,7 @@ jobs:
               -e SMTP_USER=${{ secrets.SMTP_USER }} \
               -e SMTP_PASS=${{ secrets.SMTP_PASS }} \
               -e SMTP_FROM=${{ secrets.SMTP_FROM }} \
+              -e FRONTEND_URL=${{ secrets.FRONTEND_URL }} \
               -e SMTP_SUBMISSION_PORT=587 \
               -e IMAP_PORT=993 \
               -e ENABLE_MAIL_SERVER=true \
