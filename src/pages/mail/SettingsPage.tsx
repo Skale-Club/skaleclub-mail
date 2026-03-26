@@ -23,19 +23,7 @@ import {
     Trash,
     PenTool
 } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
-
-async function mailFetch(url: string, init: RequestInit = {}): Promise<Response> {
-    const { data: { session } } = await supabase.auth.getSession()
-    return fetch(url, {
-        cache: 'no-store',
-        ...init,
-        headers: {
-            Authorization: `Bearer ${session?.access_token}`,
-            ...(init.headers || {}),
-        },
-    })
-}
+import { apiFetch } from '../../lib/api'
 
 type TabId = 'profile' | 'notifications' | 'security' | 'appearance' | 'accounts' | 'filters' | 'signatures'
 
@@ -141,13 +129,10 @@ export default function MailSettingsPage() {
     const fetchMailboxes = React.useCallback(async () => {
         setIsLoadingMailboxes(true)
         try {
-            const response = await mailFetch('/api/mail/mailboxes')
-            if (response.ok) {
-                const data = await response.json()
-                setMailboxes(data.mailboxes || [])
-                if (data.mailboxes?.length > 0 && !selectedMailboxId) {
-                    setSelectedMailboxId(data.mailboxes[0].id)
-                }
+            const data = await apiFetch<{ mailboxes: Mailbox[] }>('/api/mail/mailboxes')
+            setMailboxes(data.mailboxes || [])
+            if (data.mailboxes?.length > 0 && !selectedMailboxId) {
+                setSelectedMailboxId(data.mailboxes[0].id)
             }
         } catch (error) {
             console.error('Error fetching mailboxes:', error)
@@ -160,11 +145,8 @@ export default function MailSettingsPage() {
         if (!selectedMailboxId) return
         setIsLoadingFilters(true)
         try {
-            const response = await mailFetch(`/api/mail/mailboxes/${selectedMailboxId}/filters`)
-            if (response.ok) {
-                const data = await response.json()
-                setFilters(data.filters || [])
-            }
+            const data = await apiFetch<{ filters: MailFilter[] }>(`/api/mail/mailboxes/${selectedMailboxId}/filters`)
+            setFilters(data.filters || [])
         } catch (error) {
             console.error('Error fetching filters:', error)
         } finally {
@@ -186,11 +168,8 @@ export default function MailSettingsPage() {
         if (!selectedMailboxId) return
         setIsLoadingSignatures(true)
         try {
-            const response = await mailFetch(`/api/mail/mailboxes/${selectedMailboxId}/signatures`)
-            if (response.ok) {
-                const data = await response.json()
-                setSignatures(data.signatures || [])
-            }
+            const data = await apiFetch<{ signatures: Signature[] }>(`/api/mail/mailboxes/${selectedMailboxId}/signatures`)
+            setSignatures(data.signatures || [])
         } catch (error) {
             console.error('Error fetching signatures:', error)
         } finally {
@@ -207,9 +186,8 @@ export default function MailSettingsPage() {
     const handleTestConnection = async () => {
         setIsTesting(true)
         try {
-            const response = await mailFetch('/api/mail/mailboxes/test-connection', {
+            const data = await apiFetch<{ data: { smtp: boolean; imap: boolean; errors?: string[] } }>('/api/mail/mailboxes/test-connection', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     smtpHost: newAccount.smtpHost,
                     smtpPort: parseInt(newAccount.smtpPort),
@@ -223,7 +201,6 @@ export default function MailSettingsPage() {
                     imapPassword: newAccount.imapPassword,
                 }),
             })
-            const data = await response.json()
             if (data.data?.smtp && data.data?.imap) {
                 toast({ title: 'Connection successful!', variant: 'success' })
             } else {
@@ -243,9 +220,8 @@ export default function MailSettingsPage() {
     const handleAddAccount = async () => {
         setIsSavingAccount(true)
         try {
-            const response = await mailFetch('/api/mail/mailboxes', {
+            await apiFetch('/api/mail/mailboxes', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ...newAccount,
                     smtpPort: parseInt(newAccount.smtpPort),
@@ -254,31 +230,27 @@ export default function MailSettingsPage() {
                     imapUsername: newAccount.imapUsername || newAccount.email,
                 }),
             })
-            if (response.ok) {
-                setShowAddAccount(false)
-                setNewAccount({
-                    email: '',
-                    displayName: '',
-                    smtpHost: '',
-                    smtpPort: '587',
-                    smtpUsername: '',
-                    smtpPassword: '',
-                    smtpSecure: true,
-                    imapHost: '',
-                    imapPort: '993',
-                    imapUsername: '',
-                    imapPassword: '',
-                    imapSecure: true,
-                    isDefault: false,
-                })
-                fetchMailboxes()
-                toast({ title: 'Account added successfully', variant: 'success' })
-            } else {
-                const data = await response.json()
-                toast({ title: 'Failed to add account', description: data.error, variant: 'destructive' })
-            }
+            setShowAddAccount(false)
+            setNewAccount({
+                email: '',
+                displayName: '',
+                smtpHost: '',
+                smtpPort: '587',
+                smtpUsername: '',
+                smtpPassword: '',
+                smtpSecure: true,
+                imapHost: '',
+                imapPort: '993',
+                imapUsername: '',
+                imapPassword: '',
+                imapSecure: true,
+                isDefault: false,
+            })
+            fetchMailboxes()
+            toast({ title: 'Account added successfully', variant: 'success' })
         } catch (error) {
-            toast({ title: 'Failed to add account', variant: 'destructive' })
+            const message = error instanceof Error ? error.message : 'Failed to add account'
+            toast({ title: 'Failed to add account', description: message, variant: 'destructive' })
         } finally {
             setIsSavingAccount(false)
         }
@@ -286,11 +258,9 @@ export default function MailSettingsPage() {
 
     const handleDeleteMailbox = async (id: string) => {
         try {
-            const response = await mailFetch(`/api/mail/mailboxes/${id}`, { method: 'DELETE' })
-            if (response.ok) {
-                fetchMailboxes()
-                toast({ title: 'Account removed successfully', variant: 'success' })
-            }
+            await apiFetch(`/api/mail/mailboxes/${id}`, { method: 'DELETE' })
+            fetchMailboxes()
+            toast({ title: 'Account removed successfully', variant: 'success' })
         } catch (error) {
             toast({ title: 'Failed to remove account', variant: 'destructive' })
         }
@@ -300,9 +270,8 @@ export default function MailSettingsPage() {
         if (!selectedMailboxId) return
         setIsSavingFilter(true)
         try {
-            const response = await mailFetch(`/api/mail/mailboxes/${selectedMailboxId}/filters`, {
+            await apiFetch(`/api/mail/mailboxes/${selectedMailboxId}/filters`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     name: newFilter.name,
                     conditions: newFilter.conditions.filter(c => c.value),
@@ -310,22 +279,18 @@ export default function MailSettingsPage() {
                     priority: newFilter.priority,
                 }),
             })
-            if (response.ok) {
-                setShowAddFilter(false)
-                setNewFilter({
-                    name: '',
-                    conditions: [{ field: 'from', operator: 'contains', value: '' }],
-                    actions: [{ action: 'markRead' }],
-                    priority: 0,
-                })
-                fetchFilters()
-                toast({ title: 'Filter created successfully', variant: 'success' })
-            } else {
-                const data = await response.json()
-                toast({ title: 'Failed to create filter', description: data.error, variant: 'destructive' })
-            }
+            setShowAddFilter(false)
+            setNewFilter({
+                name: '',
+                conditions: [{ field: 'from', operator: 'contains', value: '' }],
+                actions: [{ action: 'markRead' }],
+                priority: 0,
+            })
+            fetchFilters()
+            toast({ title: 'Filter created successfully', variant: 'success' })
         } catch (error) {
-            toast({ title: 'Failed to create filter', variant: 'destructive' })
+            const message = error instanceof Error ? error.message : 'Failed to create filter'
+            toast({ title: 'Failed to create filter', description: message, variant: 'destructive' })
         } finally {
             setIsSavingFilter(false)
         }
@@ -334,11 +299,9 @@ export default function MailSettingsPage() {
     const handleDeleteFilter = async (id: string) => {
         if (!selectedMailboxId) return
         try {
-            const response = await mailFetch(`/api/mail/mailboxes/${selectedMailboxId}/filters/${id}`, { method: 'DELETE' })
-            if (response.ok) {
-                fetchFilters()
-                toast({ title: 'Filter deleted successfully', variant: 'success' })
-            }
+            await apiFetch(`/api/mail/mailboxes/${selectedMailboxId}/filters/${id}`, { method: 'DELETE' })
+            fetchFilters()
+            toast({ title: 'Filter deleted successfully', variant: 'success' })
         } catch (error) {
             toast({ title: 'Failed to delete filter', variant: 'destructive' })
         }
@@ -347,7 +310,7 @@ export default function MailSettingsPage() {
     const handleToggleFilter = async (id: string, isActive: boolean) => {
         if (!selectedMailboxId) return
         try {
-            await mailFetch(`/api/mail/mailboxes/${selectedMailboxId}/filters/${id}`, {
+            await apiFetch(`/api/mail/mailboxes/${selectedMailboxId}/filters/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ isActive }),
@@ -996,7 +959,7 @@ export default function MailSettingsPage() {
                                                                 {!sig.isDefault && (
                                                                     <Button variant="outline" size="sm" onClick={async () => {
                                                                         try {
-                                                                            await mailFetch(`/api/mail/mailboxes/${selectedMailboxId}/signatures/${sig.id}`, {
+                                                                            await apiFetch(`/api/mail/mailboxes/${selectedMailboxId}/signatures/${sig.id}`, {
                                                                                 method: 'PUT',
                                                                                 headers: { 'Content-Type': 'application/json' },
                                                                                 body: JSON.stringify({ isDefault: true }),
@@ -1013,7 +976,7 @@ export default function MailSettingsPage() {
                                                                 <Button variant="outline" size="sm" onClick={async () => {
                                                                     if (confirm('Delete this signature?')) {
                                                                         try {
-                                                                            await mailFetch(`/api/mail/mailboxes/${selectedMailboxId}/signatures/${sig.id}`, { method: 'DELETE' })
+                                                                            await apiFetch(`/api/mail/mailboxes/${selectedMailboxId}/signatures/${sig.id}`, { method: 'DELETE' })
                                                                             fetchSignatures()
                                                                             toast({ title: 'Signature deleted', variant: 'success' })
                                                                         } catch {
@@ -1045,17 +1008,14 @@ export default function MailSettingsPage() {
                                                     const url = editingSignature
                                                         ? `/api/mail/mailboxes/${selectedMailboxId}/signatures/${editingSignature.id}`
                                                         : `/api/mail/mailboxes/${selectedMailboxId}/signatures`
-                                                    const response = await mailFetch(url, {
+                                                    await apiFetch(url, {
                                                         method: editingSignature ? 'PUT' : 'POST',
-                                                        headers: { 'Content-Type': 'application/json' },
                                                         body: JSON.stringify(data),
                                                     })
-                                                    if (response.ok) {
-                                                        setShowAddSignature(false)
-                                                        setEditingSignature(null)
-                                                        fetchSignatures()
-                                                        toast({ title: editingSignature ? 'Signature updated' : 'Signature created', variant: 'success' })
-                                                    }
+                                                    setShowAddSignature(false)
+                                                    setEditingSignature(null)
+                                                    fetchSignatures()
+                                                    toast({ title: editingSignature ? 'Signature updated' : 'Signature created', variant: 'success' })
                                                 } catch {
                                                     toast({ title: 'Failed to save signature', variant: 'destructive' })
                                                 } finally {

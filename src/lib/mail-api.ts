@@ -1,17 +1,4 @@
-import { supabase } from '../lib/supabase'
-
-async function mailFetch(url: string, init: RequestInit = {}): Promise<Response> {
-    const { data: { session } } = await supabase.auth.getSession()
-    return fetch(url, {
-        cache: 'no-store',
-        ...init,
-        headers: {
-            Authorization: `Bearer ${session?.access_token}`,
-            'Content-Type': 'application/json',
-            ...(init.headers || {}),
-        },
-    })
-}
+import { apiFetch, fetchWithAuth, ApiError } from '../lib/api'
 
 export interface Mailbox {
     id: string
@@ -89,25 +76,19 @@ export interface Signature {
 }
 
 export const mailApi = {
-    async getMailboxes(): Promise<{ mailboxes: Mailbox[] }> {
-        const response = await mailFetch('/api/mail/mailboxes')
-        if (!response.ok) throw new Error('Failed to fetch mailboxes')
-        return response.json()
+    getMailboxes(): Promise<{ mailboxes: Mailbox[] }> {
+        return apiFetch('/api/mail/mailboxes')
     },
 
-    async getMailbox(id: string): Promise<{ mailbox: Mailbox }> {
-        const response = await mailFetch(`/api/mail/mailboxes/${id}`)
-        if (!response.ok) throw new Error('Failed to fetch mailbox')
-        return response.json()
+    getMailbox(id: string): Promise<{ mailbox: Mailbox }> {
+        return apiFetch(`/api/mail/mailboxes/${id}`)
     },
 
-    async getFolders(mailboxId: string): Promise<{ folders: { name: string; count: number; unread: number }[] }> {
-        const response = await mailFetch(`/api/mail/${mailboxId}/folders`)
-        if (!response.ok) throw new Error('Failed to fetch folders')
-        return response.json()
+    getFolders(mailboxId: string): Promise<{ folders: { name: string; count: number; unread: number }[] }> {
+        return apiFetch(`/api/mail/${mailboxId}/folders`)
     },
 
-    async getMessages(
+    getMessages(
         mailboxId: string,
         folder: string,
         params?: { page?: number; limit?: number; search?: string }
@@ -118,63 +99,53 @@ export const mailApi = {
         if (params?.limit) searchParams.set('limit', String(params.limit))
         if (params?.search) searchParams.set('search', params.search)
 
-        const response = await mailFetch(`/api/mail/${mailboxId}/messages?${searchParams}`)
-        if (!response.ok) throw new Error('Failed to fetch messages')
-        return response.json()
+        return apiFetch(`/api/mail/${mailboxId}/messages?${searchParams}`)
     },
 
-    async getMessage(mailboxId: string, messageId: string): Promise<{ message: Message }> {
-        const response = await mailFetch(`/api/mail/${mailboxId}/messages/${messageId}`)
-        if (!response.ok) throw new Error('Failed to fetch message')
-        return response.json()
+    getMessage(mailboxId: string, messageId: string): Promise<{ message: Message }> {
+        return apiFetch(`/api/mail/${mailboxId}/messages/${messageId}`)
     },
 
-    async updateMessage(
+    updateMessage(
         mailboxId: string,
         messageId: string,
         data: { read?: boolean; starred?: boolean; labels?: string[] }
     ): Promise<{ message: Message }> {
-        const response = await mailFetch(`/api/mail/${mailboxId}/messages/${messageId}`, {
+        return apiFetch(`/api/mail/${mailboxId}/messages/${messageId}`, {
             method: 'PUT',
             body: JSON.stringify(data),
         })
-        if (!response.ok) throw new Error('Failed to update message')
-        return response.json()
     },
 
-    async deleteMessage(mailboxId: string, messageId: string): Promise<void> {
-        const response = await mailFetch(`/api/mail/${mailboxId}/messages/${messageId}`, {
+    deleteMessage(mailboxId: string, messageId: string): Promise<void> {
+        return apiFetch(`/api/mail/${mailboxId}/messages/${messageId}`, {
             method: 'DELETE',
         })
-        if (!response.ok) throw new Error('Failed to delete message')
     },
 
-    async archiveMessage(mailboxId: string, messageId: string): Promise<void> {
-        const response = await mailFetch(`/api/mail/${mailboxId}/messages/${messageId}/archive`, {
+    archiveMessage(mailboxId: string, messageId: string): Promise<void> {
+        return apiFetch(`/api/mail/${mailboxId}/messages/${messageId}/archive`, {
             method: 'POST',
         })
-        if (!response.ok) throw new Error('Failed to archive message')
     },
 
-    async moveMessage(mailboxId: string, messageId: string, folder: string): Promise<void> {
-        const response = await mailFetch(`/api/mail/${mailboxId}/messages/${messageId}/move`, {
+    moveMessage(mailboxId: string, messageId: string, folder: string): Promise<void> {
+        return apiFetch(`/api/mail/${mailboxId}/messages/${messageId}/move`, {
             method: 'POST',
             body: JSON.stringify({ folder }),
         })
-        if (!response.ok) throw new Error('Failed to move message')
     },
 
-    async batchUpdate(
+    batchUpdate(
         mailboxId: string,
         messageIds: string[],
         action: 'read' | 'unread' | 'star' | 'unstar' | 'delete' | 'archive' | 'move',
         folder?: string
     ): Promise<void> {
-        const response = await mailFetch(`/api/mail/${mailboxId}/messages/batch`, {
+        return apiFetch(`/api/mail/${mailboxId}/messages/batch`, {
             method: 'POST',
             body: JSON.stringify({ messageIds, action, folder }),
         })
-        if (!response.ok) throw new Error('Failed to batch update messages')
     },
 
     async sendEmail(mailboxId: string, payload: SendEmailPayload): Promise<{ message: Message }> {
@@ -193,35 +164,31 @@ export const mailApi = {
             })
         }
 
-        const response = await mailFetch(`/api/mail/${mailboxId}/send`, {
+        const response = await fetchWithAuth(`/api/mail/${mailboxId}/send`, {
             method: 'POST',
             body: formData,
-            headers: {},
         })
         if (!response.ok) {
             const error = await response.json()
-            throw new Error(error.error || 'Failed to send email')
+            throw new ApiError(error.error || 'Failed to send email', response.status)
         }
         return response.json()
     },
 
-    async saveDraft(mailboxId: string, payload: SaveDraftPayload): Promise<{ draft: Message }> {
-        const response = await mailFetch(`/api/mail/${mailboxId}/save-draft`, {
+    saveDraft(mailboxId: string, payload: SaveDraftPayload): Promise<{ draft: Message }> {
+        return apiFetch(`/api/mail/${mailboxId}/save-draft`, {
             method: 'POST',
             body: JSON.stringify(payload),
         })
-        if (!response.ok) throw new Error('Failed to save draft')
-        return response.json()
     },
 
-    async syncMailbox(mailboxId: string): Promise<void> {
-        const response = await mailFetch(`/api/mail/${mailboxId}/sync`, {
+    syncMailbox(mailboxId: string): Promise<void> {
+        return apiFetch(`/api/mail/${mailboxId}/sync`, {
             method: 'POST',
         })
-        if (!response.ok) throw new Error('Failed to sync mailbox')
     },
 
-    async searchMessages(
+    searchMessages(
         mailboxId: string,
         query: string,
         params?: { folder?: string; page?: number; limit?: number }
@@ -232,52 +199,41 @@ export const mailApi = {
         if (params?.page) searchParams.set('page', String(params.page))
         if (params?.limit) searchParams.set('limit', String(params.limit))
 
-        const response = await mailFetch(`/api/mail/${mailboxId}/search?${searchParams}`)
-        if (!response.ok) throw new Error('Failed to search messages')
-        return response.json()
+        return apiFetch(`/api/mail/${mailboxId}/search?${searchParams}`)
     },
 
-    async getSignatures(mailboxId: string): Promise<{ signatures: Signature[] }> {
-        const response = await mailFetch(`/api/mail/mailboxes/${mailboxId}/signatures`)
-        if (!response.ok) throw new Error('Failed to fetch signatures')
-        return response.json()
+    getSignatures(mailboxId: string): Promise<{ signatures: Signature[] }> {
+        return apiFetch(`/api/mail/mailboxes/${mailboxId}/signatures`)
     },
 
-    async getDefaultSignature(mailboxId: string): Promise<{ signature: Signature | null }> {
-        const response = await mailFetch(`/api/mail/mailboxes/${mailboxId}/signatures/default`)
-        if (!response.ok) throw new Error('Failed to fetch default signature')
-        return response.json()
+    getDefaultSignature(mailboxId: string): Promise<{ signature: Signature | null }> {
+        return apiFetch(`/api/mail/mailboxes/${mailboxId}/signatures/default`)
     },
 
-    async createSignature(
+    createSignature(
         mailboxId: string,
         data: { name: string; content: string; isDefault?: boolean }
     ): Promise<{ signature: Signature }> {
-        const response = await mailFetch(`/api/mail/mailboxes/${mailboxId}/signatures`, {
+        return apiFetch(`/api/mail/mailboxes/${mailboxId}/signatures`, {
             method: 'POST',
             body: JSON.stringify(data),
         })
-        if (!response.ok) throw new Error('Failed to create signature')
-        return response.json()
     },
 
-    async updateSignature(
+    updateSignature(
         mailboxId: string,
         signatureId: string,
         data: { name?: string; content?: string; isDefault?: boolean }
     ): Promise<{ signature: Signature }> {
-        const response = await mailFetch(`/api/mail/mailboxes/${mailboxId}/signatures/${signatureId}`, {
+        return apiFetch(`/api/mail/mailboxes/${mailboxId}/signatures/${signatureId}`, {
             method: 'PUT',
             body: JSON.stringify(data),
         })
-        if (!response.ok) throw new Error('Failed to update signature')
-        return response.json()
     },
 
-    async deleteSignature(mailboxId: string, signatureId: string): Promise<void> {
-        const response = await mailFetch(`/api/mail/mailboxes/${mailboxId}/signatures/${signatureId}`, {
+    deleteSignature(mailboxId: string, signatureId: string): Promise<void> {
+        return apiFetch(`/api/mail/mailboxes/${mailboxId}/signatures/${signatureId}`, {
             method: 'DELETE',
         })
-        if (!response.ok) throw new Error('Failed to delete signature')
     },
 }

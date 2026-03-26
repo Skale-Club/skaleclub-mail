@@ -27,6 +27,7 @@ import { CampaignsPage } from './pages/outreach/CampaignsPage'
 import { LeadsPage } from './pages/outreach/LeadsPage'
 import { InboxesPage } from './pages/outreach/InboxesPage'
 import { SequencesPage } from './pages/outreach/SequencesPage'
+import { NewSequencePage } from './pages/outreach/sequences/NewSequencePage'
 import { AnalyticsPage as OutreachAnalyticsPage } from './pages/outreach/AnalyticsPage'
 import { SettingsPage as OutreachSettingsPage } from './pages/outreach/SettingsPage'
 import { OutreachCheck } from './components/OutreachCheck'
@@ -41,7 +42,21 @@ import MailSettingsPage from './pages/mail/SettingsPage'
 import SearchPage from './pages/mail/SearchPage'
 import EmailDetailPage from './pages/mail/EmailDetailPage'
 
-const queryClient = new QueryClient()
+const queryClient = new QueryClient({
+    defaultOptions: {
+        queries: {
+            retry: (failureCount, error) => {
+                if (error instanceof Error && error.message === 'Unauthorized') return false
+                return failureCount < 3
+            },
+            staleTime: 30_000,
+            refetchOnWindowFocus: false,
+        },
+        mutations: {
+            retry: false,
+        },
+    },
+})
 
 function Spinner() {
     return (
@@ -227,6 +242,13 @@ function App() {
                             <AuthCheck>
                                 <OutreachCheck>
                                     <SequencesPage />
+                                </OutreachCheck>
+                            </AuthCheck>
+                        </Route>
+                        <Route path="/outreach/sequences/new">
+                            <AuthCheck>
+                                <OutreachCheck>
+                                    <NewSequencePage />
                                 </OutreachCheck>
                             </AuthCheck>
                         </Route>

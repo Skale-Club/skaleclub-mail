@@ -6,7 +6,7 @@ import { useMailbox } from '../../hooks/useMailbox'
 import { useSendEmail, useSaveDraft } from '../../hooks/useMail'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import { RichTextEditor, htmlToPlainText } from '../../components/mail/RichTextEditor'
-import { supabase } from '../../lib/supabase'
+import { apiFetch } from '../../lib/api'
 import {
     ArrowLeft,
     Send,
@@ -24,18 +24,6 @@ interface Signature {
     name: string
     content: string
     isDefault: boolean
-}
-
-async function mailFetch(url: string, init: RequestInit = {}): Promise<Response> {
-    const { data: { session } } = await supabase.auth.getSession()
-    return fetch(url, {
-        cache: 'no-store',
-        ...init,
-        headers: {
-            Authorization: `Bearer ${session?.access_token}`,
-            ...(init.headers || {}),
-        },
-    })
 }
 
 interface ComposeEmail {
@@ -69,8 +57,7 @@ export default function ComposePage() {
 
     React.useEffect(() => {
         if (selectedMailbox) {
-            mailFetch(`/api/mail/mailboxes/${selectedMailbox.id}/signatures`)
-                .then(res => res.json())
+            apiFetch<{ signatures: Signature[] }>(`/api/mail/mailboxes/${selectedMailbox.id}/signatures`)
                 .then(data => {
                     setSignatures(data.signatures || [])
                     const def = (data.signatures || []).find((s: Signature) => s.isDefault)

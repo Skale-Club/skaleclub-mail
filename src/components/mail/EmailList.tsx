@@ -1,4 +1,5 @@
 import React from 'react'
+import { useLocation } from 'wouter'
 import {
     Star,
     Paperclip,
@@ -70,6 +71,7 @@ export function EmailList({
 }: EmailListProps) {
     const [menuOpenId, setMenuOpenId] = React.useState<string | null>(null)
     const isMobile = useIsMobile()
+    const [, navigate] = useLocation()
 
     const handleCheckboxClick = (e: React.MouseEvent, id: string) => {
         e.stopPropagation()
@@ -86,25 +88,25 @@ export function EmailList({
 
     if (emails.length === 0 && !isLoadingMore) {
         return (
-            <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400 py-20">
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-20">
                 <Mail className="w-16 h-16 mb-4 opacity-50" />
-                <p className="text-lg font-medium">{emptyMessage}</p>
+                <p className="text-lg font-medium text-foreground">{emptyMessage}</p>
                 <p className="text-sm mt-1">Your folder is empty</p>
             </div>
         )
     }
 
     return (
-        <div className="divide-y divide-gray-100 dark:divide-gray-800">
+        <div className="divide-y divide-border">
             {emails.map((email) => (
                 <div
                     key={email.id}
                     className={`
-                        group relative flex items-start gap-3 sm:gap-4 px-4 sm:px-5 py-3 sm:py-4 cursor-pointer transition-all duration-150
-                        hover:bg-gray-50 dark:hover:bg-slate-800/50
-                        ${selectedId === email.id ? 'bg-blue-50 dark:bg-blue-900/20' : ''}
-                        ${selectedEmails.has(email.id) ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}
-                        ${!email.read ? 'bg-blue-50/30 dark:bg-slate-800/20 font-semibold' : ''}
+                        group relative flex items-start gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-2.5 cursor-pointer transition-all duration-150
+                        hover:bg-accent/50
+                        ${selectedId === email.id ? 'bg-accent' : ''}
+                        ${selectedEmails.has(email.id) && selectedId !== email.id ? 'bg-accent/30' : ''}
+                        ${!email.read ? 'font-semibold text-foreground' : 'text-muted-foreground'}
                     `}
                     onClick={() => onSelect(email.id)}
                 >
@@ -112,17 +114,17 @@ export function EmailList({
                         <button
                             onClick={(e) => handleCheckboxClick(e, email.id)}
                             className={`
-                                flex-shrink-0 p-1 rounded transition-colors mt-1
+                                flex-shrink-0 p-1 rounded transition-colors mt-0.5
                                 ${selectedEmails.has(email.id)
-                                    ? 'text-blue-600'
-                                    : 'text-gray-300 hover:text-gray-400'
+                                    ? 'text-primary'
+                                    : 'text-muted-foreground/50 hover:text-muted-foreground'
                                 }
                             `}
                         >
                             {selectedEmails.has(email.id) ? (
-                                <CheckSquare className="w-5 h-5" />
+                                <CheckSquare className="w-4 h-4" />
                             ) : (
-                                <Square className="w-5 h-5" />
+                                <Square className="w-4 h-4" />
                             )}
                         </button>
                     )}
@@ -133,56 +135,56 @@ export function EmailList({
                             onStar?.(email.id)
                         }}
                         className={`
-                            flex-shrink-0 p-1 rounded-full transition-colors mt-1
+                            flex-shrink-0 p-1 rounded-full transition-colors mt-0.5
                             ${email.starred
                                 ? 'text-yellow-500 hover:text-yellow-600'
-                                : 'text-gray-300 hover:text-gray-400 opacity-0 group-hover:opacity-100'
+                                : 'text-muted-foreground/50 hover:text-muted-foreground opacity-0 group-hover:opacity-100'
                             }
                         `}
                     >
-                        <Star className={`w-5 h-5 ${email.starred ? 'fill-current' : ''}`} />
+                        <Star className={`w-4 h-4 ${email.starred ? 'fill-current' : ''}`} />
                     </button>
 
                     <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2 sm:gap-4 mb-1">
+                        <div className="flex items-center justify-between gap-2 sm:gap-4">
                             <div className="flex items-center gap-2 min-w-0">
                                 {!email.read && (
-                                    <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+                                    <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
                                 )}
-                                <span className={`truncate text-sm sm:text-base ${!email.read ? 'text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'}`}>
+                                <span className={`truncate text-sm ${!email.read ? 'text-foreground' : 'text-foreground/80'}`}>
                                     {email.from.name || email.from.email}
                                 </span>
                             </div>
-                            <span className="flex-shrink-0 text-xs text-gray-500 dark:text-gray-400">
+                            <span className={`flex-shrink-0 text-xs ${!email.read ? 'text-foreground/90' : 'text-muted-foreground'}`}>
                                 {formatEmailDate(email.date)}
                             </span>
                         </div>
 
-                        <div className="flex items-center gap-2">
-                            <span className="truncate text-sm text-gray-900 dark:text-white">
+                        <div className="flex items-center gap-2 mt-0.5">
+                            <span className="truncate text-sm text-foreground/90">
                                 {email.subject}
                             </span>
                             {email.isThread && email.threadCount && email.threadCount > 1 && (
-                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded text-xs font-medium flex-shrink-0">
+                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-secondary text-secondary-foreground rounded text-[10px] font-medium flex-shrink-0">
                                     <MessageSquare className="w-3 h-3" />
                                     {email.threadCount}
                                 </span>
                             )}
                             {email.hasAttachments && (
-                                <Paperclip className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                                <Paperclip className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
                             )}
                         </div>
 
-                        <p className="text-sm text-gray-500 dark:text-gray-400 truncate mt-0.5 hidden sm:block">
+                        <p className="text-xs text-muted-foreground truncate mt-0.5 hidden sm:block">
                             {email.snippet}
                         </p>
 
                         {email.labels && email.labels.length > 0 && (
-                            <div className="flex items-center gap-1 mt-2">
+                            <div className="flex items-center gap-1 mt-1.5">
                                 {email.labels.map((label) => (
                                     <span
                                         key={label}
-                                        className="px-2 py-0.5 text-xs rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                                        className="px-2 py-0.5 text-[10px] uppercase tracking-wider font-semibold rounded-full bg-secondary text-secondary-foreground"
                                     >
                                         {label}
                                     </span>
@@ -197,9 +199,9 @@ export function EmailList({
                                 e.stopPropagation()
                                 setMenuOpenId(menuOpenId === email.id ? null : email.id)
                             }}
-                            className="p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
+                            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-all"
                         >
-                            <MoreVertical className="w-5 h-5" />
+                            <MoreVertical className="w-4 h-4" />
                         </button>
 
                         {menuOpenId === email.id && (
@@ -211,13 +213,14 @@ export function EmailList({
                                         setMenuOpenId(null)
                                     }}
                                 />
-                                <div className={`absolute ${isMobile ? 'left-0' : 'right-0'} top-full mt-1 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 py-1 z-50`}>
+                                <div className={`absolute ${isMobile ? 'left-0' : 'right-0'} top-full mt-1 w-48 bg-popover rounded-xl shadow-xl border border-border py-1 z-50`}>
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation()
                                             setMenuOpenId(null)
+                                            navigate(`/mail/compose?reply=${email.id}`)
                                         }}
-                                        className="flex items-center gap-3 w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                                        className="flex items-center gap-3 w-full px-4 py-2 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground"
                                     >
                                         <Reply className="w-4 h-4" />
                                         Reply
@@ -226,8 +229,9 @@ export function EmailList({
                                         onClick={(e) => {
                                             e.stopPropagation()
                                             setMenuOpenId(null)
+                                            navigate(`/mail/compose?reply=${email.id}&replyAll=true`)
                                         }}
-                                        className="flex items-center gap-3 w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                                        className="flex items-center gap-3 w-full px-4 py-2 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground"
                                     >
                                         <ReplyAll className="w-4 h-4" />
                                         Reply All
@@ -236,8 +240,9 @@ export function EmailList({
                                         onClick={(e) => {
                                             e.stopPropagation()
                                             setMenuOpenId(null)
+                                            navigate(`/mail/compose?forward=${email.id}`)
                                         }}
-                                        className="flex items-center gap-3 w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                                        className="flex items-center gap-3 w-full px-4 py-2 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground"
                                     >
                                         <Forward className="w-4 h-4" />
                                         Forward
@@ -248,19 +253,19 @@ export function EmailList({
                                             onArchive?.(email.id)
                                             setMenuOpenId(null)
                                         }}
-                                        className="flex items-center gap-3 w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                                        className="flex items-center gap-3 w-full px-4 py-2 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground"
                                     >
                                         <Archive className="w-4 h-4" />
                                         Archive
                                     </button>
-                                    <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
+                                    <div className="border-t border-border my-1" />
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation()
                                             onDelete?.(email.id)
                                             setMenuOpenId(null)
                                         }}
-                                        className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                        className="flex items-center gap-3 w-full px-4 py-2 text-sm text-destructive hover:bg-destructive/10"
                                     >
                                         <Trash2 className="w-4 h-4" />
                                         Delete
@@ -278,8 +283,8 @@ export function EmailList({
                     className="flex items-center justify-center py-6"
                 >
                     {isLoadingMore && (
-                        <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-                            <Loader2 className="w-5 h-5 animate-spin" />
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                            <Loader2 className="w-4 h-4 animate-spin" />
                             <span className="text-sm">Loading more...</span>
                         </div>
                     )}
@@ -313,12 +318,12 @@ export function EmailToolbar({
     isRefreshing
 }: EmailToolbarProps) {
     return (
-        <div className="flex items-center justify-between px-4 sm:px-5 py-2 sm:py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-slate-900">
+        <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-border bg-background">
             <div className="flex items-center gap-2">
                 {onSelectAll ? (
                     <button
                         onClick={onSelectAll}
-                        className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                        className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
                     >
                         {selectedCount > 0 
                             ? `${selectedCount} selected` 
@@ -328,7 +333,7 @@ export function EmailToolbar({
                         }
                     </button>
                 ) : (
-                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                    <span className="text-xs font-medium text-muted-foreground">
                         {selectedCount > 0 ? `${selectedCount} selected` : 'Select all'}
                     </span>
                 )}
@@ -336,35 +341,35 @@ export function EmailToolbar({
             <div className="flex items-center gap-1">
                 <button
                     onClick={onRefresh}
-                    className="p-2 rounded-lg text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                     title="Refresh"
                 >
-                    <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                    <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
                 </button>
                 {selectedCount > 0 && (
                     <>
                         <button
                             onClick={onMarkRead}
-                            className="hidden sm:block px-3 py-1.5 text-sm rounded-lg text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                            className="hidden sm:block px-2.5 py-1 text-xs font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                         >
                             Mark as read
                         </button>
                         <button
                             onClick={onMarkUnread}
-                            className="hidden sm:block px-3 py-1.5 text-sm rounded-lg text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                            className="hidden sm:block px-2.5 py-1 text-xs font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                         >
                             Mark as unread
                         </button>
                         <button
                             onClick={onArchive}
-                            className="p-2 sm:px-3 sm:py-1.5 text-sm rounded-lg text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                             title="Archive"
                         >
                             <Archive className="w-4 h-4" />
                         </button>
                         <button
                             onClick={onDelete}
-                            className="p-2 sm:px-3 sm:py-1.5 text-sm rounded-lg text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                            className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
                             title="Delete"
                         >
                             <Trash2 className="w-4 h-4" />

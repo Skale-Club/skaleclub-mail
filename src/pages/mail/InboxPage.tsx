@@ -28,6 +28,7 @@ export default function InboxPage() {
 
     const [selectedEmail, setSelectedEmail] = React.useState<string | null>(null)
     const [selectedEmails, setSelectedEmails] = React.useState<Set<string>>(new Set())
+    const [filter, setFilter] = React.useState<'all' | 'unread' | 'starred' | 'attachments'>('all')
 
     const { data, isLoading, isFetching, refetch } = useMessages('inbox', 1, 50)
     const updateMessage = useUpdateMessage()
@@ -41,14 +42,21 @@ export default function InboxPage() {
         [branding.applicationName, branding.companyName]
     )
 
-    const emails = React.useMemo(() => {
-        if (!selectedMailbox || !data?.messages) {
-            return mockEmails
+    const { emails, unreadCount } = React.useMemo(() => {
+        let baseEmails = mockEmails
+        if (selectedMailbox && data?.messages) {
+            baseEmails = data.messages.map(mapMessageToEmailItem)
         }
-        return data.messages.map(mapMessageToEmailItem)
-    }, [selectedMailbox, data, mockEmails])
+        
+        const totalUnread = baseEmails.filter(e => !e.read).length
 
-    const unreadCount = React.useMemo(() => emails.filter(email => !email.read).length, [emails])
+        let filtered = baseEmails
+        if (filter === 'unread') filtered = filtered.filter(e => !e.read)
+        if (filter === 'starred') filtered = filtered.filter(e => e.starred)
+        if (filter === 'attachments') filtered = filtered.filter(e => e.hasAttachments)
+        
+        return { emails: filtered, unreadCount: totalUnread }
+    }, [selectedMailbox, data, mockEmails, filter])
 
     const currentIndex = React.useMemo(() => {
         if (!selectedEmail) return -1
@@ -241,15 +249,15 @@ export default function InboxPage() {
                 <div className="flex items-center justify-center h-full">
                     <div className="text-center max-w-md px-6">
                         <AlertCircle className="w-16 h-16 mx-auto mb-4 text-yellow-500" />
-                        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                        <h2 className="text-xl font-bold text-foreground mb-2">
                             No Email Accounts Connected
                         </h2>
-                        <p className="text-gray-500 dark:text-gray-400 mb-6">
+                        <p className="text-muted-foreground mb-6">
                             Add an email account to start sending and receiving emails.
                         </p>
                         <Link
                             href="/mail/settings"
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors"
                         >
                             Add Email Account
                         </Link>
@@ -262,22 +270,25 @@ export default function InboxPage() {
     return (
         <MailLayout>
             <div className="flex h-full">
-                <div className={`w-full ${!isMobile ? 'lg:w-1/2 xl:w-2/5 border-r border-gray-200 dark:border-gray-800' : ''} flex flex-col bg-white dark:bg-slate-900`}>
-                    <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <InboxIcon className="w-6 h-6 text-gray-600 dark:text-gray-400" />
+                <div className={`w-full ${!isMobile ? 'lg:w-1/2 xl:w-2/5 border-r border-border' : ''} flex flex-col bg-background`}>
+                    <div className="px-4 py-3 border-b border-border bg-background">
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                                <InboxIcon className="w-5 h-5 text-muted-foreground" />
                                 <div>
-                                    <h1 className="text-xl font-bold text-gray-900 dark:text-white">Inbox</h1>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                                        {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}
-                                    </p>
+                                    <h1 className="text-lg font-bold text-foreground">Inbox</h1>
                                 </div>
                             </div>
-                            <div className="hidden sm:flex items-center gap-2 text-xs text-gray-400">
-                                <kbd className="px-1.5 py-0.5 bg-gray-100 dark:bg-slate-800 rounded border border-gray-200 dark:border-gray-700">?</kbd>
+                            <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
+                                <kbd className="px-1.5 py-0.5 bg-muted rounded border border-border">?</kbd>
                                 <span>shortcuts</span>
                             </div>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <button onClick={() => setFilter('all')} className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${filter === 'all' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'}`}>All</button>
+                            <button onClick={() => setFilter('unread')} className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${filter === 'unread' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'}`}>Unread {unreadCount > 0 && `(${unreadCount})`}</button>
+                            <button onClick={() => setFilter('starred')} className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${filter === 'starred' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'}`}>Starred</button>
+                            <button onClick={() => setFilter('attachments')} className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${filter === 'attachments' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'}`}>Attachments</button>
                         </div>
                     </div>
 
@@ -309,22 +320,22 @@ export default function InboxPage() {
                             onStar={handleStar}
                             onDelete={handleDelete}
                             onArchive={handleArchive}
-                            emptyMessage="No emails in inbox"
+                            emptyMessage={filter === 'all' ? "No emails in inbox" : `No ${filter} emails`}
                         />
                     </div>
                 </div>
 
                 {!isMobile && (
-                    <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col bg-gray-50 dark:bg-slate-900/50">
+                    <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col bg-muted/30">
                         {selectedEmail ? (
                             <EmailDetail email={emails.find(email => email.id === selectedEmail)!} />
                         ) : (
-                            <div className="flex-1 flex items-center justify-center text-gray-500 dark:text-gray-400">
+                            <div className="flex-1 flex items-center justify-center text-muted-foreground">
                                 <div className="text-center">
-                                    <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-slate-800 flex items-center justify-center">
-                                        <InboxIcon className="w-10 h-10 text-gray-400" />
+                                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-accent flex items-center justify-center">
+                                        <InboxIcon className="w-8 h-8 text-muted-foreground" />
                                     </div>
-                                    <p className="text-lg font-medium">Select an email to read</p>
+                                    <p className="text-base font-medium text-foreground">Select an email to read</p>
                                     <p className="text-sm mt-1">Click on an email from the list to view its contents</p>
                                 </div>
                             </div>
@@ -341,29 +352,29 @@ function EmailDetail({ email }: { email: EmailItem }) {
         <div className="flex-1 overflow-y-auto">
             <div className="p-6">
                 <div className="max-w-3xl mx-auto">
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+                    <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-6">
                         {email.subject}
                     </h2>
                     <div className="flex items-start gap-4">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-lg flex-shrink-0">
+                        <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium text-base flex-shrink-0">
                             {email.from.name[0].toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="font-semibold text-gray-900 dark:text-white">
+                                    <p className="font-semibold text-foreground text-sm sm:text-base">
                                         {email.from.name}
                                     </p>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    <p className="text-xs sm:text-sm text-muted-foreground">
                                         {email.from.email}
                                     </p>
                                 </div>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                <p className="text-xs sm:text-sm text-muted-foreground">
                                     {email.date.toLocaleString()}
                                 </p>
                             </div>
-                            <div className="mt-1">
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                            <div className="mt-1.5">
+                                <p className="text-xs text-muted-foreground">
                                     To: {email.to.map(t => t.name || t.email).join(', ')}
                                 </p>
                             </div>
@@ -375,7 +386,7 @@ function EmailDetail({ email }: { email: EmailItem }) {
                             {email.labels.map(label => (
                                 <span
                                     key={label}
-                                    className="px-3 py-1 text-xs rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                                    className="px-2.5 py-0.5 text-xs rounded-full bg-secondary text-secondary-foreground font-medium"
                                 >
                                     {label}
                                 </span>
@@ -383,29 +394,29 @@ function EmailDetail({ email }: { email: EmailItem }) {
                         </div>
                     )}
 
-                    <div className="prose dark:prose-invert max-w-none mt-6">
-                        <div className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                    <div className="prose dark:prose-invert max-w-none mt-8 text-sm sm:text-base">
+                        <div className="text-foreground whitespace-pre-wrap">
                             {email.snippet}
                         </div>
                     </div>
 
-                    <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+                    <div className="mt-8 pt-6 border-t border-border">
                         <div className="flex items-center gap-3">
                             <Link
                                 href={`/mail/compose?reply=${email.id}`}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-sm font-medium transition-colors"
                             >
                                 Reply
                             </Link>
                             <Link
                                 href={`/mail/compose?reply=${email.id}&replyAll=true`}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-lg text-sm font-medium transition-colors"
                             >
                                 Reply All
                             </Link>
                             <Link
                                 href={`/mail/compose?forward=${email.id}`}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-lg text-sm font-medium transition-colors"
                             >
                                 Forward
                             </Link>

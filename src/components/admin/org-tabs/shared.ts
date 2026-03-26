@@ -1,20 +1,10 @@
 import { supabase } from '../../../lib/supabase'
 
+export { fetchWithAuth } from '../../../lib/api'
+
 export async function getAccessToken() {
     const { data: { session } } = await supabase.auth.getSession()
     return session?.access_token
-}
-
-export async function fetchWithAuth(url: string, init: RequestInit = {}): Promise<Response> {
-    const token = await getAccessToken()
-    return fetch(url, {
-        cache: 'no-store',
-        ...init,
-        headers: {
-            Authorization: `Bearer ${token}`,
-            ...(init.headers || {}),
-        },
-    })
 }
 
 export function generateSlug(value: string) {

@@ -1,7 +1,10 @@
 import { useState, useCallback } from 'react'
 import { toast } from '../components/ui/toaster'
+import { ApiError, isNetworkError, isAuthError } from '../lib/api'
 
-interface ApiError {
+export { ApiError, isNetworkError, isAuthError }
+
+interface ApiErrorState {
     message: string
     code?: string
     status?: number
@@ -9,38 +12,33 @@ interface ApiError {
 }
 
 export function useApiError() {
-    const [error, setError] = useState<ApiError | null>(null)
+    const [error, setError] = useState<ApiErrorState | null>(null)
     const [isError, setIsError] = useState(false)
 
     const handleError = useCallback((err: unknown, fallbackMessage = 'An error occurred') => {
-        const apiError: ApiError = {
+        const apiError: ApiErrorState = {
             message: fallbackMessage,
             details: err
         }
 
-        if (err instanceof Error) {
+        if (err instanceof ApiError) {
             apiError.message = err.message
-        } else if (typeof err === 'object' && err !== null) {
-            const anyErr = err as Record<string, unknown>
-            if (anyErr.message) {
-                apiError.message = String(anyErr.message)
-            }
-            if (anyErr.code) {
-                apiError.code = String(anyErr.code)
-            }
-            if (anyErr.status) {
-                apiError.status = Number(anyErr.status)
-            }
+            apiError.code = err.code
+            apiError.status = err.status
+        } else if (err instanceof Error) {
+            apiError.message = err.message
         }
 
         setError(apiError)
         setIsError(true)
 
-        toast({
-            title: 'Error',
-            description: apiError.message,
-            variant: 'destructive'
-        })
+        if (!isAuthError(err)) {
+            toast({
+                title: 'Error',
+                description: apiError.message,
+                variant: 'destructive'
+            })
+        }
 
         return apiError
     }, [])
@@ -69,7 +67,11 @@ export function useApiError() {
     }
 }
 
-export function parseApiError(error: unknown): ApiError {
+export function parseApiError(error: unknown): ApiErrorState {
+    if (error instanceof ApiError) {
+        return { message: error.message, code: error.code, status: error.status, details: error }
+    }
+
     if (error instanceof Error) {
         return { message: error.message, details: error }
     }
@@ -91,21 +93,6 @@ export function getErrorMessage(error: unknown): string {
     return parseApiError(error).message
 }
 
-export function isNetworkError(error: unknown): boolean {
-    if (error instanceof TypeError && error.message === 'Failed to fetch') {
-        return true
-    }
-    
-    const apiError = parseApiError(error)
-    return apiError.code === 'NETWORK_ERROR' || apiError.status === 0
-}
-
-export function isAuthError(error: unknown): boolean {
-    const apiError = parseApiError(error)
-    return apiError.status === 401 || apiError.status === 403
-}
-
 export function isNotFoundError(error: unknown): boolean {
-    const apiError = parseApiError(error)
-    return apiError.status === 404
+    return error instanceof ApiError && error.status === 404
 }

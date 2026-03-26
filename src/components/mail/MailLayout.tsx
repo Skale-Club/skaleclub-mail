@@ -24,7 +24,8 @@ import {
     ChevronDown,
     User,
     RefreshCw,
-    Bell
+    Bell,
+    Mail
 } from 'lucide-react'
 
 interface MailLayoutProps {
@@ -53,6 +54,7 @@ export function MailLayout({ children }: MailLayoutProps) {
     const isMobile = useIsMobile()
     const { isOpen: shortcutsOpen, closeHelp: closeShortcuts } = useKeyboardShortcutHelp()
     const [sidebarOpen, setSidebarOpen] = React.useState(false)
+    const [isCollapsed, setIsCollapsed] = React.useState(false)
     const [userMenuOpen, setUserMenuOpen] = React.useState(false)
     const [searchOpen, setSearchOpen] = React.useState(false)
     const [searchQuery, setSearchQuery] = React.useState('')
@@ -78,13 +80,22 @@ export function MailLayout({ children }: MailLayoutProps) {
 
     const SidebarContent = () => (
         <>
-            <div className="flex items-center justify-between h-16 px-5 border-b border-border">
-                <Link href="/mail/inbox" className="flex items-center gap-3" onClick={closeSidebar}>
-                    <AppLogo className="h-10 w-10 shrink-0" />
-                    <div>
-                        <span className="text-xl font-bold tracking-tight text-foreground">{branding.applicationName}</span>
-                    </div>
-                </Link>
+            <div className="flex items-center justify-between h-16 px-4 border-b border-border">
+                <div className="flex items-center gap-3 overflow-hidden">
+                    <button 
+                        onClick={() => setIsCollapsed(!isCollapsed)} 
+                        className="p-2 rounded-lg hover:bg-accent text-muted-foreground shrink-0 hidden lg:block"
+                        title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                    >
+                        <Menu className="w-5 h-5" />
+                    </button>
+                    {(!isCollapsed || isMobile) && (
+                        <Link href="/mail/inbox" className="flex items-center gap-2" onClick={closeSidebar}>
+                            <AppLogo className="h-8 w-8 shrink-0" />
+                            <span className="text-lg font-bold tracking-tight text-foreground truncate">{branding.applicationName}</span>
+                        </Link>
+                    )}
+                </div>
                 {isMobile && (
                     <button
                         className="p-2 rounded-lg hover:bg-accent text-muted-foreground transition-colors"
@@ -95,18 +106,30 @@ export function MailLayout({ children }: MailLayoutProps) {
                 )}
             </div>
 
-            <div className="p-4 border-b border-border">
+            <div className={`p-4 border-b border-border ${isCollapsed && !isMobile ? 'hidden' : ''}`}>
                 <AccountSwitcher />
             </div>
+            {isCollapsed && !isMobile && (
+                <div className="p-4 border-b border-border flex justify-center">
+                    <button 
+                        onClick={() => setIsCollapsed(false)}
+                        className="p-2 bg-accent/50 hover:bg-accent rounded-lg text-muted-foreground hover:text-foreground transition-colors" 
+                        title="Switch Account"
+                    >
+                        <Mail className="w-5 h-5" />
+                    </button>
+                </div>
+            )}
 
-            <div className="p-4">
+            <div className={`p-4 ${isCollapsed && !isMobile ? 'px-3' : ''}`}>
                 <Link
                     href="/mail/compose"
-                    className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-primary hover:bg-primary/90 rounded-xl font-medium text-primary-foreground shadow-sm-soft transition-all duration-200"
+                    className={`flex items-center justify-center gap-2 w-full ${isCollapsed && !isMobile ? 'p-2.5' : 'px-4 py-2.5'} bg-primary hover:bg-primary/90 rounded-xl font-medium text-primary-foreground shadow-sm-soft transition-all duration-200`}
                     onClick={closeSidebar}
+                    title={isCollapsed && !isMobile ? "Compose" : undefined}
                 >
-                    <Plus className="w-5 h-5" />
-                    Compose
+                    <Plus className="w-5 h-5 shrink-0" />
+                    {(!isCollapsed || isMobile) && <span>Compose</span>}
                 </Link>
             </div>
 
@@ -121,15 +144,21 @@ export function MailLayout({ children }: MailLayoutProps) {
                                 ? 'bg-accent text-accent-foreground'
                                 : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
                             }
+                            ${isCollapsed && !isMobile ? 'justify-center px-0' : ''}
                         `}
+                        title={isCollapsed && !isMobile ? folder.label : undefined}
                         onClick={closeSidebar}
                     >
-                        {folder.icon}
-                        <span className="flex-1">{folder.label}</span>
-                        {folder.badge && (
-                            <span className="px-2 py-0.5 text-xs font-bold bg-primary text-primary-foreground rounded-full">
-                                {folder.badge}
-                            </span>
+                        <span className="shrink-0">{folder.icon}</span>
+                        {(!isCollapsed || isMobile) && (
+                            <>
+                                <span className="flex-1">{folder.label}</span>
+                                {folder.badge && (
+                                    <span className="px-2 py-0.5 text-xs font-bold bg-primary text-primary-foreground rounded-full">
+                                        {folder.badge}
+                                    </span>
+                                )}
+                            </>
                         )}
                     </Link>
                 ))}
@@ -144,11 +173,13 @@ export function MailLayout({ children }: MailLayoutProps) {
                             ? 'bg-accent text-accent-foreground'
                             : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
                         }
+                        ${isCollapsed && !isMobile ? 'justify-center px-0' : ''}
                     `}
+                    title={isCollapsed && !isMobile ? "Settings" : undefined}
                     onClick={closeSidebar}
                 >
-                    <Settings className="w-5 h-5" />
-                    Settings
+                    <Settings className="w-5 h-5 shrink-0" />
+                    {(!isCollapsed || isMobile) && <span>Settings</span>}
                 </Link>
             </div>
         </>
@@ -210,7 +241,7 @@ export function MailLayout({ children }: MailLayoutProps) {
 
             <div className="flex h-screen">
                 {!isMobile && (
-                    <aside className="w-72 h-full bg-card border-r border-border flex flex-col">
+                    <aside className={`${isCollapsed ? 'w-[72px]' : 'w-72'} h-full bg-card border-r border-border flex flex-col transition-all duration-300 ease-in-out`}>
                         <SidebarContent />
                     </aside>
                 )}
@@ -285,7 +316,11 @@ export function MailLayout({ children }: MailLayoutProps) {
                                 </button>
                             )}
                             
-                            <button className="p-2 rounded-xl hover:bg-accent hover:text-accent-foreground text-muted-foreground transition-colors relative">
+                            <button 
+                                onClick={() => window.location.reload()}
+                                className="p-2 rounded-xl hover:bg-accent hover:text-accent-foreground text-muted-foreground transition-colors relative"
+                                title="Refresh Page"
+                            >
                                 <RefreshCw className="w-5 h-5" />
                             </button>
                             

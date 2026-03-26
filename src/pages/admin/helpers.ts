@@ -1,4 +1,5 @@
-import { supabase } from '../../lib/supabase'
+export { apiFetch } from '../../lib/api'
+import { apiFetch } from '../../lib/api'
 
 export interface OrganizationOption {
     id: string
@@ -11,38 +12,6 @@ export interface DomainOption {
     organizationId: string
     name: string
     verificationStatus: 'pending' | 'verified' | 'failed'
-}
-
-export async function getAccessToken() {
-    const { data: { session } } = await supabase.auth.getSession()
-    return session?.access_token
-}
-
-export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const token = await getAccessToken()
-    const response = await fetch(path, {
-        cache: 'no-store',
-        ...init,
-        headers: {
-            Authorization: `Bearer ${token}`,
-            ...(init.headers || {}),
-        },
-    })
-
-    const contentType = response.headers.get('content-type') || ''
-    const payload = contentType.includes('application/json')
-        ? await response.json()
-        : await response.text()
-
-    if (!response.ok) {
-        const message =
-            typeof payload === 'object' && payload && 'error' in payload
-                ? String(payload.error)
-                : response.statusText
-        throw new Error(message || 'Request failed')
-    }
-
-    return payload as T
 }
 
 export async function loadOrganizations() {

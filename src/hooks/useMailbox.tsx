@@ -1,5 +1,5 @@
 import React from 'react'
-import { supabase } from '../lib/supabase'
+import { apiFetch } from '../lib/api'
 
 export interface Mailbox {
     id: string
@@ -23,19 +23,6 @@ interface MailboxContextType {
 
 const MailboxContext = React.createContext<MailboxContextType | undefined>(undefined)
 
-async function mailFetch(url: string, init: RequestInit = {}): Promise<Response> {
-    const { data: { session } } = await supabase.auth.getSession()
-    return fetch(url, {
-        cache: 'no-store',
-        ...init,
-        headers: {
-            Authorization: `Bearer ${session?.access_token}`,
-            'Content-Type': 'application/json',
-            ...(init.headers || {}),
-        },
-    })
-}
-
 export function MailboxProvider({ children }: { children: React.ReactNode }) {
     const [mailboxes, setMailboxes] = React.useState<Mailbox[]>([])
     const [selectedMailbox, setSelectedMailbox] = React.useState<Mailbox | null>(null)
@@ -44,18 +31,15 @@ export function MailboxProvider({ children }: { children: React.ReactNode }) {
     const refreshMailboxes = React.useCallback(async () => {
         setIsLoading(true)
         try {
-            const response = await mailFetch('/api/mail/mailboxes')
-            if (response.ok) {
-                const data = await response.json()
-                const fetchedMailboxes = data.mailboxes || []
-                setMailboxes(fetchedMailboxes)
-                
-                const savedId = localStorage.getItem('selectedMailboxId')
-                const saved = savedId ? fetchedMailboxes.find((m: Mailbox) => m.id === savedId) : null
-                const defaultMailbox = fetchedMailboxes.find((m: Mailbox) => m.isDefault)
-                
-                setSelectedMailbox(saved || defaultMailbox || fetchedMailboxes[0] || null)
-            }
+            const data = await apiFetch<{ mailboxes: Mailbox[] }>('/api/mail/mailboxes')
+            const fetchedMailboxes = data.mailboxes || []
+            setMailboxes(fetchedMailboxes)
+
+            const savedId = localStorage.getItem('selectedMailboxId')
+            const saved = savedId ? fetchedMailboxes.find((m: Mailbox) => m.id === savedId) : null
+            const defaultMailbox = fetchedMailboxes.find((m: Mailbox) => m.isDefault)
+
+            setSelectedMailbox(saved || defaultMailbox || fetchedMailboxes[0] || null)
         } catch (error) {
             console.error('Error fetching mailboxes:', error)
         } finally {
