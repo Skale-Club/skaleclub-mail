@@ -1,6 +1,6 @@
 import { createHmac } from 'crypto'
 import { db } from '../../db'
-import { webhooks, webhookRequests, statistics } from '../../db/schema'
+import { webhooks, webhookRequests, statistics, organizationUsers, userNotifications } from '../../db/schema'
 import { eq, and, sql } from 'drizzle-orm'
 
 // ---------------------------------------------------------------------------
@@ -131,6 +131,75 @@ type WebhookEvent =
     | 'test'
 
 /**
+ * Creates user notifications for organization members when server events occur.
+ */
+export async function createUserNotificationsForEvent(
+    organizationId: string,
+    event: WebhookEvent,
+    data: Record<string, unknown>
+): Promise<void> {
+    try {
+        const typeMap: Record<WebhookEvent, string> = {
+            message_sent: 'bounce',
+            message_delivered: 'bounce',
+            message_bounced: 'bounce',
+            message_held: 'held',
+            message_opened: 'bounce',
+            link_clicked: 'bounce',
+            domain_verified: 'domain_verification_failed',
+            spam_alert: 'spam_alert',
+            test: 'bounce',
+        }
+
+        const titleMap: Record<WebhookEvent, string> = {
+            message_sent: 'Email sent',
+            message_delivered: 'Email delivered',
+            message_bounced: 'Email bounced',
+            message_held: 'Message held',
+            message_opened: 'Email opened',
+            link_clicked: 'Link clicked',
+            domain_verified: 'Domain verified',
+            spam_alert: 'Spam detected',
+            test: 'Test event',
+        }
+
+        const messageMap: Record<WebhookEvent, string> = {
+            message_sent: `Message sent to ${data.to || 'unknown recipient'}`,
+            message_delivered: `Message delivered to ${data.to || 'unknown recipient'}`,
+            message_bounced: `Message to ${data.to || 'unknown recipient'} bounced: ${data.reason || 'Unknown reason'}`,
+            message_held: `Message from ${data.from || 'unknown sender'} is held: ${data.reason || 'Unknown reason'}`,
+            message_opened: `Message to ${data.to || 'unknown recipient'} was opened`,
+            link_clicked: `Link clicked in message to ${data.to || 'unknown recipient'}`,
+            domain_verified: `Domain ${data.domain || 'unknown'} has been verified`,
+            spam_alert: `Spam detected in message from ${data.from || 'unknown sender'}`,
+            test: 'Test notification',
+        }
+
+        const type = typeMap[event]
+        const title = titleMap[event]
+        const message = messageMap[event]
+
+        const memberships = await db.query.organizationUsers.findMany({
+            where: eq(organizationUsers.organizationId, organizationId),
+        })
+
+        if (memberships.length === 0) return
+
+        await db.insert(userNotifications).values(
+            memberships.map((m) => ({
+                userId: m.userId,
+                type,
+                title,
+                message,
+                metadata: data,
+            }))
+        )
+    } catch (err) {
+        console.error('createUserNotificationsForEvent error:', err)
+    }
+}
+
+/**
  * Fires all active webhooks subscribed to the given event for an organization.
  * Signs the payload with HMAC-SHA256 when a secret is configured.
  * Logs every attempt to webhook_requests.
@@ -141,6 +210,12 @@ export async function fireWebhooks(
     event: WebhookEvent,
     data: Record<string, unknown>
 ): Promise<void> {
+    // Create user notifications for critical events
+    const notificationEvents: WebhookEvent[] = ['message_bounced', 'message_held', 'spam_alert']
+    if (notificationEvents.includes(event)) {
+        await createUserNotificationsForEvent(organizationId, event, data)
+    }
+
     try {
         const allWebhooks = await db.query.webhooks.findMany({
             where: and(

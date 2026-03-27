@@ -1237,3 +1237,25 @@ export const selectSignatureSchema = createSelectSchema(signatures)
 
 export type Signature = typeof signatures.$inferSelect
 export type NewSignature = typeof signatures.$inferInsert
+
+// User Notifications table
+export const userNotifications = pgTable('user_notifications', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').references(() => users.id).notNull(),
+    type: text('type').notNull(),
+    title: text('title').notNull(),
+    message: text('message').notNull(),
+    metadata: jsonb('metadata').default({}),
+    read: boolean('read').default(false).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
+export const userNotificationsRelations = relations(userNotifications, ({ one }) => ({
+    user: one(users, {
+        fields: [userNotifications.userId],
+        references: [users.id],
+    }),
+}))
+
+export type UserNotification = typeof userNotifications.$inferSelect
+export type NewUserNotification = typeof userNotifications.$inferInsert

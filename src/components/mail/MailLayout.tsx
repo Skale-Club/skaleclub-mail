@@ -26,13 +26,13 @@ import {
     ChevronDown,
     User,
     RefreshCw,
-    Bell,
     Mail,
     Archive,
     ShieldAlert,
     Users
 } from 'lucide-react'
 import { useFolders } from '../../hooks/useMail'
+import { NotificationBell } from './NotificationBell'
 
 interface MailLayoutProps {
     children: React.ReactNode
@@ -348,10 +348,7 @@ export function MailLayout({ children }: MailLayoutProps) {
                                 <RefreshCw className="w-5 h-5" />
                             </button>
                             
-                            <button className="p-2 rounded-xl hover:bg-accent hover:text-accent-foreground text-muted-foreground transition-colors relative hidden sm:flex">
-                                <Bell className="w-5 h-5" />
-                                <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full"></span>
-                            </button>
+                            <NotificationBell />
                             
                             <KeyboardShortcutsButton onClick={openShortcuts} />
                             <ModeToggle />

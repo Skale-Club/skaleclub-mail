@@ -22,6 +22,7 @@ import templateRoutes from './routes/templates'
 import outreachRoutes from './routes/outreach'
 import outlookRoutes from './routes/outlook'
 import mailRoutes from './routes/mail'
+import notificationRoutes from './routes/notifications'
 import { createSMTPServer } from './smtp-server'
 import { createIMAPServer, loadImapBranding } from './imap-server'
 import { runReadinessChecks } from './lib/health'
@@ -202,6 +203,7 @@ app.use('/api/templates', templateRoutes)
 app.use('/api/outreach', outreachRoutes)
 app.use('/api/outlook', outlookRoutes)
 app.use('/api/mail', mailRoutes)
+app.use('/api/notifications', notificationRoutes)
 
 app.use('/t', trackRoutes)
 

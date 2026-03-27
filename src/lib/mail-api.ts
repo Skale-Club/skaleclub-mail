@@ -368,4 +368,52 @@ export const mailApi = {
             body: JSON.stringify({ csvContent }),
         })
     },
+
+    // Notifications API
+    getNotifications(params?: { page?: number; limit?: number }): Promise<{
+        data: Array<{
+            id: string
+            userId: string
+            type: string
+            title: string
+            message: string
+            metadata: Record<string, unknown>
+            read: boolean
+            createdAt: string
+        }>
+        pagination: {
+            page: number
+            limit: number
+            total: number
+            totalPages: number
+        }
+    }> {
+        const searchParams = new URLSearchParams()
+        if (params?.page !== undefined) searchParams.set('page', String(params.page))
+        if (params?.limit !== undefined) searchParams.set('limit', String(params.limit))
+        const qs = searchParams.toString()
+        return apiFetch(`/api/notifications${qs ? `?${qs}` : ''}`)
+    },
+
+    getUnreadCount(): Promise<{ unreadCount: number }> {
+        return apiFetch('/api/notifications/unread-count')
+    },
+
+    markAsRead(id: string): Promise<{ success: boolean }> {
+        return apiFetch(`/api/notifications/${id}/read`, {
+            method: 'PUT',
+        })
+    },
+
+    markAllAsRead(): Promise<{ success: boolean }> {
+        return apiFetch('/api/notifications/read-all', {
+            method: 'PUT',
+        })
+    },
+
+    deleteNotification(id: string): Promise<{ success: boolean }> {
+        return apiFetch(`/api/notifications/${id}`, {
+            method: 'DELETE',
+        })
+    },
 }
