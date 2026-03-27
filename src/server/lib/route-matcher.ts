@@ -12,6 +12,10 @@
 import { db } from '../../db'
 import { routes, smtpEndpoints, httpEndpoints, addressEndpoints, domains } from '../../db/schema'
 import { eq, and } from 'drizzle-orm'
+import nodemailer from 'nodemailer'
+import { v4 as uuidv4 } from 'uuid'
+import { messages } from '../../db/schema'
+import { incrementStat } from './tracking'
 
 export interface MatchedRoute {
     route: typeof routes.$inferSelect
@@ -175,4 +179,84 @@ export async function processInboundEmail(
     }
 
     return { organizationId, routes: matchedRoutes, action: 'deliver' }
+}
+
+/**
+ * Deliver email via matched routes (SMTP, HTTP, address forwarding, hold).
+ */
+export async function deliverViaRoutes(
+    recipient: string,
+    rawEmail: Buffer,
+    matchedRoutes: MatchedRoute[],
+    organizationId: string
+): Promise<void> {
+    for (const { route, endpoint } of matchedRoutes) {
+        if (endpoint.type === 'hold') {
+            const token = uuidv4()
+            await db.insert(messages).values({
+                organizationId,
+                token,
+                direction: 'incoming',
+                fromAddress: '',
+                toAddresses: [recipient],
+                subject: '(held)',
+                status: 'held',
+                held: true,
+                holdExpiry: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+                heldReason: `Route: ${route.name}`,
+            }).onConflictDoNothing()
+
+            await incrementStat(organizationId, 'messagesHeld')
+            continue
+        }
+
+        if (endpoint.type === 'smtp' && endpoint.config) {
+            const cfg = endpoint.config as { hostname: string; port: number; sslMode: string; username?: string; password?: string }
+            const transporter = nodemailer.createTransport({
+                host: cfg.hostname,
+                port: cfg.port,
+                secure: cfg.sslMode === 'ssl' || cfg.port === 465,
+                auth: cfg.username && cfg.password ? { user: cfg.username, pass: cfg.password } : undefined,
+            })
+
+            await transporter.sendMail({
+                envelope: { from: '', to: [recipient] },
+                raw: rawEmail,
+            })
+        }
+
+        if (endpoint.type === 'address' && endpoint.config) {
+            const cfg = endpoint.config as { emailAddress: string }
+            const host = process.env.SMTP_HOST
+            if (host) {
+                const transporter = nodemailer.createTransport({
+                    host,
+                    port: parseInt(process.env.SMTP_PORT || '587'),
+                    secure: false,
+                    auth: process.env.SMTP_USER && process.env.SMTP_PASS
+                        ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+                        : undefined,
+                })
+
+                await transporter.sendMail({
+                    envelope: { from: '', to: [cfg.emailAddress] },
+                    raw: rawEmail,
+                })
+            }
+        }
+
+        if (endpoint.type === 'http' && endpoint.config) {
+            const cfg = endpoint.config as { url: string; method?: string; headers?: Record<string, string>; includeOriginal?: boolean }
+            const body = cfg.includeOriginal
+                ? { recipient, raw: rawEmail.toString('base64') }
+                : { recipient }
+
+            await fetch(cfg.url, {
+                method: cfg.method || 'POST',
+                headers: { 'Content-Type': 'application/json', ...(cfg.headers || {}) },
+                body: JSON.stringify(body),
+                signal: AbortSignal.timeout(30_000),
+            })
+        }
+    }
 }

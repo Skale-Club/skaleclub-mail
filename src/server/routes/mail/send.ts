@@ -4,11 +4,13 @@ import nodemailer from 'nodemailer'
 import Imap from 'imap'
 import { v4 as uuidv4 } from 'uuid'
 import { db } from '../../../db'
-import { mailFolders, mailMessages } from '../../../db/schema'
+import { mailboxes, mailFolders, mailMessages } from '../../../db/schema'
 import { eq, and } from 'drizzle-orm'
-import { decrypt } from '../../../lib/crypto'
+import { decryptSecret } from '../../lib/crypto'
 import { checkUserMailboxAccess } from './mailboxes'
 import { createMultipartEmail } from '../../lib/html-to-text'
+import { findLocalUser } from '../../lib/native-mail'
+import { processInboundEmail, deliverViaRoutes } from '../../lib/route-matcher'
 
 const router = Router()
 
@@ -19,7 +21,7 @@ async function appendToSentFolder(
     return new Promise((resolve) => {
         const imapConfig = {
             user: mailbox.imapUsername,
-            password: decrypt(mailbox.imapPasswordEncrypted),
+            password: decryptSecret(mailbox.imapPasswordEncrypted),
             host: mailbox.imapHost,
             port: mailbox.imapPort,
             tls: mailbox.imapSecure,
@@ -47,6 +49,94 @@ async function appendToSentFolder(
     })
 }
 
+// Relay outbound email through configured SMTP relay or direct delivery
+async function relayMessage(
+    fromAddress: string,
+    toAddresses: string[],
+    rawEmail: Buffer
+): Promise<void> {
+    if (process.env.SMTP_HOST && process.env.SMTP_USER) {
+        const transporter = nodemailer.createTransport({
+            host: process.env.SMTP_HOST,
+            port: parseInt(process.env.SMTP_PORT || '587'),
+            secure: false,
+            auth: {
+                user: process.env.SMTP_USER,
+                pass: process.env.SMTP_PASS,
+            },
+        })
+
+        await transporter.sendMail({
+            envelope: { from: fromAddress, to: toAddresses },
+            raw: rawEmail,
+        })
+    } else {
+        const transporter = nodemailer.createTransport({
+            direct: true,
+            name: process.env.MAIL_DOMAIN || 'localhost',
+        } as nodemailer.TransportOptions)
+
+        await transporter.sendMail({
+            envelope: { from: fromAddress, to: toAddresses },
+            raw: rawEmail,
+        })
+    }
+}
+
+// Store a message in a folder for a mailbox (mirrors smtp-server.ts storeMessage)
+async function storeMessage(
+    mailboxId: string,
+    folderType: string,
+    data: {
+        messageId: string
+        inReplyTo?: string
+        references?: string
+        subject: string
+        fromAddress: string
+        fromName: string | null
+        toAddresses: object[]
+        ccAddresses: object[]
+        bccAddresses: object[]
+        plainBody?: string
+        htmlBody?: string
+        hasAttachments: boolean
+        attachments: object[]
+    },
+    isRead = false
+) {
+    const folder = await db.query.mailFolders.findFirst({
+        where: and(
+            eq(mailFolders.mailboxId, mailboxId),
+            eq(mailFolders.type, folderType)
+        ),
+    })
+
+    if (!folder) return
+
+    await db.insert(mailMessages).values({
+        mailboxId,
+        folderId: folder.id,
+        messageId: data.messageId,
+        inReplyTo: data.inReplyTo,
+        references: data.references,
+        subject: data.subject,
+        fromAddress: data.fromAddress,
+        fromName: data.fromName,
+        toAddresses: data.toAddresses,
+        ccAddresses: data.ccAddresses,
+        bccAddresses: data.bccAddresses,
+        plainBody: data.plainBody,
+        htmlBody: data.htmlBody,
+        headers: {},
+        hasAttachments: data.hasAttachments,
+        attachments: data.attachments,
+        isRead,
+        isDraft: false,
+        remoteDate: new Date(),
+        receivedAt: new Date(),
+    }).onConflictDoNothing()
+}
+
 router.post('/:mailboxId/send', async (req: Request, res: Response) => {
     try {
         const userId = req.headers['x-user-id'] as string
@@ -60,6 +150,8 @@ router.post('/:mailboxId/send', async (req: Request, res: Response) => {
         if (!mailbox) {
             return res.status(404).json({ error: 'Mailbox not found' })
         }
+
+        const isNative = mailbox.isNative === true
 
         const schema = z.object({
             to: z.array(z.object({
@@ -93,56 +185,49 @@ router.post('/:mailboxId/send', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Message body is required' })
         }
 
-        const smtpConfig = {
-            host: mailbox.smtpHost,
-            port: mailbox.smtpPort,
-            secure: mailbox.smtpSecure,
-            auth: {
-                user: mailbox.smtpUsername,
-                pass: decrypt(mailbox.smtpPasswordEncrypted),
-            },
-        }
-
-        const transporter = nodemailer.createTransport(smtpConfig)
-
         const messageId = `<${uuidv4()}@${mailbox.email.split('@')[1] || 'mail.local'}>`
+        const fromAddress = mailbox.displayName
+            ? `${mailbox.displayName} <${mailbox.email}>`
+            : mailbox.email
 
-        const mailOptions: nodemailer.SendMailOptions = {
-            from: mailbox.displayName 
-                ? `${mailbox.displayName} <${mailbox.email}>`
-                : mailbox.email,
-            to: data.to.map(t => t.address),
-            cc: data.cc?.map(c => c.address),
-            bcc: data.bcc?.map(b => b.address),
-            subject: data.subject,
-            text: data.plainBody,
-            html: data.htmlBody,
+        const allRecipients = [
+            ...data.to.map(t => t.address),
+            ...(data.cc?.map(c => c.address) || []),
+            ...(data.bcc?.map(b => b.address) || []),
+        ]
+
+        const messageData = {
             messageId,
             inReplyTo: data.inReplyTo,
             references: data.references,
+            subject: data.subject,
+            fromAddress: mailbox.email,
+            fromName: mailbox.displayName || null,
+            toAddresses: data.to.map(t => ({ name: t.name || null, address: t.address })),
+            ccAddresses: data.cc?.map(c => ({ name: c.name || null, address: c.address })) || [],
+            bccAddresses: data.bcc?.map(b => ({ name: b.name || null, address: b.address })) || [],
+            plainBody: data.plainBody,
+            htmlBody: data.htmlBody,
+            hasAttachments: (data.attachments?.length || 0) > 0,
             attachments: data.attachments?.map(att => ({
                 filename: att.filename,
-                content: Buffer.from(att.content, 'base64'),
-                contentType: att.contentType,
-            })),
+                contentType: att.contentType || 'application/octet-stream',
+                size: Math.ceil(att.content.length * 0.75),
+            })) || [],
         }
 
-        await transporter.sendMail(mailOptions)
-
-        if (data.saveToSent) {
-            const sentFolder = await db.query.mailFolders.findFirst({
-                where: and(
-                    eq(mailFolders.mailboxId, mailboxId),
-                    eq(mailFolders.remoteId, 'Sent')
-                ),
-            })
-
+        if (isNative) {
+            // Native mailbox: bypass SMTP server, do direct delivery
+            // 1. Build raw email for relay
             const { headers: contentHeaders, body: contentBody } = createMultipartEmail(data.plainBody, data.htmlBody)
-            
-            const rawEmail = [
-                `From: ${mailbox.displayName ? `${mailbox.displayName} <${mailbox.email}>` : mailbox.email}`,
-                `To: ${data.to.map(t => t.name ? `${t.name} <${t.address}>` : t.address).join(', ')}`,
-                data.cc ? `Cc: ${data.cc.map(c => c.name ? `${c.name} <${c.address}>` : c.address).join(', ')}` : '',
+
+            const toHeader = data.to.map(t => t.name ? `${t.name} <${t.address}>` : t.address).join(', ')
+            const ccHeader = data.cc?.map(c => c.name ? `${c.name} <${c.address}>` : c.address).join(', ')
+
+            const rawEmailParts = [
+                `From: ${fromAddress}`,
+                `To: ${toHeader}`,
+                ccHeader ? `Cc: ${ccHeader}` : '',
                 `Subject: ${data.subject}`,
                 `Date: ${new Date().toUTCString()}`,
                 `Message-ID: ${messageId}`,
@@ -151,38 +236,122 @@ router.post('/:mailboxId/send', async (req: Request, res: Response) => {
                 ...contentHeaders,
                 contentBody,
             ].filter(Boolean).join('\r\n')
+            const rawEmailBuffer = Buffer.from(rawEmailParts)
 
-            if (sentFolder) {
-                await db.insert(mailMessages).values({
-                    mailboxId,
-                    folderId: sentFolder.id,
-                    messageId,
-                    inReplyTo: data.inReplyTo,
-                    references: data.references,
-                    subject: data.subject,
-                    fromAddress: mailbox.email,
-                    fromName: mailbox.displayName,
-                    toAddresses: data.to.map(t => ({ name: t.name || null, address: t.address })),
-                    ccAddresses: data.cc?.map(c => ({ name: c.name || null, address: c.address })) || [],
-                    plainBody: data.plainBody,
-                    htmlBody: data.htmlBody,
-                    headers: {},
-                    hasAttachments: (data.attachments?.length || 0) > 0,
-                    attachments: data.attachments?.map(att => ({
-                        filename: att.filename,
-                        contentType: att.contentType || 'application/octet-stream',
-                        size: Math.ceil(att.content.length * 0.75),
-                    })) || [],
-                    isRead: true,
-                    isDraft: false,
-                    remoteDate: new Date(),
-                    receivedAt: new Date(),
-                })
+            // 2. Store in sender's Sent folder
+            if (data.saveToSent) {
+                await storeMessage(mailboxId, 'sent', messageData, true)
             }
 
-            const appendResult = await appendToSentFolder(mailbox, rawEmail)
-            if (!appendResult.success) {
-                console.warn('Failed to append to IMAP Sent folder:', appendResult.error)
+            // 3. Separate local vs external recipients
+            const localRecipients: Array<{ email: string; userId: string }> = []
+            const externalRecipients: string[] = []
+
+            for (const addr of allRecipients) {
+                const recipientUserId = await findLocalUser(addr)
+                if (recipientUserId) {
+                    localRecipients.push({ email: addr, userId: recipientUserId })
+                } else {
+                    externalRecipients.push(addr)
+                }
+            }
+
+            // 4. Deliver to local recipients (store directly in their INBOX)
+            for (const { email: recipientEmail, userId: recipientUserId } of localRecipients) {
+                const recipientMailbox = await db.query.mailboxes.findFirst({
+                    where: and(
+                        eq(mailboxes.email, recipientEmail.toLowerCase()),
+                        eq(mailboxes.userId, recipientUserId)
+                    ),
+                })
+                if (recipientMailbox) {
+                    await storeMessage(recipientMailbox.id, 'inbox', messageData, false)
+                }
+            }
+
+            // 5. Relay external recipients
+            if (externalRecipients.length > 0) {
+                try {
+                    const routedRecipients: string[] = []
+                    const directRelayRecipients: string[] = []
+
+                    for (const addr of externalRecipients) {
+                        const routing = await processInboundEmail(addr)
+                        if (routing.action === 'reject') {
+                            continue
+                        }
+                        if (routing.action !== 'none' && routing.routes.length > 0) {
+                            routedRecipients.push(addr)
+                            await deliverViaRoutes(addr, rawEmailBuffer, routing.routes, routing.organizationId!)
+                        } else {
+                            directRelayRecipients.push(addr)
+                        }
+                    }
+
+                    if (directRelayRecipients.length > 0) {
+                        await relayMessage(mailbox.email, directRelayRecipients, rawEmailBuffer)
+                    }
+                } catch (relayErr) {
+                    console.error('[Send] Relay error:', relayErr)
+                    // Don't fail the whole request if relay fails
+                }
+            }
+        } else {
+            // External mailbox: send via user's SMTP credentials
+            const transporter = nodemailer.createTransport({
+                host: mailbox.smtpHost,
+                port: mailbox.smtpPort,
+                secure: mailbox.smtpSecure,
+                auth: {
+                    user: mailbox.smtpUsername,
+                    pass: decryptSecret(mailbox.smtpPasswordEncrypted),
+                },
+            })
+
+            await transporter.sendMail({
+                from: fromAddress,
+                to: data.to.map(t => t.address),
+                cc: data.cc?.map(c => c.address),
+                bcc: data.bcc?.map(b => b.address),
+                subject: data.subject,
+                text: data.plainBody,
+                html: data.htmlBody,
+                messageId,
+                inReplyTo: data.inReplyTo,
+                references: data.references,
+                attachments: data.attachments?.map(att => ({
+                    filename: att.filename,
+                    content: Buffer.from(att.content, 'base64'),
+                    contentType: att.contentType,
+                })),
+            })
+
+            // Store in Sent folder + append to remote IMAP Sent
+            if (data.saveToSent) {
+                await storeMessage(mailboxId, 'sent', messageData, true)
+
+                const { headers: contentHeaders, body: contentBody } = createMultipartEmail(data.plainBody, data.htmlBody)
+
+                const toHeader = data.to.map(t => t.name ? `${t.name} <${t.address}>` : t.address).join(', ')
+                const ccHeader = data.cc?.map(c => c.name ? `${c.name} <${c.address}>` : c.address).join(', ')
+
+                const rawEmail = [
+                    `From: ${fromAddress}`,
+                    `To: ${toHeader}`,
+                    ccHeader ? `Cc: ${ccHeader}` : '',
+                    `Subject: ${data.subject}`,
+                    `Date: ${new Date().toUTCString()}`,
+                    `Message-ID: ${messageId}`,
+                    data.inReplyTo ? `In-Reply-To: ${data.inReplyTo}` : '',
+                    data.references ? `References: ${data.references}` : '',
+                    ...contentHeaders,
+                    contentBody,
+                ].filter(Boolean).join('\r\n')
+
+                const appendResult = await appendToSentFolder(mailbox, rawEmail)
+                if (!appendResult.success) {
+                    console.warn('Failed to append to IMAP Sent folder:', appendResult.error)
+                }
             }
         }
 

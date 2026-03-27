@@ -326,8 +326,8 @@ router.post('/:id/members', async (req: Request, res: Response) => {
             role,
         }).returning()
 
-        // Auto-create native mailbox
-        if (!userToAdd.isAdmin) {
+        // Auto-create native mailbox (only if user has a password set)
+        if (!userToAdd.isAdmin && userToAdd.passwordHash) {
             await createUserMailbox(userToAdd.id, userToAdd.email)
         }
 

@@ -4,7 +4,7 @@ import { simpleParser } from 'mailparser'
 import { db } from '../../db'
 import { mailboxes, mailFolders, mailMessages } from '../../db/schema'
 import { eq, and, gt, or, isNull, desc } from 'drizzle-orm'
-import { decrypt } from '../../lib/crypto'
+import { decryptSecret } from '../../lib/crypto'
 
 interface SyncResult {
     mailboxId: string
@@ -63,7 +63,7 @@ async function withRetry<T>(
 function createImapConnection(mailbox: any, isIdle = false): Imap {
     const config: any = {
         user: mailbox.imapUsername,
-        password: decrypt(mailbox.imapPasswordEncrypted),
+        password: decryptSecret(mailbox.imapPasswordEncrypted),
         host: mailbox.imapHost,
         port: mailbox.imapPort,
         tls: mailbox.imapSecure,
@@ -105,7 +105,7 @@ export async function syncMailbox(
 
     const imapConfig = {
         user: mailbox.imapUsername,
-        password: decrypt(mailbox.imapPasswordEncrypted),
+        password: decryptSecret(mailbox.imapPasswordEncrypted),
         host: mailbox.imapHost,
         port: mailbox.imapPort,
         tls: mailbox.imapSecure,
@@ -463,7 +463,7 @@ export async function startMailboxIdle(mailboxId: string): Promise<void> {
 
     const imapConfig = {
         user: mailbox.imapUsername,
-        password: decrypt(mailbox.imapPasswordEncrypted),
+        password: decryptSecret(mailbox.imapPasswordEncrypted),
         host: mailbox.imapHost,
         port: mailbox.imapPort,
         tls: mailbox.imapSecure,
@@ -526,12 +526,14 @@ export async function testMailboxConnection(
     }
 
     try {
-        const imapTest = createImapConnection({
-            imapHost,
-            imapPort,
-            imapSecure,
-            imapUsername,
-            imapPasswordEncrypted: imapPassword,
+        const Imap = (await import('imap')).default
+        const imapTest = new Imap({
+            user: imapUsername,
+            password: imapPassword,
+            host: imapHost,
+            port: imapPort,
+            tls: imapSecure,
+            tlsOptions: { rejectUnauthorized: false },
         })
 
         await new Promise<void>((resolve, reject) => {

@@ -1,5 +1,5 @@
 import { simpleParser, ParsedMail } from 'mailparser'
-import { decrypt } from '../../lib/crypto'
+import { decryptSecret } from '../../lib/crypto'
 import type { Mailbox, MailMessage } from '../../db/schema'
 
 interface ImapConfig {
@@ -24,7 +24,7 @@ export function getImapConfig(mailbox: Mailbox): ImapConfig {
         port: mailbox.imapPort,
         secure: mailbox.imapSecure,
         username: mailbox.imapUsername,
-        password: decrypt(mailbox.imapPasswordEncrypted),
+        password: decryptSecret(mailbox.imapPasswordEncrypted),
     }
 }
 
@@ -34,7 +34,7 @@ export function getSmtpConfig(mailbox: Mailbox): SmtpConfig {
         port: mailbox.smtpPort,
         secure: mailbox.smtpSecure,
         username: mailbox.smtpUsername,
-        password: decrypt(mailbox.smtpPasswordEncrypted),
+        password: decryptSecret(mailbox.smtpPasswordEncrypted),
     }
 }
 
@@ -65,8 +65,10 @@ export async function parseRawEmail(rawContent: Buffer | string): Promise<Parsed
 
     const getAddressList = (addr: ParsedMail['to']) => {
         if (!addr) return []
-        const obj = Array.isArray(addr) ? addr[0] : addr
-        return obj?.value.map(v => ({ name: v.name || null, address: v.address || null })) || []
+        const items = Array.isArray(addr) ? addr : [addr]
+        return items.flatMap(obj =>
+            (obj?.value || []).map(v => ({ name: v.name || null, address: v.address || null }))
+        )
     }
 
     const refs = parsed.references

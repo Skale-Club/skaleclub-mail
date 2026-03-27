@@ -11,12 +11,11 @@ import { SMTPServer } from 'smtp-server'
 import nodemailer from 'nodemailer'
 import { v4 as uuidv4 } from 'uuid'
 import { db } from '../db'
-import { mailboxes, mailFolders, mailMessages, messages } from '../db/schema'
+import { mailboxes, mailFolders, mailMessages } from '../db/schema'
 import { eq, and } from 'drizzle-orm'
 import { parseRawEmail } from './lib/mail'
 import { authenticateNativeUser, findLocalUser } from './lib/native-mail'
-import { processInboundEmail, type MatchedRoute } from './lib/route-matcher'
-import { incrementStat, fireWebhooks } from './lib/tracking'
+import { processInboundEmail, deliverViaRoutes, type MatchedRoute } from './lib/route-matcher'
 
 // Find the companion mailboxes entry (for folder/message storage)
 async function getCompanionMailbox(email: string, userId: string) {
@@ -117,84 +116,6 @@ async function relayMessage(
 async function isLocalAddress(email: string): Promise<string | null> {
     const result = await findLocalUser(email)
     return result ? result.userId : null
-}
-
-// Deliver email via matched routes
-async function deliverViaRoutes(
-    recipient: string,
-    rawEmail: Buffer,
-    matchedRoutes: MatchedRoute[],
-    organizationId: string
-): Promise<void> {
-    for (const { route, endpoint } of matchedRoutes) {
-        if (endpoint.type === 'hold') {
-            const token = uuidv4()
-            await db.insert(messages).values({
-                organizationId,
-                token,
-                direction: 'incoming',
-                fromAddress: '',
-                toAddresses: [recipient],
-                subject: '(held)',
-                status: 'held',
-                held: true,
-                holdExpiry: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-                heldReason: `Route: ${route.name}`,
-            }).onConflictDoNothing()
-
-            await incrementStat(organizationId, 'messagesHeld')
-            continue
-        }
-
-        if (endpoint.type === 'smtp' && endpoint.config) {
-            const cfg = endpoint.config as { hostname: string; port: number; sslMode: string; username?: string; password?: string }
-            const transporter = nodemailer.createTransport({
-                host: cfg.hostname,
-                port: cfg.port,
-                secure: cfg.sslMode === 'ssl' || cfg.port === 465,
-                auth: cfg.username && cfg.password ? { user: cfg.username, pass: cfg.password } : undefined,
-            })
-
-            await transporter.sendMail({
-                envelope: { from: '', to: [recipient] },
-                raw: rawEmail,
-            })
-        }
-
-        if (endpoint.type === 'address' && endpoint.config) {
-            const cfg = endpoint.config as { emailAddress: string }
-            const host = process.env.SMTP_HOST
-            if (host) {
-                const transporter = nodemailer.createTransport({
-                    host,
-                    port: parseInt(process.env.SMTP_PORT || '587'),
-                    secure: false,
-                    auth: process.env.SMTP_USER && process.env.SMTP_PASS
-                        ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-                        : undefined,
-                })
-
-                await transporter.sendMail({
-                    envelope: { from: '', to: [cfg.emailAddress] },
-                    raw: rawEmail,
-                })
-            }
-        }
-
-        if (endpoint.type === 'http' && endpoint.config) {
-            const cfg = endpoint.config as { url: string; method?: string; headers?: Record<string, string>; includeOriginal?: boolean }
-            const body = cfg.includeOriginal
-                ? { recipient, raw: rawEmail.toString('base64') }
-                : { recipient }
-
-            await fetch(cfg.url, {
-                method: cfg.method || 'POST',
-                headers: { 'Content-Type': 'application/json', ...(cfg.headers || {}) },
-                body: JSON.stringify(body),
-                signal: AbortSignal.timeout(30_000),
-            })
-        }
-    }
 }
 
 export function createSMTPServer() {

@@ -287,11 +287,11 @@ router.post('/', async (req: Request, res: Response) => {
                 userId: newUser.id,
                 role: userData.organizationRole,
             })
+        }
 
-            // Auto-create native mailbox for non-admin users with a password
-            if (!userData.isAdmin && passwordHash) {
-                await createUserMailbox(newUser.id, userData.email)
-            }
+        // Auto-create native mailbox for non-admin users with a password
+        if (!userData.isAdmin && passwordHash) {
+            await createUserMailbox(newUser.id, userData.email)
         }
 
         // If sendInvite is true, send password reset email

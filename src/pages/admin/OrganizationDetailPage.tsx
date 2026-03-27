@@ -166,7 +166,7 @@ export default function OrganizationDetailPage() {
                 </div>
             </div>
 
-            <div className="overflow-x-auto border-b">
+            <div className="overflow-x-auto overflow-y-hidden border-b">
                 <div className="flex min-w-max gap-1">
                     {tabs.map((tab) => (
                         <button

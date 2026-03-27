@@ -159,6 +159,7 @@ export default function ComposePage() {
                 bodyHtml: email.body,
                 attachments,
                 inReplyTo: originalMessage?.message?.messageId,
+                references: originalMessage?.message?.references,
             })
             toast({ title: 'Email sent successfully!', variant: 'success' })
             setLocation('/mail/sent')

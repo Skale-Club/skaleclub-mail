@@ -106,6 +106,7 @@ export interface SendEmailPayload {
     bodyHtml?: string
     replyTo?: string
     inReplyTo?: string
+    references?: string
     attachments?: File[]
 }
 
@@ -226,6 +227,7 @@ export const mailApi = {
                 plainBody: payload.bodyText,
                 htmlBody: payload.bodyHtml,
                 inReplyTo: payload.inReplyTo,
+                references: payload.references,
                 attachments: await mapAttachments(payload.attachments),
                 saveToSent: true,
             }),

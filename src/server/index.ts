@@ -232,7 +232,10 @@ if (!process.env.VERCEL) {
                 const smtpServer = createSMTPServer()
                 const imapServer = createIMAPServer()
                 smtpServer.start()
-                loadImapBranding().then(() => imapServer.start())
+                loadImapBranding().then(() => imapServer.start()).catch((err) => {
+                    console.warn('⚠️  IMAP branding load failed, starting IMAP server anyway:', (err as Error).message)
+                    imapServer.start()
+                })
             } catch (err) {
                 console.warn('⚠️  SMTP/IMAP servers failed to start:', (err as Error).message)
             }

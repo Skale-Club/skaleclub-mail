@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { eq, and, desc } from 'drizzle-orm'
 import { db } from '../../../db'
 import { mailboxes, mailFolders, mailMessages, users } from '../../../db/schema'
-import { encrypt } from '../../../lib/crypto'
+import { encryptSecret } from '../../lib/crypto'
 import { createUserMailbox } from '../../lib/native-mail'
 
 const router = Router()
@@ -25,7 +25,7 @@ router.get('/', async (req: Request, res: Response) => {
             return res.status(401).json({ error: 'Unauthorized' })
         }
 
-        // Auto-ensure native mailbox exists for non-admin users with a passwordHash
+        // Safety net: ensure native mailbox exists (should already exist from user creation)
         const user = await db.query.users.findFirst({ where: eq(users.id, userId) })
         if (user && !user.isAdmin && user.passwordHash) {
             await createUserMailbox(userId, user.email)
@@ -81,6 +81,7 @@ router.get('/:id', async (req: Request, res: Response) => {
                 displayName: mailbox.displayName,
                 isDefault: mailbox.isDefault,
                 isActive: mailbox.isActive,
+                isNative: mailbox.isNative,
                 lastSyncAt: mailbox.lastSyncAt,
                 syncError: mailbox.syncError,
             },
@@ -129,12 +130,12 @@ router.post('/', async (req: Request, res: Response) => {
             smtpHost: data.smtpHost,
             smtpPort: data.smtpPort,
             smtpUsername: data.smtpUsername,
-            smtpPasswordEncrypted: encrypt(data.smtpPassword),
+            smtpPasswordEncrypted: encryptSecret(data.smtpPassword),
             smtpSecure: data.smtpSecure,
             imapHost: data.imapHost,
             imapPort: data.imapPort,
             imapUsername: data.imapUsername,
-            imapPasswordEncrypted: encrypt(data.imapPassword),
+            imapPasswordEncrypted: encryptSecret(data.imapPassword),
             imapSecure: data.imapSecure,
             isDefault: data.isDefault,
         }
@@ -210,8 +211,8 @@ router.put('/:id', async (req: Request, res: Response) => {
 
         const updateData: Record<string, unknown> = { updatedAt: new Date() }
         if (data.displayName !== undefined) updateData.displayName = data.displayName
-        if (data.smtpPassword !== undefined) updateData.smtpPasswordEncrypted = encrypt(data.smtpPassword)
-        if (data.imapPassword !== undefined) updateData.imapPasswordEncrypted = encrypt(data.imapPassword)
+        if (data.smtpPassword !== undefined) updateData.smtpPasswordEncrypted = encryptSecret(data.smtpPassword)
+        if (data.imapPassword !== undefined) updateData.imapPasswordEncrypted = encryptSecret(data.imapPassword)
         if (data.isDefault !== undefined) updateData.isDefault = data.isDefault
         if (data.isActive !== undefined) updateData.isActive = data.isActive
 
