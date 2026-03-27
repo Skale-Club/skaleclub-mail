@@ -1,5 +1,5 @@
 import React from 'react'
-import { Link } from 'wouter'
+import { Link, useLocation } from 'wouter'
 import { MailLayout } from '../../components/mail/MailLayout'
 import { EmailList, EmailItem, EmailToolbar } from '../../components/mail/EmailList'
 import { LoadingState } from '../../components/mail/EmailParts'
@@ -14,12 +14,12 @@ import {
     useSyncMailbox,
     mapMessageToEmailItem
 } from '../../hooks/useMail'
-import { mockSentEmails } from '../../lib/mock-data'
 import { Send, AlertCircle } from 'lucide-react'
 
 export default function SentPage() {
     const { selectedMailbox, mailboxes, isLoading: mailboxesLoading } = useMailbox()
     const isMobile = useIsMobile()
+    const [, navigate] = useLocation()
 
     const [selectedEmail, setSelectedEmail] = React.useState<string | null>(null)
     const [selectedEmails, setSelectedEmails] = React.useState<Set<string>>(new Set())
@@ -31,11 +31,9 @@ export default function SentPage() {
     const syncMailbox = useSyncMailbox()
 
     const emails = React.useMemo(() => {
-        if (!selectedMailbox || !data?.messages) {
-            return mockSentEmails
-        }
+        if (!data?.messages) return []
         return data.messages.map(mapMessageToEmailItem)
-    }, [selectedMailbox, data])
+    }, [data])
 
     const handleRefresh = async () => {
         if (selectedMailbox) {
@@ -48,7 +46,7 @@ export default function SentPage() {
 
     const handleSelectEmail = (id: string) => {
         if (isMobile) {
-            window.location.href = `/mail/sent/${id}`
+            navigate(`/mail/sent/${id}`)
             return
         }
         setSelectedEmail(id)
@@ -188,16 +186,16 @@ export default function SentPage() {
                 </div>
 
                 {!isMobile && (
-                    <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col bg-gray-50 dark:bg-slate-900/50">
+                    <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col bg-muted/30">
                         {selectedEmail ? (
                             <EmailDetail email={emails.find(email => email.id === selectedEmail)!} />
                         ) : (
-                            <div className="flex-1 flex items-center justify-center text-gray-500 dark:text-gray-400">
+                            <div className="flex-1 flex items-center justify-center text-muted-foreground">
                                 <div className="text-center">
-                                    <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-slate-800 flex items-center justify-center">
-                                        <Send className="w-10 h-10 text-gray-400" />
+                                    <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+                                        <Send className="w-10 h-10 text-muted-foreground" />
                                     </div>
-                                    <p className="text-lg font-medium">Select a sent email to view</p>
+                                    <p className="text-lg font-medium text-foreground">Select a sent email to view</p>
                                 </div>
                             </div>
                         )}
@@ -213,22 +211,22 @@ function EmailDetail({ email }: { email: EmailItem }) {
         <div className="flex-1 overflow-y-auto p-6">
             <div className="max-w-3xl mx-auto">
                 <div className="mb-6">
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+                    <h2 className="text-2xl font-bold text-foreground mb-4">
                         {email.subject}
                     </h2>
                     <div className="flex items-start gap-4">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-green-500 to-teal-600 flex items-center justify-center text-white font-semibold text-lg flex-shrink-0">
+                        <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-semibold text-lg flex-shrink-0">
                             Y
                         </div>
                         <div className="flex-1">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="font-semibold text-gray-900 dark:text-white">You</p>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    <p className="font-semibold text-foreground">You</p>
+                                    <p className="text-sm text-muted-foreground">
                                         To: {email.to.map(t => t.name || t.email).join(', ')}
                                     </p>
                                 </div>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                <p className="text-sm text-muted-foreground">
                                     {email.date.toLocaleString()}
                                 </p>
                             </div>
@@ -237,15 +235,15 @@ function EmailDetail({ email }: { email: EmailItem }) {
                 </div>
 
                 <div className="prose dark:prose-invert max-w-none">
-                    <div className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                    <div className="text-foreground whitespace-pre-wrap">
                         {email.snippet}
                     </div>
                 </div>
 
-                <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+                <div className="mt-8 pt-6 border-t border-border">
                     <Link
                         href={`/mail/compose?forward=${email.id}`}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors"
                     >
                         Forward
                     </Link>

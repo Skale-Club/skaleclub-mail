@@ -35,7 +35,7 @@ const dateRangeLabels = {
 }
 
 export default function SearchPage() {
-    const [location] = useLocation()
+    const [location, navigate] = useLocation()
     const { selectedMailbox, mailboxes } = useMailbox()
     const isMobile = useIsMobile()
 
@@ -133,7 +133,7 @@ export default function SearchPage() {
 
     const handleSelectEmail = (id: string) => {
         if (isMobile) {
-            window.location.href = `/mail/search/${id}`
+            navigate(`/mail/inbox/${id}`)
             return
         }
         setSelectedEmail(id)
@@ -223,13 +223,13 @@ export default function SearchPage() {
                         </form>
 
                         {showFilters && (
-                            <div className="mt-4 p-4 bg-gray-50 dark:bg-slate-800/50 rounded-xl space-y-3">
+                            <div className="mt-4 p-4 bg-muted/50 rounded-xl space-y-3">
                                 <div className="flex items-center justify-between mb-2">
-                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Filters</span>
+                                    <span className="text-sm font-medium text-foreground">Filters</span>
                                     {activeFilterCount > 0 && (
                                         <button
                                             onClick={handleClearFilters}
-                                            className="text-sm text-blue-600 hover:text-blue-700"
+                                            className="text-sm text-primary hover:text-primary/80"
                                         >
                                             Clear all
                                         </button>
@@ -238,7 +238,7 @@ export default function SearchPage() {
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div>
-                                        <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-1">
+                                        <label className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
                                             <User className="w-3 h-3" />
                                             From
                                         </label>
@@ -247,12 +247,12 @@ export default function SearchPage() {
                                             placeholder="sender@example.com"
                                             value={filters.from}
                                             onChange={(e) => setFilters({ ...filters, from: e.target.value })}
-                                            className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                                            className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
                                         />
                                     </div>
 
                                     <div>
-                                        <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-1">
+                                        <label className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
                                             <Mail className="w-3 h-3" />
                                             To
                                         </label>
@@ -261,12 +261,12 @@ export default function SearchPage() {
                                             placeholder="recipient@example.com"
                                             value={filters.to}
                                             onChange={(e) => setFilters({ ...filters, to: e.target.value })}
-                                            className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                                            className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
                                         />
                                     </div>
 
                                     <div className="sm:col-span-2">
-                                        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">
+                                        <label className="text-xs text-muted-foreground mb-1 block">
                                             Subject contains
                                         </label>
                                         <input
@@ -274,19 +274,19 @@ export default function SearchPage() {
                                             placeholder="Keywords in subject"
                                             value={filters.subject}
                                             onChange={(e) => setFilters({ ...filters, subject: e.target.value })}
-                                            className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                                            className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
                                         />
                                     </div>
 
                                     <div>
-                                        <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-1">
+                                        <label className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
                                             <Calendar className="w-3 h-3" />
                                             Date
                                         </label>
                                         <select
                                             value={filters.dateRange}
                                             onChange={(e) => setFilters({ ...filters, dateRange: e.target.value as SearchFilters['dateRange'] })}
-                                            className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                                            className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
                                         >
                                             {Object.entries(dateRangeLabels).map(([value, label]) => (
                                                 <option key={value} value={value}>{label}</option>
@@ -295,7 +295,7 @@ export default function SearchPage() {
                                     </div>
 
                                     <div>
-                                        <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-1">
+                                        <label className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
                                             <Paperclip className="w-3 h-3" />
                                             Attachments
                                         </label>
@@ -305,7 +305,7 @@ export default function SearchPage() {
                                                 ...filters,
                                                 hasAttachment: e.target.value === '' ? null : e.target.value === 'yes'
                                             })}
-                                            className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                                            className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
                                         >
                                             <option value="">Any</option>
                                             <option value="yes">Has attachments</option>
@@ -443,24 +443,24 @@ function EmailDetail({ email }: { email: EmailItem }) {
         <div className="flex-1 overflow-y-auto p-6">
             <div className="max-w-3xl mx-auto">
                 <div className="mb-6">
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+                    <h2 className="text-2xl font-bold text-foreground mb-4">
                         {email.subject}
                     </h2>
                     <div className="flex items-start gap-4">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-lg flex-shrink-0">
-                            {email.from.name[0].toUpperCase()}
+                        <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-semibold text-lg flex-shrink-0">
+                            {email.from.name?.[0]?.toUpperCase() || email.from.email[0].toUpperCase()}
                         </div>
                         <div className="flex-1">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="font-semibold text-gray-900 dark:text-white">
+                                    <p className="font-semibold text-foreground">
                                         {email.from.name}
                                     </p>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    <p className="text-sm text-muted-foreground">
                                         {email.from.email}
                                     </p>
                                 </div>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                <p className="text-sm text-muted-foreground">
                                     {email.date.toLocaleString()}
                                 </p>
                             </div>
@@ -469,21 +469,21 @@ function EmailDetail({ email }: { email: EmailItem }) {
                 </div>
 
                 <div className="prose dark:prose-invert max-w-none">
-                    <div className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                    <div className="text-foreground whitespace-pre-wrap">
                         {email.snippet}
                     </div>
                 </div>
 
-                <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700 flex items-center gap-3">
+                <div className="mt-8 pt-6 border-t border-border flex items-center gap-3">
                     <Link
                         href={`/mail/compose?reply=${email.id}`}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors"
                     >
                         Reply
                     </Link>
                     <Link
                         href={`/mail/compose?forward=${email.id}`}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-lg font-medium transition-colors"
                     >
                         Forward
                     </Link>

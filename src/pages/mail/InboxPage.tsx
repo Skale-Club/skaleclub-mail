@@ -1,6 +1,5 @@
 import React from 'react'
 import { Link, useLocation } from 'wouter'
-import { useBranding } from '../../lib/branding'
 import { MailLayout } from '../../components/mail/MailLayout'
 import { EmailList, EmailItem, EmailToolbar } from '../../components/mail/EmailList'
 import { LoadingState } from '../../components/mail/EmailParts'
@@ -17,14 +16,12 @@ import {
     useSyncMailbox,
     mapMessageToEmailItem
 } from '../../hooks/useMail'
-import { createMockInboxEmails } from '../../lib/mock-data'
 import { Inbox as InboxIcon, AlertCircle } from 'lucide-react'
 
 export default function InboxPage() {
-    const { branding } = useBranding()
-    const { selectedMailbox, mailboxes, isLoading: mailboxesLoading } = useMailbox()
     const isMobile = useIsMobile()
     const [, navigate] = useLocation()
+    const { selectedMailbox, mailboxes, isLoading: mailboxesLoading } = useMailbox()
 
     const [selectedEmail, setSelectedEmail] = React.useState<string | null>(null)
     const [selectedEmails, setSelectedEmails] = React.useState<Set<string>>(new Set())
@@ -37,16 +34,8 @@ export default function InboxPage() {
     const batchUpdate = useBatchUpdate()
     const syncMailbox = useSyncMailbox()
 
-    const mockEmails = React.useMemo(
-        () => createMockInboxEmails(branding.applicationName, branding.companyName),
-        [branding.applicationName, branding.companyName]
-    )
-
     const { emails, unreadCount } = React.useMemo(() => {
-        let baseEmails = mockEmails
-        if (selectedMailbox && data?.messages) {
-            baseEmails = data.messages.map(mapMessageToEmailItem)
-        }
+        const baseEmails = data?.messages ? data.messages.map(mapMessageToEmailItem) : []
         
         const totalUnread = baseEmails.filter(e => !e.read).length
 
@@ -56,7 +45,7 @@ export default function InboxPage() {
         if (filter === 'attachments') filtered = filtered.filter(e => e.hasAttachments)
         
         return { emails: filtered, unreadCount: totalUnread }
-    }, [selectedMailbox, data, mockEmails, filter])
+    }, [data, filter])
 
     const currentIndex = React.useMemo(() => {
         if (!selectedEmail) return -1
@@ -74,7 +63,7 @@ export default function InboxPage() {
 
     const handleSelectEmail = (id: string) => {
         if (isMobile) {
-            window.location.href = `/mail/inbox/${id}`
+            navigate(`/mail/inbox/${id}`)
             return
         }
         setSelectedEmail(id)

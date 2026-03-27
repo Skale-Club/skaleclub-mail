@@ -64,6 +64,8 @@ export interface Message {
     mailboxId: string
     folder: string
     messageId: string
+    inReplyTo?: string
+    references?: string
     from: { name: string; email: string }
     to: { name: string; email: string }[]
     cc?: { name: string; email: string }[]
@@ -71,7 +73,10 @@ export interface Message {
     subject: string
     bodyText?: string
     bodyHtml?: string
+    plainBody?: string
+    htmlBody?: string
     snippet?: string
+    headers?: Record<string, string>
     date: string
     read: boolean
     starred: boolean
@@ -81,6 +86,7 @@ export interface Message {
         mimeType: string
         size: number
     }[]
+    hasAttachments: boolean
     labels?: string[]
     createdAt: string
 }
@@ -145,19 +151,19 @@ export const mailApi = {
         return apiFetch(`/api/mail/mailboxes/${id}`)
     },
 
-    getFolders(mailboxId: string): Promise<{ folders: { name: string; count: number; unread: number }[] }> {
+    getFolders(mailboxId: string): Promise<{ folders: { id: string; name: string; remoteId?: string; type?: string; count: number; unread: number }[] }> {
         return apiFetch(`/api/mail/mailboxes/${mailboxId}/folders`)
     },
 
     getMessages(
         mailboxId: string,
-        folder: string,
+        folderId: string,
         params?: { page?: number; limit?: number; search?: string }
     ): Promise<MessageListResponse> {
         const searchParams = new URLSearchParams()
-        searchParams.set('folder', folder)
-        if (params?.page) searchParams.set('page', String(params.page))
-        if (params?.limit) searchParams.set('limit', String(params.limit))
+        searchParams.set('folderId', folderId)
+        if (params?.page !== undefined) searchParams.set('page', String(params.page))
+        if (params?.limit !== undefined) searchParams.set('limit', String(params.limit))
         if (params?.search) searchParams.set('search', params.search)
 
         return apiFetch(`/api/mail/mailboxes/${mailboxId}/messages?${searchParams}`)
@@ -190,10 +196,10 @@ export const mailApi = {
         })
     },
 
-    moveMessage(mailboxId: string, messageId: string, folder: string): Promise<void> {
+    moveMessage(mailboxId: string, messageId: string, folderId: string): Promise<void> {
         return apiFetch(`/api/mail/mailboxes/${mailboxId}/messages/${messageId}/move`, {
             method: 'POST',
-            body: JSON.stringify({ folder }),
+            body: JSON.stringify({ folderId }),
         })
     },
 
@@ -201,11 +207,11 @@ export const mailApi = {
         mailboxId: string,
         messageIds: string[],
         action: 'read' | 'unread' | 'star' | 'unstar' | 'delete' | 'archive' | 'move',
-        folder?: string
+        folderId?: string
     ): Promise<void> {
         return apiFetch(`/api/mail/mailboxes/${mailboxId}/messages/batch`, {
             method: 'POST',
-            body: JSON.stringify({ messageIds, action, folder }),
+            body: JSON.stringify({ messageIds, action, folderId }),
         })
     },
 
@@ -249,13 +255,13 @@ export const mailApi = {
     searchMessages(
         mailboxId: string,
         query: string,
-        params?: { folder?: string; page?: number; limit?: number }
+        params?: { folderId?: string; page?: number; limit?: number }
     ): Promise<MessageListResponse> {
         const searchParams = new URLSearchParams()
         searchParams.set('q', query)
-        if (params?.folder) searchParams.set('folder', params.folder)
-        if (params?.page) searchParams.set('page', String(params.page))
-        if (params?.limit) searchParams.set('limit', String(params.limit))
+        if (params?.folderId) searchParams.set('folderId', params.folderId)
+        if (params?.page !== undefined) searchParams.set('page', String(params.page))
+        if (params?.limit !== undefined) searchParams.set('limit', String(params.limit))
 
         return apiFetch(`/api/mail/mailboxes/${mailboxId}/search?${searchParams}`)
     },

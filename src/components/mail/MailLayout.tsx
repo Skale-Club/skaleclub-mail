@@ -1,5 +1,5 @@
 import React from 'react'
-import { Link } from 'wouter'
+import { Link, useLocation } from 'wouter'
 import { useAuth } from '../../hooks/useAuth'
 import { useBranding } from '../../lib/branding'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -9,6 +9,7 @@ import { ModeToggle } from '../mode-toggle'
 import { supabase } from '../../lib/supabase'
 import { AccountSwitcher } from './AccountSwitcher'
 import { KeyboardShortcutsHelp, KeyboardShortcutsButton } from './KeyboardShortcutsHelp'
+import { useQueryClient } from '@tanstack/react-query'
 import {
     Inbox,
     Send,
@@ -53,6 +54,8 @@ export function MailLayout({ children }: MailLayoutProps) {
     const { branding } = useBranding()
     const isMobile = useIsMobile()
     const { isOpen: shortcutsOpen, closeHelp: closeShortcuts } = useKeyboardShortcutHelp()
+    const queryClient = useQueryClient()
+    const [location] = useLocation()
     const [sidebarOpen, setSidebarOpen] = React.useState(false)
     const [isCollapsed, setIsCollapsed] = React.useState(false)
     const [userMenuOpen, setUserMenuOpen] = React.useState(false)
@@ -65,7 +68,7 @@ export function MailLayout({ children }: MailLayoutProps) {
     }
 
     const isActiveRoute = (href: string) => {
-        return window.location.pathname.startsWith(href)
+        return location.startsWith(href)
     }
 
     const handleSearch = (e: React.FormEvent) => {
@@ -317,9 +320,9 @@ export function MailLayout({ children }: MailLayoutProps) {
                             )}
                             
                             <button 
-                                onClick={() => window.location.reload()}
+                                onClick={() => queryClient.invalidateQueries({ queryKey: ['messages'] })}
                                 className="p-2 rounded-xl hover:bg-accent hover:text-accent-foreground text-muted-foreground transition-colors relative"
-                                title="Refresh Page"
+                                title="Refresh"
                             >
                                 <RefreshCw className="w-5 h-5" />
                             </button>

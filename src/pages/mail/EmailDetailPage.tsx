@@ -239,7 +239,13 @@ export default function EmailDetailPage() {
             deleteMessage.mutate(email.id)
         }
         toast({ title: 'Email moved to trash', variant: 'success' })
-        setLocation('/mail/inbox')
+        const backPath = params.folder === 'inbox' ? '/mail/inbox'
+            : params.folder === 'sent' ? '/mail/sent'
+            : params.folder === 'starred' ? '/mail/starred'
+            : params.folder === 'drafts' ? '/mail/drafts'
+            : params.folder === 'trash' ? '/mail/trash'
+            : '/mail/inbox'
+        setLocation(backPath)
     }
 
     const handleArchive = () => {
@@ -247,7 +253,13 @@ export default function EmailDetailPage() {
             archiveMessage.mutate(email.id)
         }
         toast({ title: 'Email archived', variant: 'success' })
-        setLocation('/mail/inbox')
+        const backPath = params.folder === 'inbox' ? '/mail/inbox'
+            : params.folder === 'sent' ? '/mail/sent'
+            : params.folder === 'starred' ? '/mail/starred'
+            : params.folder === 'drafts' ? '/mail/drafts'
+            : params.folder === 'trash' ? '/mail/trash'
+            : '/mail/inbox'
+        setLocation(backPath)
     }
 
     const handleReply = (messageId: string) => {
@@ -268,10 +280,10 @@ export default function EmailDetailPage() {
                 <div className="flex items-center justify-center h-full">
                     <div className="text-center max-w-md px-6">
                         <AlertCircle className="w-16 h-16 mx-auto mb-4 text-yellow-500" />
-                        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                        <h2 className="text-xl font-bold text-foreground mb-2">
                             No Email Accounts Connected
                         </h2>
-                        <p className="text-gray-500 dark:text-gray-400 mb-6">
+                        <p className="text-muted-foreground mb-6">
                             Add an email account to view emails.
                         </p>
                         <Link
@@ -324,20 +336,28 @@ export default function EmailDetailPage() {
 
     return (
         <MailLayout>
-            <div className="flex flex-col h-full bg-white dark:bg-slate-900">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-slate-900">
+            <div className="flex flex-col h-full bg-background">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-background">
                     <div className="flex items-center gap-2">
                         <button
-                            onClick={() => setLocation('/mail/inbox')}
-                            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+                            onClick={() => {
+                                const backPath = params.folder === 'inbox' ? '/mail/inbox'
+                                    : params.folder === 'sent' ? '/mail/sent'
+                                    : params.folder === 'starred' ? '/mail/starred'
+                                    : params.folder === 'drafts' ? '/mail/drafts'
+                                    : params.folder === 'trash' ? '/mail/trash'
+                                    : '/mail/inbox'
+                                setLocation(backPath)
+                            }}
+                            className="p-2 rounded-lg hover:bg-muted transition-colors"
                         >
-                            <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                            <ArrowLeft className="w-5 h-5 text-muted-foreground" />
                         </button>
-                        <span className="text-sm text-gray-500 dark:text-gray-400 capitalize">
+                        <span className="text-sm text-muted-foreground capitalize">
                             {params.folder}
                         </span>
                         {thread.messages.length > 1 && (
-                            <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs">
+                            <span className="flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs">
                                 <MessagesSquare className="w-3 h-3" />
                                 {thread.messages.length}
                             </span>
@@ -346,13 +366,13 @@ export default function EmailDetailPage() {
 
                     <div className="flex items-center gap-1">
                         {thread.messages.length > 1 && (
-                            <div className="flex items-center gap-1 mr-2 p-1 bg-gray-100 dark:bg-slate-800 rounded-lg">
+                            <div className="flex items-center gap-1 mr-2 p-1 bg-muted rounded-lg">
                                 <button
                                     onClick={() => setViewMode('thread')}
                                     className={`px-2 py-1 text-xs rounded-md transition-colors ${
                                         viewMode === 'thread'
-                                            ? 'bg-white dark:bg-slate-700 text-gray-900 dark:text-white shadow-sm'
-                                            : 'text-gray-600 dark:text-gray-400'
+                                            ? 'bg-background text-foreground shadow-sm'
+                                            : 'text-muted-foreground'
                                     }`}
                                 >
                                     Thread
@@ -361,8 +381,8 @@ export default function EmailDetailPage() {
                                     onClick={() => setViewMode('single')}
                                     className={`px-2 py-1 text-xs rounded-md transition-colors ${
                                         viewMode === 'single'
-                                            ? 'bg-white dark:bg-slate-700 text-gray-900 dark:text-white shadow-sm'
-                                            : 'text-gray-600 dark:text-gray-400'
+                                            ? 'bg-background text-foreground shadow-sm'
+                                            : 'text-muted-foreground'
                                     }`}
                                 >
                                     Single
@@ -371,14 +391,14 @@ export default function EmailDetailPage() {
                         )}
                         <button
                             onClick={handleArchive}
-                            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-600 dark:text-gray-400 transition-colors"
+                            className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors"
                             title="Archive"
                         >
                             <Archive className="w-5 h-5" />
                         </button>
                         <button
                             onClick={handleDelete}
-                            className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 transition-colors"
+                            className="p-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
                             title="Delete"
                         >
                             <Trash2 className="w-5 h-5" />
@@ -388,7 +408,7 @@ export default function EmailDetailPage() {
                             className={`p-2 rounded-lg transition-colors ${
                                 thread.starred
                                     ? 'text-yellow-500 hover:text-yellow-600'
-                                    : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                                    : 'text-muted-foreground hover:text-foreground'
                             }`}
                             title={thread.starred ? 'Unstar' : 'Star'}
                         >
@@ -397,7 +417,7 @@ export default function EmailDetailPage() {
                         <div className="relative">
                             <button
                                 onClick={() => setMenuOpen(!menuOpen)}
-                                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-600 dark:text-gray-400 transition-colors"
+                                className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors"
                             >
                                 <MoreVertical className="w-5 h-5" />
                             </button>
@@ -408,13 +428,13 @@ export default function EmailDetailPage() {
                                         className="fixed inset-0 z-40"
                                         onClick={() => setMenuOpen(false)}
                                     />
-                                    <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 py-1 z-50">
+                                    <div className="absolute right-0 top-full mt-1 w-48 bg-popover rounded-xl shadow-xl border border-border py-1 z-50">
                                         <button
                                             onClick={() => {
                                                 setMenuOpen(false)
                                                 handleReply(thread.messages[thread.messages.length - 1].id)
                                             }}
-                                            className="flex items-center gap-3 w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                                            className="flex items-center gap-3 w-full px-4 py-2 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground"
                                         >
                                             <Reply className="w-4 h-4" />
                                             Reply
@@ -424,7 +444,7 @@ export default function EmailDetailPage() {
                                                 setMenuOpen(false)
                                                 handleReplyAll(thread.messages[thread.messages.length - 1].id)
                                             }}
-                                            className="flex items-center gap-3 w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                                            className="flex items-center gap-3 w-full px-4 py-2 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground"
                                         >
                                             <ReplyAll className="w-4 h-4" />
                                             Reply All
@@ -434,7 +454,7 @@ export default function EmailDetailPage() {
                                                 setMenuOpen(false)
                                                 handleForward(thread.messages[thread.messages.length - 1].id)
                                             }}
-                                            className="flex items-center gap-3 w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                                            className="flex items-center gap-3 w-full px-4 py-2 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground"
                                         >
                                             <Forward className="w-4 h-4" />
                                             Forward
@@ -515,14 +535,14 @@ function SingleEmailView({
                     </div>
 
                     <div className="prose dark:prose-invert max-w-none">
-                        <div className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
+                        <div className="text-foreground whitespace-pre-wrap leading-relaxed">
                             {message.body}
                         </div>
                     </div>
 
                     {message.attachments && message.attachments.length > 0 && (
                         <div className="mt-8">
-                            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                            <h3 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
                                 <Paperclip className="w-4 h-4" />
                                 Attachments ({message.attachments.length})
                             </h3>
@@ -530,16 +550,16 @@ function SingleEmailView({
                                 {message.attachments.map((attachment, index) => (
                                     <div
                                         key={index}
-                                        className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-slate-800 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                                        className="flex items-center gap-2 px-3 py-2 bg-muted rounded-lg hover:bg-muted/80 transition-colors cursor-pointer"
                                     >
-                                        <Paperclip className="w-4 h-4 text-gray-500" />
+                                        <Paperclip className="w-4 h-4 text-muted-foreground" />
                                         <div>
-                                            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            <p className="text-sm font-medium text-foreground">
                                                 {attachment.name}
                                             </p>
-                                            <p className="text-xs text-gray-500">{attachment.size}</p>
+                                            <p className="text-xs text-muted-foreground">{attachment.size}</p>
                                         </div>
-                                        <Download className="w-4 h-4 text-gray-400 ml-2" />
+                                        <Download className="w-4 h-4 text-muted-foreground ml-2" />
                                     </div>
                                 ))}
                             </div>

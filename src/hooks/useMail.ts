@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
+import React from 'react'
 import { mailApi, Message, SendEmailPayload, SaveDraftPayload } from '../lib/mail-api'
 import { useMailbox } from './useMailbox'
 
@@ -15,35 +16,57 @@ export function useFolders() {
     })
 }
 
-export function useMessages(folder: string, page = 1, limit = 50, search?: string) {
+export function useMessages(folderType: string, page = 1, limit = 50, search?: string) {
     const { selectedMailbox } = useMailbox()
+    const { data: foldersData } = useFolders()
+
+    const folderId = React.useMemo(() => {
+        if (!foldersData?.folders) return undefined
+        const folder = foldersData.folders.find(
+            (f: { remoteId?: string; type?: string; id: string }) =>
+                f.type === folderType || f.remoteId?.toLowerCase() === folderType.toLowerCase()
+        )
+        return folder?.id
+    }, [foldersData, folderType])
 
     return useQuery({
-        queryKey: ['messages', selectedMailbox?.id, folder, page, limit, search],
+        queryKey: ['messages', selectedMailbox?.id, folderType, folderId, page, limit, search],
         queryFn: () => {
             if (!selectedMailbox) throw new Error('No mailbox selected')
-            return mailApi.getMessages(selectedMailbox.id, folder, { page, limit, search })
+            if (!folderId) return { messages: [], total: 0, hasMore: false }
+            return mailApi.getMessages(selectedMailbox.id, folderId, { page, limit, search })
         },
-        enabled: !!selectedMailbox && !!folder,
+        enabled: !!selectedMailbox && !!folderId,
         staleTime: 30000,
     })
 }
 
-export function useInfiniteMessages(folder: string, limit = 30) {
+export function useInfiniteMessages(folderType: string, limit = 30) {
     const { selectedMailbox } = useMailbox()
+    const { data: foldersData } = useFolders()
+
+    const folderId = React.useMemo(() => {
+        if (!foldersData?.folders) return undefined
+        const folder = foldersData.folders.find(
+            (f: { remoteId?: string; type?: string; id: string }) =>
+                f.type === folderType || f.remoteId?.toLowerCase() === folderType.toLowerCase()
+        )
+        return folder?.id
+    }, [foldersData, folderType])
 
     return useInfiniteQuery({
-        queryKey: ['messages', 'infinite', selectedMailbox?.id, folder],
+        queryKey: ['messages', 'infinite', selectedMailbox?.id, folderType, folderId],
         queryFn: async ({ pageParam = 1 }) => {
             if (!selectedMailbox) throw new Error('No mailbox selected')
-            return mailApi.getMessages(selectedMailbox.id, folder, { page: pageParam, limit })
+            if (!folderId) return { messages: [], total: 0, hasMore: false }
+            return mailApi.getMessages(selectedMailbox.id, folderId, { page: pageParam, limit })
         },
         getNextPageParam: (lastPage, allPages) => {
             if (!lastPage.hasMore) return undefined
             return allPages.length + 1
         },
         initialPageParam: 1,
-        enabled: !!selectedMailbox && !!folder,
+        enabled: !!selectedMailbox && !!folderId,
         staleTime: 30000,
     })
 }
@@ -122,13 +145,13 @@ export function useMoveMessage() {
     return useMutation({
         mutationFn: ({
             messageId,
-            folder
+            folderId
         }: {
             messageId: string
-            folder: string
+            folderId: string
         }) => {
             if (!selectedMailbox) throw new Error('No mailbox selected')
-            return mailApi.moveMessage(selectedMailbox.id, messageId, folder)
+            return mailApi.moveMessage(selectedMailbox.id, messageId, folderId)
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['messages'] })
@@ -145,14 +168,14 @@ export function useBatchUpdate() {
         mutationFn: ({
             messageIds,
             action,
-            folder
+            folderId
         }: {
             messageIds: string[]
             action: 'read' | 'unread' | 'star' | 'unstar' | 'delete' | 'archive' | 'move'
-            folder?: string
+            folderId?: string
         }) => {
             if (!selectedMailbox) throw new Error('No mailbox selected')
-            return mailApi.batchUpdate(selectedMailbox.id, messageIds, action, folder)
+            return mailApi.batchUpdate(selectedMailbox.id, messageIds, action, folderId)
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['messages'] })
@@ -208,14 +231,14 @@ export function useSyncMailbox() {
     })
 }
 
-export function useSearchMessages(query: string, folder?: string) {
+export function useSearchMessages(query: string, folderId?: string) {
     const { selectedMailbox } = useMailbox()
 
     return useQuery({
-        queryKey: ['search', selectedMailbox?.id, query, folder],
+        queryKey: ['search', selectedMailbox?.id, query, folderId],
         queryFn: () => {
             if (!selectedMailbox) throw new Error('No mailbox selected')
-            return mailApi.searchMessages(selectedMailbox.id, query, { folder })
+            return mailApi.searchMessages(selectedMailbox.id, query, { folderId })
         },
         enabled: !!selectedMailbox && query.length >= 2,
     })

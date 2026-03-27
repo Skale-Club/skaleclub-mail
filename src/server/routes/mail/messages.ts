@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
-import { eq, and, desc, inArray } from 'drizzle-orm'
+import { eq, and, desc, inArray, sql, ilike, or } from 'drizzle-orm'
 import { db } from '../../../db'
 import { mailMessages, mailFolders, mailboxes } from '../../../db/schema'
 import { checkUserMailboxAccess } from './mailboxes'
@@ -53,24 +53,29 @@ router.get('/:mailboxId/messages', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Mailbox not found' })
         }
 
-        const conditions = [eq(mailMessages.mailboxId, mailboxId)]
+        const conditions = [
+            eq(mailMessages.mailboxId, mailboxId),
+            eq(mailMessages.isDeleted, false),
+        ]
 
         if (folderId) {
             conditions.push(eq(mailMessages.folderId, folderId))
         }
 
-        const messages = await db.query.mailMessages.findMany({
-            where: and(...conditions),
-            orderBy: [desc(mailMessages.receivedAt)],
-            limit,
-            offset,
-        })
+        const [messages, countResult] = await Promise.all([
+            db.query.mailMessages.findMany({
+                where: and(...conditions),
+                orderBy: [desc(mailMessages.receivedAt)],
+                limit,
+                offset,
+            }),
+            db
+                .select({ count: sql<number>`count(*)::int` })
+                .from(mailMessages)
+                .where(and(...conditions)),
+        ])
 
-        const [{ count }] = await db
-            .select({ count: eq(mailMessages.id, mailMessages.id) })
-            .from(mailMessages)
-            .where(and(...conditions))
-
+        const total = countResult[0]?.count ?? 0
         const items = messages.map(mailMessageToListItem)
 
         res.json({
@@ -78,8 +83,8 @@ router.get('/:mailboxId/messages', async (req: Request, res: Response) => {
             pagination: {
                 page,
                 limit,
-                total: messages.length,
-                totalPages: Math.ceil(messages.length / limit),
+                total,
+                totalPages: Math.ceil(total / limit),
             },
         })
     } catch (error) {
@@ -127,7 +132,7 @@ router.get('/:mailboxId/messages/:messageId', async (req: Request, res: Response
                 inReplyTo: message.inReplyTo,
                 references: message.references,
                 subject: message.subject,
-                from: { name: message.fromName, address: message.fromAddress },
+                from: { name: message.fromName, email: message.fromAddress },
                 to: message.toAddresses,
                 cc: message.ccAddresses,
                 bcc: message.bccAddresses,
@@ -218,7 +223,7 @@ router.delete('/:mailboxId/messages/:messageId', async (req: Request, res: Respo
 
         await db.update(mailMessages)
             .set({ isDeleted: true, updatedAt: new Date() })
-            .where(eq(mailMessages.id, messageId))
+            .where(and(eq(mailMessages.id, messageId), eq(mailMessages.mailboxId, mailboxId)))
 
         res.json({ success: true })
     } catch (error) {
@@ -252,7 +257,7 @@ router.post('/:mailboxId/messages/:messageId/archive', async (req: Request, res:
         if (archiveFolder) {
             await db.update(mailMessages)
                 .set({ folderId: archiveFolder.id, updatedAt: new Date() })
-                .where(eq(mailMessages.id, messageId))
+                .where(and(eq(mailMessages.id, messageId), eq(mailMessages.mailboxId, mailboxId)))
         }
 
         res.json({ success: true })
@@ -288,7 +293,7 @@ router.post('/:mailboxId/messages/:messageId/spam', async (req: Request, res: Re
         if (spamFolder && isSpam) {
             await db.update(mailMessages)
                 .set({ folderId: spamFolder.id, updatedAt: new Date() })
-                .where(eq(mailMessages.id, messageId))
+                .where(and(eq(mailMessages.id, messageId), eq(mailMessages.mailboxId, mailboxId)))
         } else {
             const inboxFolder = await db.query.mailFolders.findFirst({
                 where: and(
@@ -299,7 +304,7 @@ router.post('/:mailboxId/messages/:messageId/spam', async (req: Request, res: Re
             if (inboxFolder) {
                 await db.update(mailMessages)
                     .set({ folderId: inboxFolder.id, updatedAt: new Date() })
-                    .where(eq(mailMessages.id, messageId))
+                    .where(and(eq(mailMessages.id, messageId), eq(mailMessages.mailboxId, mailboxId)))
             }
         }
 
@@ -333,7 +338,7 @@ router.post('/:mailboxId/messages/:messageId/move', async (req: Request, res: Re
 
         await db.update(mailMessages)
             .set({ folderId: data.folderId, updatedAt: new Date() })
-            .where(eq(mailMessages.id, messageId))
+            .where(and(eq(mailMessages.id, messageId), eq(mailMessages.mailboxId, mailboxId)))
 
         res.json({ success: true })
     } catch (error) {
@@ -367,7 +372,7 @@ router.post('/:mailboxId/messages/batch', async (req: Request, res: Response) =>
 
         const data = schema.parse(req.body)
 
-        const updateData: any = { updatedAt: new Date() }
+        const updateData: Record<string, unknown> = { updatedAt: new Date() }
 
         switch (data.action) {
             case 'archive':
@@ -426,7 +431,7 @@ router.post('/:mailboxId/messages/batch', async (req: Request, res: Response) =>
 
         await db.update(mailMessages)
             .set(updateData)
-            .where(inArray(mailMessages.id, data.messageIds))
+            .where(and(inArray(mailMessages.id, data.messageIds), eq(mailMessages.mailboxId, mailboxId)))
 
         for (const messageId of data.messageIds) {
             await runFiltersOnMessage(messageId)
@@ -438,6 +443,75 @@ router.post('/:mailboxId/messages/batch', async (req: Request, res: Response) =>
             return res.status(400).json({ error: error.errors })
         }
         console.error('Error batch updating messages:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+router.get('/:mailboxId/search', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        const mailboxId = req.params.mailboxId
+        const q = req.query.q as string | undefined
+        const folderId = req.query.folderId as string | undefined
+        const page = parseInt(req.query.page as string) || 1
+        const limit = Math.min(parseInt(req.query.limit as string) || 50, 100)
+        const offset = (page - 1) * limit
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        if (!q || q.trim().length < 2) {
+            return res.json({ messages: [], pagination: { page, limit, total: 0, totalPages: 0 } })
+        }
+
+        const mailbox = await checkUserMailboxAccess(userId, mailboxId)
+        if (!mailbox) {
+            return res.status(404).json({ error: 'Mailbox not found' })
+        }
+
+        const conditions = [
+            eq(mailMessages.mailboxId, mailboxId),
+            eq(mailMessages.isDeleted, false),
+            or(
+                ilike(mailMessages.subject, `%${q}%`),
+                ilike(mailMessages.fromName, `%${q}%`),
+                ilike(mailMessages.fromAddress, `%${q}%`),
+                ilike(mailMessages.plainBody, `%${q}%`),
+            ),
+        ]
+
+        if (folderId) {
+            conditions.push(eq(mailMessages.folderId, folderId))
+        }
+
+        const [messages, countResult] = await Promise.all([
+            db.query.mailMessages.findMany({
+                where: and(...conditions),
+                orderBy: [desc(mailMessages.receivedAt)],
+                limit,
+                offset,
+            }),
+            db
+                .select({ count: sql<number>`count(*)::int` })
+                .from(mailMessages)
+                .where(and(...conditions)),
+        ])
+
+        const total = countResult[0]?.count ?? 0
+        const items = messages.map(mailMessageToListItem)
+
+        res.json({
+            messages: items,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit),
+            },
+        })
+    } catch (error) {
+        console.error('Error searching messages:', error)
         res.status(500).json({ error: 'Internal server error' })
     }
 })

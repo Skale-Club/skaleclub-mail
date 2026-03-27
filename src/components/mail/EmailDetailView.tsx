@@ -1,5 +1,5 @@
 import React from 'react'
-import { Link, useLocation } from 'wouter'
+import { Link } from 'wouter'
 import { EmailItem } from './EmailList'
 import {
     Star,
@@ -20,7 +20,6 @@ interface EmailDetailViewProps {
 }
 
 export function EmailDetailView({ email, onStar, onDelete, onArchive }: EmailDetailViewProps) {
-    const [, navigate] = useLocation()
     const avatarColor = getAvatarColor(email.from.email)
     const initials = getInitials(email.from.name || email.from.email)
 

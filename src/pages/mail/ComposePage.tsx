@@ -1,9 +1,9 @@
 import React from 'react'
-import { Link, useLocation } from 'wouter'
+import { Link, useLocation, useSearch } from 'wouter'
 import { MailLayout } from '../../components/mail/MailLayout'
 import { toast } from '../../components/ui/toaster'
 import { useMailbox } from '../../hooks/useMailbox'
-import { useSendEmail, useSaveDraft } from '../../hooks/useMail'
+import { useSendEmail, useSaveDraft, useMessage } from '../../hooks/useMail'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import { RichTextEditor, htmlToPlainText } from '../../components/mail/RichTextEditor'
 import { apiFetch } from '../../lib/api-client'
@@ -36,9 +36,17 @@ interface ComposeEmail {
 
 export default function ComposePage() {
     const [, setLocation] = useLocation()
+    const search = useSearch()
+    const params = new URLSearchParams(search)
+    const replyToId = params.get('reply')
+    const replyAll = params.get('replyAll') === 'true'
+    const forwardId = params.get('forward')
+    const draftId = params.get('draft')
+
     const { selectedMailbox, mailboxes } = useMailbox()
     const sendEmail = useSendEmail()
     const saveDraft = useSaveDraft()
+    const { data: originalMessage } = useMessage(replyToId || forwardId || draftId)
 
     const [email, setEmail] = React.useState<ComposeEmail>({
         to: '',
@@ -54,6 +62,7 @@ export default function ComposePage() {
     const [discardConfirm, setDiscardConfirm] = React.useState(false)
     const [signatures, setSignatures] = React.useState<Signature[]>([])
     const [showSignatureMenu, setShowSignatureMenu] = React.useState(false)
+    const [prefilled, setPrefilled] = React.useState(false)
 
     React.useEffect(() => {
         if (selectedMailbox) {
@@ -68,6 +77,40 @@ export default function ComposePage() {
                 .catch(console.error)
         }
     }, [selectedMailbox])
+
+    React.useEffect(() => {
+        if (prefilled || !originalMessage?.message) return
+        const msg = originalMessage.message
+        const updates: Partial<ComposeEmail> = {}
+
+        if (replyToId) {
+            updates.to = msg.from?.email || ''
+            updates.subject = msg.subject?.startsWith('Re:') ? msg.subject : `Re: ${msg.subject || ''}`
+            const bodyText = msg.bodyHtml || msg.plainBody || ''
+            updates.body = `<br/><br/><blockquote style="border-left:2px solid #ccc;padding-left:12px;color:#666;">${bodyText}</blockquote>`
+            if (replyAll && msg.to) {
+                const allRecipients = [...msg.to]
+                if (msg.cc) allRecipients.push(...msg.cc)
+                updates.cc = allRecipients.map((r: { email: string }) => r.email).filter((e: string) => e !== selectedMailbox?.email).join(', ')
+            }
+            if (msg.cc?.length) setShowCc(true)
+        } else if (forwardId) {
+            updates.subject = msg.subject?.startsWith('Fwd:') ? msg.subject : `Fwd: ${msg.subject || ''}`
+            const bodyText = msg.bodyHtml || msg.plainBody || ''
+            updates.body = `<br/><br/><p>---------- Forwarded message ----------<br>From: ${msg.from?.name || ''} &lt;${msg.from?.email}&gt;<br>Date: ${msg.date || ''}<br>Subject: ${msg.subject || ''}</p><blockquote style="border-left:2px solid #ccc;padding-left:12px;color:#666;">${bodyText}</blockquote>`
+        } else if (draftId) {
+            updates.to = msg.to?.map((r: { email: string }) => r.email).join(', ') || ''
+            updates.cc = msg.cc?.map((r: { email: string }) => r.email).join(', ') || ''
+            updates.subject = msg.subject || ''
+            updates.body = msg.bodyHtml || msg.plainBody || ''
+            if (msg.cc?.length) setShowCc(true)
+        }
+
+        if (Object.keys(updates).length > 0) {
+            setEmail(prev => ({ ...prev, ...updates }))
+            setPrefilled(true)
+        }
+    }, [originalMessage, replyToId, replyAll, forwardId, draftId, prefilled, selectedMailbox])
 
     const insertSignature = (signature: Signature) => {
         setEmail(prev => ({
@@ -114,7 +157,8 @@ export default function ComposePage() {
                 subject: email.subject,
                 bodyText: htmlToPlainText(email.body),
                 bodyHtml: email.body,
-                attachments
+                attachments,
+                inReplyTo: originalMessage?.message?.messageId,
             })
             toast({ title: 'Email sent successfully!', variant: 'success' })
             setLocation('/mail/sent')
@@ -140,7 +184,8 @@ export default function ComposePage() {
                 bcc: email.bcc ? parseEmailList(email.bcc) : undefined,
                 subject: email.subject,
                 bodyText: htmlToPlainText(email.body),
-                bodyHtml: email.body
+                bodyHtml: email.body,
+                draftId: draftId || undefined,
             })
             setIsSaved(true)
             toast({ title: 'Draft saved', variant: 'success' })
@@ -224,7 +269,7 @@ export default function ComposePage() {
                             <ArrowLeft className="w-5 h-5 text-muted-foreground" />
                         </Link>
                         <h1 className="text-lg font-semibold text-foreground">
-                            New Message
+                            {replyToId ? 'Reply' : forwardId ? 'Forward' : draftId ? 'Edit Draft' : 'New Message'}
                         </h1>
                         {selectedMailbox && (
                             <span className="text-sm text-muted-foreground hidden sm:inline">
