@@ -37,6 +37,7 @@ jobs:
           username: root
           key: ${{ secrets.HETZNER_SSH_KEY }}
           command_timeout: 20m
+          envs: IMAGE_NAME,DEPLOY_DIR,HEALTH_CHECK_URL,HEALTH_CHECK_RETRIES,HEALTH_CHECK_INTERVAL
           script: |
             set -euo pipefail
             
