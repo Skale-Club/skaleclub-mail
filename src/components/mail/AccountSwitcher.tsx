@@ -1,7 +1,6 @@
 import React from 'react'
 import { Link } from 'wouter'
 import { useMailbox, getProviderColor, getProviderIcon, Mailbox } from '../../hooks/useMailbox'
-import { useIsMobile } from '../../hooks/useIsMobile'
 import { Plus, Check, AlertCircle, ChevronDown, Mail, RefreshCw, Settings } from 'lucide-react'
 
 interface AccountSwitcherProps {
@@ -11,7 +10,6 @@ interface AccountSwitcherProps {
 export function AccountSwitcher({ compact = false }: AccountSwitcherProps) {
     const { mailboxes, selectedMailbox, setSelectedMailbox, isLoading, refreshMailboxes } = useMailbox()
     const [isOpen, setIsOpen] = React.useState(false)
-    const isMobile = useIsMobile()
 
     if (isLoading) {
         return (
@@ -35,13 +33,13 @@ export function AccountSwitcher({ compact = false }: AccountSwitcherProps) {
     }
 
     return (
-        <div className="relative">
+        <div className="relative w-full">
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 className={`
-                    flex items-center gap-2 rounded-xl transition-colors
-                    ${compact 
-                        ? 'p-2 hover:bg-accent' 
+                    flex items-center gap-2 rounded-xl transition-colors w-full
+                    ${compact
+                        ? 'p-2 hover:bg-accent'
                         : 'px-3 py-2 bg-accent/50 hover:bg-accent'
                     }
                 `}
@@ -83,11 +81,7 @@ export function AccountSwitcher({ compact = false }: AccountSwitcherProps) {
                         className="fixed inset-0 z-40"
                         onClick={() => setIsOpen(false)}
                     />
-                    <div className={`
-                        absolute z-50 bg-popover border border-border rounded-xl shadow-xl py-2
-                        ${isMobile ? 'left-0 right-0 w-screen max-w-[calc(100vw-2rem)] -translate-x-1/2' : 'right-0 w-72'}
-                        mt-2
-                    `}>
+                    <div className="absolute left-0 right-0 z-50 bg-popover border border-border rounded-xl shadow-xl py-2 mt-2">
                         <div className="px-3 py-2 border-b border-border">
                             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                                 Email Accounts

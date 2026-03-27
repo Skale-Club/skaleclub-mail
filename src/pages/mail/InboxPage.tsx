@@ -13,6 +13,7 @@ import {
     useDeleteMessage,
     useArchiveMessage,
     useBatchUpdate,
+    useSpamMessage,
     useSyncMailbox,
     mapMessageToEmailItem
 } from '../../hooks/useMail'
@@ -32,6 +33,7 @@ export default function InboxPage() {
     const deleteMessage = useDeleteMessage()
     const archiveMessage = useArchiveMessage()
     const batchUpdate = useBatchUpdate()
+    const spamMessage = useSpamMessage()
     const syncMailbox = useSyncMailbox()
 
     const { emails, unreadCount } = React.useMemo(() => {
@@ -170,6 +172,27 @@ export default function InboxPage() {
         toast({ title: `${selectedEmails.size} emails archived`, variant: 'success' })
     }
 
+    const handleSpam = (id: string) => {
+        if (selectedMailbox) {
+            spamMessage.mutate({ messageId: id, isSpam: true })
+        }
+        setSelectedEmails(prev => {
+            const newSet = new Set(prev)
+            newSet.delete(id)
+            return newSet
+        })
+        toast({ title: 'Marked as spam', variant: 'success' })
+    }
+
+    const handleBulkSpam = () => {
+        if (selectedEmails.size === 0) return
+        if (selectedMailbox) {
+            batchUpdate.mutate({ messageIds: Array.from(selectedEmails), action: 'spam' })
+        }
+        setSelectedEmails(new Set())
+        toast({ title: `${selectedEmails.size} emails marked as spam`, variant: 'success' })
+    }
+
     const handleBulkRead = (read: boolean) => {
         if (selectedEmails.size === 0) return
         if (selectedMailbox) {
@@ -295,6 +318,7 @@ export default function InboxPage() {
                         onMarkUnread={() => handleBulkRead(false)}
                         onDelete={handleBulkDelete}
                         onArchive={handleBulkArchive}
+                        onSpam={handleBulkSpam}
                         onRefresh={handleRefresh}
                         isRefreshing={isFetching || syncMailbox.isPending}
                     />
@@ -309,6 +333,7 @@ export default function InboxPage() {
                             onStar={handleStar}
                             onDelete={handleDelete}
                             onArchive={handleArchive}
+                            onSpam={handleSpam}
                             emptyMessage={filter === 'all' ? "No emails in inbox" : `No ${filter} emails`}
                         />
                     </div>

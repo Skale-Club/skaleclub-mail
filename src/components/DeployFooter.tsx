@@ -5,11 +5,11 @@ const BUILD_TIMESTAMP = import.meta.env.VITE_BUILD_TIMESTAMP as string | undefin
 export function DeployFooter() {
     if (!BUILD_TIMESTAMP) return null
 
-    const date = format(new Date(BUILD_TIMESTAMP), "dd/MM/yyyy 'às' HH:mm:ss")
+    const date = format(new Date(BUILD_TIMESTAMP), "MMM d, yyyy 'at' h:mm a")
 
     return (
-        <footer className="px-4 lg:px-6 py-3 text-center text-xs text-muted-foreground/60 border-t border-border/50">
-            Último deploy: {date}
+        <footer className="px-4 py-1.5 text-center text-[10px] text-muted-foreground/40">
+            Last deploy: {date}
         </footer>
     )
 }

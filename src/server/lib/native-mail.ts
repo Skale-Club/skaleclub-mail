@@ -142,7 +142,7 @@ export async function findLocalUser(email: string): Promise<{ userId: string } |
         where: eq(users.email, email.toLowerCase()),
     })
 
-    if (!user || user.isAdmin) return null
+    if (!user) return null
 
     return { userId: user.id }
 }

@@ -10,7 +10,7 @@ import {
     uniqueIndex,
     bigint,
 } from 'drizzle-orm/pg-core'
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import { createInsertSchema, createSelectSchema } from 'drizzle-zod'
 
 // Enums
@@ -1193,7 +1193,33 @@ export const signaturesRelations = relations(signatures, ({ one }) => ({
     }),
 }))
 
+// Contacts (user's address book for autocomplete)
+export const contacts = pgTable('contacts', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').references(() => users.id).notNull(),
+    email: text('email').notNull(),
+    firstName: text('first_name'),
+    lastName: text('last_name'),
+    company: text('company'),
+    emailedCount: integer('emailed_count').default(0).notNull(),
+    lastEmailedAt: timestamp('last_emailed_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    userEmailUnique: uniqueIndex('contact_user_email_unique').on(table.userId, table.email),
+}))
+
+export const contactsRelations = relations(contacts, ({ one }) => ({
+    user: one(users, {
+        fields: [contacts.userId],
+        references: [users.id],
+    }),
+}))
+
 // Types
+export type Contact = typeof contacts.$inferSelect
+export type NewContact = typeof contacts.$inferInsert
+
 export type Mailbox = typeof mailboxes.$inferSelect
 export type NewMailbox = typeof mailboxes.$inferInsert
 

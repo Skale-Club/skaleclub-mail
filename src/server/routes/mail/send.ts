@@ -4,8 +4,8 @@ import nodemailer from 'nodemailer'
 import Imap from 'imap'
 import { v4 as uuidv4 } from 'uuid'
 import { db } from '../../../db'
-import { mailboxes, mailFolders, mailMessages } from '../../../db/schema'
-import { eq, and } from 'drizzle-orm'
+import { mailboxes, mailFolders, mailMessages, contacts } from '../../../db/schema'
+import { eq, and, sql } from 'drizzle-orm'
 import { decryptSecret } from '../../lib/crypto'
 import { checkUserMailboxAccess } from './mailboxes'
 import { createMultipartEmail } from '../../lib/html-to-text'
@@ -111,7 +111,10 @@ async function storeMessage(
         ),
     })
 
-    if (!folder) return
+    if (!folder) {
+        console.warn(`[Send] storeMessage: folder type '${folderType}' not found for mailbox ${mailboxId}`)
+        return
+    }
 
     await db.insert(mailMessages).values({
         mailboxId,
@@ -138,6 +141,7 @@ async function storeMessage(
 }
 
 router.post('/:mailboxId/send', async (req: Request, res: Response) => {
+    const startTime = Date.now()
     try {
         const userId = req.headers['x-user-id'] as string
         const mailboxId = req.params.mailboxId
@@ -185,16 +189,18 @@ router.post('/:mailboxId/send', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Message body is required' })
         }
 
-        const messageId = `<${uuidv4()}@${mailbox.email.split('@')[1] || 'mail.local'}>`
-        const fromAddress = mailbox.displayName
-            ? `${mailbox.displayName} <${mailbox.email}>`
-            : mailbox.email
-
         const allRecipients = [
             ...data.to.map(t => t.address),
             ...(data.cc?.map(c => c.address) || []),
             ...(data.bcc?.map(b => b.address) || []),
         ]
+
+        console.log(`[Send] from=${mailbox.email} native=${isNative} to=[${allRecipients.join(',')}] subject="${data.subject.substring(0, 50)}"`)
+
+        const messageId = `<${uuidv4()}@${mailbox.email.split('@')[1] || 'mail.local'}>`
+        const fromAddress = mailbox.displayName
+            ? `${mailbox.displayName} <${mailbox.email}>`
+            : mailbox.email
 
         const messageData = {
             messageId,
@@ -215,6 +221,9 @@ router.post('/:mailboxId/send', async (req: Request, res: Response) => {
                 size: Math.ceil(att.content.length * 0.75),
             })) || [],
         }
+
+        let localDelivered = 0
+        let externalRelayed = 0
 
         if (isNative) {
             // Native mailbox: bypass SMTP server, do direct delivery
@@ -251,8 +260,10 @@ router.post('/:mailboxId/send', async (req: Request, res: Response) => {
                 const recipientUserId = await findLocalUser(addr)
                 if (recipientUserId) {
                     localRecipients.push({ email: addr, userId: recipientUserId.userId })
+                    console.log(`[Send] ${addr} → LOCAL (userId=${recipientUserId.userId})`)
                 } else {
                     externalRecipients.push(addr)
+                    console.log(`[Send] ${addr} → EXTERNAL`)
                 }
             }
 
@@ -266,11 +277,16 @@ router.post('/:mailboxId/send', async (req: Request, res: Response) => {
                 })
                 if (recipientMailbox) {
                     await storeMessage(recipientMailbox.id, 'inbox', messageData, false)
+                    localDelivered++
+                    console.log(`[Send] Local delivery to ${recipientEmail}: stored in inbox`)
+                } else {
+                    console.warn(`[Send] Local delivery to ${recipientEmail}: NO MAILBOX FOUND`)
                 }
             }
 
             // 5. Relay external recipients
             if (externalRecipients.length > 0) {
+                console.log(`[Send] Relaying to ${externalRecipients.length} external recipient(s)...`)
                 try {
                     const routedRecipients: string[] = []
                     const directRelayRecipients: string[] = []
@@ -278,22 +294,27 @@ router.post('/:mailboxId/send', async (req: Request, res: Response) => {
                     for (const addr of externalRecipients) {
                         const routing = await processInboundEmail(addr)
                         if (routing.action === 'reject') {
+                            console.log(`[Send] ${addr} → REJECTED by route`)
                             continue
                         }
                         if (routing.action !== 'none' && routing.routes.length > 0) {
                             routedRecipients.push(addr)
                             await deliverViaRoutes(addr, rawEmailBuffer, routing.routes, routing.organizationId!)
+                            externalRelayed++
+                            console.log(`[Send] ${addr} → ROUTED via ${routing.routes.length} route(s)`)
                         } else {
                             directRelayRecipients.push(addr)
+                            console.log(`[Send] ${addr} → DIRECT RELAY (no routes)`)
                         }
                     }
 
                     if (directRelayRecipients.length > 0) {
                         await relayMessage(mailbox.email, directRelayRecipients, rawEmailBuffer)
+                        externalRelayed += directRelayRecipients.length
+                        console.log(`[Send] Direct relay completed for ${directRelayRecipients.length} recipient(s)`)
                     }
                 } catch (relayErr) {
-                    console.error('[Send] Relay error:', relayErr)
-                    // Don't fail the whole request if relay fails
+                    console.error('[Send] Relay FAILED:', relayErr)
                 }
             }
         } else {
@@ -355,17 +376,54 @@ router.post('/:mailboxId/send', async (req: Request, res: Response) => {
             }
         }
 
+        // Auto-register contacts from recipients
+        const recipientEntries = [
+            ...data.to,
+            ...(data.cc || []),
+            ...(data.bcc || []),
+        ]
+        for (const recipient of recipientEntries) {
+            const nameParts = recipient.name?.split(' ') || []
+            const firstName = nameParts[0] || null
+            const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : null
+
+            await db.insert(contacts).values({
+                userId,
+                email: recipient.address.toLowerCase(),
+                firstName,
+                lastName,
+                company: null,
+                emailedCount: 1,
+                lastEmailedAt: new Date(),
+            }).onConflictDoUpdate({
+                target: [contacts.userId, contacts.email],
+                set: {
+                    emailedCount: sql`${contacts.emailedCount} + 1`,
+                    lastEmailedAt: new Date(),
+                    updatedAt: new Date(),
+                },
+            })
+        }
+
+        const duration = Date.now() - startTime
+        console.log(`[Send] Completed in ${duration}ms — local=${localDelivered} external=${externalRelayed}`)
+
         res.json({
             success: true,
             messageId,
             message: 'Email sent successfully',
+            delivery: {
+                sentFolder: data.saveToSent,
+                localDelivered,
+                externalRelayed,
+            }
         })
 
     } catch (error) {
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: error.errors })
         }
-        console.error('Error sending email:', error)
+        console.error('[Send] Error:', error)
         res.status(500).json({ error: 'Failed to send email' })
     }
 })

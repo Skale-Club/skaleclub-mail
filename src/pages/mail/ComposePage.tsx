@@ -6,6 +6,7 @@ import { useMailbox } from '../../hooks/useMailbox'
 import { useSendEmail, useSaveDraft, useMessage } from '../../hooks/useMail'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import { RichTextEditor, htmlToPlainText } from '../../components/mail/RichTextEditor'
+import { ContactAutocomplete } from '../../components/mail/ContactAutocomplete'
 import { apiFetch } from '../../lib/api-client'
 import {
     ArrowLeft,
@@ -329,12 +330,10 @@ export default function ComposePage() {
                                 <label className="w-12 sm:w-16 text-sm font-medium text-muted-foreground flex-shrink-0">
                                     To
                                 </label>
-                                <input
-                                    type="text"
+                                <ContactAutocomplete
                                     value={email.to}
-                                    onChange={(e) => setEmail({ ...email, to: e.target.value })}
+                                    onChange={(value) => setEmail({ ...email, to: value })}
                                     placeholder="recipient@example.com"
-                                    className="flex-1 px-3 py-2 bg-transparent border-0 border-b border-border focus:border-primary focus:ring-0 text-foreground placeholder-muted-foreground text-sm sm:text-base"
                                 />
                                 <button
                                     onClick={() => setShowCc(!showCc)}
@@ -355,12 +354,10 @@ export default function ComposePage() {
                                     <label className="w-12 sm:w-16 text-sm font-medium text-muted-foreground flex-shrink-0">
                                         Cc
                                     </label>
-                                    <input
-                                        type="text"
+                                    <ContactAutocomplete
                                         value={email.cc}
-                                        onChange={(e) => setEmail({ ...email, cc: e.target.value })}
+                                        onChange={(value) => setEmail({ ...email, cc: value })}
                                         placeholder="cc@example.com"
-                                        className="flex-1 px-3 py-2 bg-transparent border-0 border-b border-border focus:border-primary focus:ring-0 text-foreground placeholder-muted-foreground text-sm sm:text-base"
                                     />
                                 </div>
                             )}
@@ -370,12 +367,10 @@ export default function ComposePage() {
                                     <label className="w-12 sm:w-16 text-sm font-medium text-muted-foreground flex-shrink-0">
                                         Bcc
                                     </label>
-                                    <input
-                                        type="text"
+                                    <ContactAutocomplete
                                         value={email.bcc}
-                                        onChange={(e) => setEmail({ ...email, bcc: e.target.value })}
+                                        onChange={(value) => setEmail({ ...email, bcc: value })}
                                         placeholder="bcc@example.com"
-                                        className="flex-1 px-3 py-2 bg-transparent border-0 border-b border-border focus:border-primary focus:ring-0 text-foreground placeholder-muted-foreground text-sm sm:text-base"
                                     />
                                 </div>
                             )}

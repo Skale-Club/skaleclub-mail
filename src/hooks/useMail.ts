@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
 import React from 'react'
-import { mailApi, Message, SendEmailPayload, SaveDraftPayload } from '../lib/mail-api'
+import { mailApi, Message, SendEmailPayload, SaveDraftPayload, ContactItem } from '../lib/mail-api'
 import { useMailbox } from './useMailbox'
 
 export function useFolders() {
@@ -138,6 +138,28 @@ export function useArchiveMessage() {
     })
 }
 
+export function useSpamMessage() {
+    const queryClient = useQueryClient()
+    const { selectedMailbox } = useMailbox()
+
+    return useMutation({
+        mutationFn: ({
+            messageId,
+            isSpam
+        }: {
+            messageId: string
+            isSpam: boolean
+        }) => {
+            if (!selectedMailbox) throw new Error('No mailbox selected')
+            return mailApi.spamMessage(selectedMailbox.id, messageId, isSpam)
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['messages'] })
+            queryClient.invalidateQueries({ queryKey: ['folders'] })
+        },
+    })
+}
+
 export function useMoveMessage() {
     const queryClient = useQueryClient()
     const { selectedMailbox } = useMailbox()
@@ -171,7 +193,7 @@ export function useBatchUpdate() {
             folderId
         }: {
             messageIds: string[]
-            action: 'read' | 'unread' | 'star' | 'unstar' | 'delete' | 'archive' | 'move'
+            action: 'read' | 'unread' | 'star' | 'unstar' | 'delete' | 'archive' | 'move' | 'spam' | 'unspam'
             folderId?: string
         }) => {
             if (!selectedMailbox) throw new Error('No mailbox selected')
@@ -257,4 +279,68 @@ export function mapMessageToEmailItem(message: Message): import('../components/m
         hasAttachments: !!(message.attachments && message.attachments.length > 0),
         labels: message.labels,
     }
+}
+
+// Contacts hooks
+export function useContacts(search?: string, page = 1, limit = 50) {
+    return useQuery({
+        queryKey: ['contacts', search, page, limit],
+        queryFn: () => mailApi.getContacts({ search, page, limit }),
+        staleTime: 30000,
+    })
+}
+
+export function useSearchContacts(query: string) {
+    return useQuery({
+        queryKey: ['contacts', 'search', query],
+        queryFn: () => mailApi.searchContacts(query),
+        enabled: query.length >= 1,
+        staleTime: 10000,
+    })
+}
+
+export function useCreateContact() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (data: { email: string; firstName?: string; lastName?: string; company?: string }) =>
+            mailApi.createContact(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['contacts'] })
+        },
+    })
+}
+
+export function useUpdateContact() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: { email?: string; firstName?: string; lastName?: string; company?: string } }) =>
+            mailApi.updateContact(id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['contacts'] })
+        },
+    })
+}
+
+export function useDeleteContact() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (id: string) => mailApi.deleteContact(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['contacts'] })
+        },
+    })
+}
+
+export function useImportContactsCsv() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (csvContent: string) => mailApi.importContactsCsv(csvContent),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['contacts'] })
+        },
+    })
 }

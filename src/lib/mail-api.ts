@@ -143,6 +143,18 @@ export interface Signature {
     updatedAt: string
 }
 
+export interface ContactItem {
+    id: string
+    email: string
+    firstName: string | null
+    lastName: string | null
+    company: string | null
+    emailedCount: number
+    lastEmailedAt: string | null
+    createdAt: string
+    updatedAt: string
+}
+
 export const mailApi = {
     getMailboxes(): Promise<{ mailboxes: Mailbox[] }> {
         return apiFetch('/api/mail/mailboxes')
@@ -197,6 +209,13 @@ export const mailApi = {
         })
     },
 
+    spamMessage(mailboxId: string, messageId: string, isSpam: boolean): Promise<void> {
+        return apiFetch(`/api/mail/mailboxes/${mailboxId}/messages/${messageId}/spam`, {
+            method: 'POST',
+            body: JSON.stringify({ isSpam }),
+        })
+    },
+
     moveMessage(mailboxId: string, messageId: string, folderId: string): Promise<void> {
         return apiFetch(`/api/mail/mailboxes/${mailboxId}/messages/${messageId}/move`, {
             method: 'POST',
@@ -207,7 +226,7 @@ export const mailApi = {
     batchUpdate(
         mailboxId: string,
         messageIds: string[],
-        action: 'read' | 'unread' | 'star' | 'unstar' | 'delete' | 'archive' | 'move',
+        action: 'read' | 'unread' | 'star' | 'unstar' | 'delete' | 'archive' | 'move' | 'spam' | 'unspam',
         folderId?: string
     ): Promise<void> {
         return apiFetch(`/api/mail/mailboxes/${mailboxId}/messages/batch`, {
@@ -300,6 +319,53 @@ export const mailApi = {
     deleteSignature(mailboxId: string, signatureId: string): Promise<void> {
         return apiFetch(`/api/mail/mailboxes/${mailboxId}/signatures/${signatureId}`, {
             method: 'DELETE',
+        })
+    },
+
+    // Contacts API (user-scoped, not mailbox-scoped)
+    getContacts(params?: { page?: number; limit?: number; search?: string }): Promise<{
+        contacts: ContactItem[]
+        total: number
+        page: number
+        limit: number
+        hasMore: boolean
+    }> {
+        const searchParams = new URLSearchParams()
+        if (params?.page !== undefined) searchParams.set('page', String(params.page))
+        if (params?.limit !== undefined) searchParams.set('limit', String(params.limit))
+        if (params?.search) searchParams.set('search', params.search)
+        const qs = searchParams.toString()
+        return apiFetch(`/api/mail/contacts${qs ? `?${qs}` : ''}`)
+    },
+
+    searchContacts(query: string): Promise<{ contacts: ContactItem[] }> {
+        return apiFetch(`/api/mail/contacts/search?q=${encodeURIComponent(query)}`)
+    },
+
+    createContact(data: { email: string; firstName?: string; lastName?: string; company?: string }): Promise<{ contact: ContactItem }> {
+        return apiFetch('/api/mail/contacts', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        })
+    },
+
+    updateContact(id: string, data: { email?: string; firstName?: string; lastName?: string; company?: string }): Promise<{ contact: ContactItem }> {
+        return apiFetch(`/api/mail/contacts/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        })
+    },
+
+    deleteContact(id: string): Promise<void> {
+        return apiFetch(`/api/mail/contacts/${id}`, {
+            method: 'DELETE',
+        })
+    },
+
+    importContactsCsv(csvContent: string): Promise<{ imported: number; skipped: number; errors: string[]; total: number }> {
+        return apiFetch('/api/mail/contacts/import-csv', {
+            method: 'POST',
+            body: JSON.stringify({ csvContent }),
         })
     },
 }

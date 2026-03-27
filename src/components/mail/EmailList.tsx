@@ -14,7 +14,8 @@ import {
     CheckSquare,
     Square,
     Loader2,
-    MessageSquare
+    MessageSquare,
+    ShieldAlert
 } from 'lucide-react'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { formatEmailDate } from '../../lib/utils'
@@ -49,6 +50,7 @@ interface EmailListProps {
     onStar?: (id: string) => void
     onDelete?: (id: string) => void
     onArchive?: (id: string) => void
+    onSpam?: (id: string) => void
     emptyMessage?: string
     isLoadingMore?: boolean
     hasMore?: boolean
@@ -64,6 +66,7 @@ export function EmailList({
     onStar,
     onDelete,
     onArchive,
+    onSpam,
     emptyMessage = 'No emails',
     isLoadingMore = false,
     hasMore = false,
@@ -258,6 +261,19 @@ export function EmailList({
                                         <Archive className="w-4 h-4" />
                                         Archive
                                     </button>
+                                    {onSpam && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                onSpam(email.id)
+                                                setMenuOpenId(null)
+                                            }}
+                                            className="flex items-center gap-3 w-full px-4 py-2 text-sm text-amber-500 hover:bg-amber-500/10"
+                                        >
+                                            <ShieldAlert className="w-4 h-4" />
+                                            Mark as spam
+                                        </button>
+                                    )}
                                     <div className="border-t border-border my-1" />
                                     <button
                                         onClick={(e) => {
@@ -303,6 +319,8 @@ interface EmailToolbarProps {
     onDelete: () => void
     onArchive: () => void
     onRefresh: () => void
+    onSpam?: () => void
+    spamLabel?: string
     isRefreshing?: boolean
 }
 
@@ -315,6 +333,8 @@ export function EmailToolbar({
     onDelete,
     onArchive,
     onRefresh,
+    onSpam,
+    spamLabel = 'Mark as spam',
     isRefreshing
 }: EmailToolbarProps) {
     return (
@@ -367,6 +387,15 @@ export function EmailToolbar({
                         >
                             <Archive className="w-4 h-4" />
                         </button>
+                        {onSpam && (
+                            <button
+                                onClick={onSpam}
+                                className="p-1.5 rounded-lg text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10 transition-colors"
+                                title={spamLabel}
+                            >
+                                <ShieldAlert className="w-4 h-4" />
+                            </button>
+                        )}
                         <button
                             onClick={onDelete}
                             className="p-1.5 rounded-lg text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors"

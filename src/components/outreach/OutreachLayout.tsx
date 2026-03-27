@@ -137,6 +137,7 @@ export function OutreachLayout({ children }: OutreachLayoutProps) {
                             <LogOut className="w-4 h-4 mr-2" />
                             Logout
                         </Button>
+                        <DeployFooter />
                     </div>
                 </div>
             </aside>
@@ -170,8 +171,6 @@ export function OutreachLayout({ children }: OutreachLayoutProps) {
                 <main className="p-4 lg:p-6 bg-background">
                     {children}
                 </main>
-
-                <DeployFooter />
             </div>
         </div>
     )

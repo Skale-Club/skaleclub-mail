@@ -37,6 +37,9 @@ import SentPage from './pages/mail/SentPage'
 import DraftsPage from './pages/mail/DraftsPage'
 import TrashPage from './pages/mail/TrashPage'
 import StarredPage from './pages/mail/StarredPage'
+import SpamPage from './pages/mail/SpamPage'
+import ArchivePage from './pages/mail/ArchivePage'
+import ContactsPage from './pages/mail/ContactsPage'
 import ComposePage from './pages/mail/ComposePage'
 import MailSettingsPage from './pages/mail/SettingsPage'
 import SearchPage from './pages/mail/SearchPage'
@@ -298,6 +301,21 @@ function App() {
                         <Route path="/mail/starred">
                             <MailCheck>
                                 <StarredPage />
+                            </MailCheck>
+                        </Route>
+                        <Route path="/mail/spam">
+                            <MailCheck>
+                                <SpamPage />
+                            </MailCheck>
+                        </Route>
+                        <Route path="/mail/archive">
+                            <MailCheck>
+                                <ArchivePage />
+                            </MailCheck>
+                        </Route>
+                        <Route path="/mail/contacts">
+                            <MailCheck>
+                                <ContactsPage />
                             </MailCheck>
                         </Route>
                         <Route path="/mail/:folder/:id">

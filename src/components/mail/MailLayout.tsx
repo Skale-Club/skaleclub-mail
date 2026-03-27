@@ -27,8 +27,12 @@ import {
     User,
     RefreshCw,
     Bell,
-    Mail
+    Mail,
+    Archive,
+    ShieldAlert,
+    Users
 } from 'lucide-react'
+import { useFolders } from '../../hooks/useMail'
 
 interface MailLayoutProps {
     children: React.ReactNode
@@ -42,19 +46,12 @@ interface FolderItem {
     badge?: number
 }
 
-const folders: FolderItem[] = [
-    { id: 'inbox', label: 'Inbox', icon: <Inbox className="w-5 h-5" />, href: '/mail/inbox' },
-    { id: 'starred', label: 'Starred', icon: <Star className="w-5 h-5" />, href: '/mail/starred' },
-    { id: 'sent', label: 'Sent', icon: <Send className="w-5 h-5" />, href: '/mail/sent' },
-    { id: 'drafts', label: 'Drafts', icon: <FileText className="w-5 h-5" />, href: '/mail/drafts' },
-    { id: 'trash', label: 'Trash', icon: <Trash2 className="w-5 h-5 text-gray-500 group-hover:text-red-500 transition-colors" />, href: '/mail/trash' },
-]
 
 export function MailLayout({ children }: MailLayoutProps) {
     const { user } = useAuth()
     const { branding } = useBranding()
     const isMobile = useIsMobile()
-    const { isOpen: shortcutsOpen, closeHelp: closeShortcuts } = useKeyboardShortcutHelp()
+    const { isOpen: shortcutsOpen, openHelp: openShortcuts, closeHelp: closeShortcuts } = useKeyboardShortcutHelp()
     const queryClient = useQueryClient()
     const [location] = useLocation()
     const [sidebarOpen, setSidebarOpen] = React.useState(false)
@@ -82,8 +79,26 @@ export function MailLayout({ children }: MailLayoutProps) {
 
     const closeSidebar = () => setSidebarOpen(false)
 
-    const SidebarContent = () => (
-        <>
+    const SidebarContent = () => {
+        const { data: foldersData } = useFolders()
+        const spamUnread = foldersData?.folders.find(f => f.type === 'spam')?.unread ?? 0
+        const archiveUnread = foldersData?.folders.find(
+            f => f.type === 'archive' || f.remoteId === 'Archive'
+        )?.unread ?? 0
+
+        const folders: FolderItem[] = [
+            { id: 'inbox',   label: 'Inbox',   icon: <Inbox className="w-5 h-5" />,   href: '/mail/inbox' },
+            { id: 'starred', label: 'Starred', icon: <Star className="w-5 h-5" />,    href: '/mail/starred' },
+            { id: 'sent',    label: 'Sent',    icon: <Send className="w-5 h-5" />,    href: '/mail/sent' },
+            { id: 'drafts',  label: 'Drafts',  icon: <FileText className="w-5 h-5" />, href: '/mail/drafts' },
+            { id: 'trash',   label: 'Trash',   icon: <Trash2 className="w-5 h-5 text-gray-500 group-hover:text-red-500 transition-colors" />, href: '/mail/trash' },
+            { id: 'archive', label: 'Archive', icon: <Archive className="w-5 h-5" />, href: '/mail/archive', badge: archiveUnread || undefined },
+            { id: 'spam',    label: 'Spam',    icon: <ShieldAlert className="w-5 h-5 text-amber-500" />, href: '/mail/spam', badge: spamUnread || undefined },
+            { id: 'contacts', label: 'Contacts', icon: <Users className="w-5 h-5" />, href: '/mail/contacts' },
+        ]
+
+        return (
+            <>
             <div className="flex items-center justify-between h-16 px-4 border-b border-border">
                 <div className="flex items-center gap-3 overflow-hidden">
                     <button 
@@ -185,9 +200,11 @@ export function MailLayout({ children }: MailLayoutProps) {
                     <Settings className="w-5 h-5 shrink-0" />
                     {(!isCollapsed || isMobile) && <span>Settings</span>}
                 </Link>
+                <DeployFooter />
             </div>
-        </>
-    )
+            </>
+        )
+    }
 
     const MobileBottomNav = () => (
         <nav className="fixed bottom-0 left-0 right-0 z-30 bg-background border-t border-border flex items-center justify-around py-2 lg:hidden safe-area-bottom">
@@ -320,8 +337,11 @@ export function MailLayout({ children }: MailLayoutProps) {
                                 </button>
                             )}
                             
-                            <button 
-                                onClick={() => queryClient.invalidateQueries({ queryKey: ['messages'] })}
+                            <button
+                                onClick={() => {
+                                    queryClient.invalidateQueries({ queryKey: ['messages'] })
+                                    queryClient.invalidateQueries({ queryKey: ['folders'] })
+                                }}
                                 className="p-2 rounded-xl hover:bg-accent hover:text-accent-foreground text-muted-foreground transition-colors relative"
                                 title="Refresh"
                             >
@@ -333,7 +353,7 @@ export function MailLayout({ children }: MailLayoutProps) {
                                 <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full"></span>
                             </button>
                             
-                            <KeyboardShortcutsButton onClick={() => {}} />
+                            <KeyboardShortcutsButton onClick={openShortcuts} />
                             <ModeToggle />
 
                             <div className="relative">
@@ -390,8 +410,6 @@ export function MailLayout({ children }: MailLayoutProps) {
                     <main className={`flex-1 overflow-hidden bg-background ${isMobile ? 'pb-20' : ''}`}>
                         {children}
                     </main>
-
-                    <DeployFooter />
                 </div>
             </div>
 

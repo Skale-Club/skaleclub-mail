@@ -131,6 +131,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                             <LogOut className="w-4 h-4 mr-2" />
                             Logout
                         </Button>
+                        <DeployFooter />
                     </div>
                 </div>
             </aside>
@@ -169,8 +170,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
                 {/* Page content */}
                 <main className="p-4 lg:p-6">{children}</main>
-
-                <DeployFooter />
             </div>
         </div>
     )
