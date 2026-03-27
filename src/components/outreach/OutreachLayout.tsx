@@ -5,6 +5,7 @@ import { useBranding } from '../../lib/branding'
 import { supabase } from '../../lib/supabase'
 import { AppLogo } from '../AppLogo'
 import { Button } from '../ui/button'
+import { DeployFooter } from '../DeployFooter'
 import {
     ArrowLeft,
     LayoutDashboard,
@@ -169,6 +170,8 @@ export function OutreachLayout({ children }: OutreachLayoutProps) {
                 <main className="p-4 lg:p-6 bg-background">
                     {children}
                 </main>
+
+                <DeployFooter />
             </div>
         </div>
     )

@@ -6,6 +6,7 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import { useKeyboardShortcutHelp } from '../../hooks/useKeyboardShortcuts'
 import { AppLogo } from '../AppLogo'
 import { ModeToggle } from '../mode-toggle'
+import { DeployFooter } from '../DeployFooter'
 import { supabase } from '../../lib/supabase'
 import { AccountSwitcher } from './AccountSwitcher'
 import { KeyboardShortcutsHelp, KeyboardShortcutsButton } from './KeyboardShortcutsHelp'
@@ -389,6 +390,8 @@ export function MailLayout({ children }: MailLayoutProps) {
                     <main className={`flex-1 overflow-hidden bg-background ${isMobile ? 'pb-20' : ''}`}>
                         {children}
                     </main>
+
+                    <DeployFooter />
                 </div>
             </div>
 

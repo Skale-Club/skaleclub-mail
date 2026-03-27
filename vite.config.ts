@@ -44,6 +44,7 @@ export default defineConfig(({ mode }) => {
             'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(supabaseUrl),
             'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(supabaseAnonKey),
             'import.meta.env.VITE_APP_NAME': JSON.stringify(appName),
+            'import.meta.env.VITE_BUILD_TIMESTAMP': JSON.stringify(new Date().toISOString()),
         },
         server: {
             port: 9000,
