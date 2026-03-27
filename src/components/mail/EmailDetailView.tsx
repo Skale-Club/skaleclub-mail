@@ -96,7 +96,7 @@ export function EmailDetailView({ email, onStar, onDelete, onArchive }: EmailDet
                         </button>
                         <button
                             onClick={handleDelete}
-                            className="p-2 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                            className="p-2 rounded-full text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors"
                             title="Delete"
                         >
                             <Trash2 className="w-4 h-4" />

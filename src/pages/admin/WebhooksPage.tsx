@@ -271,7 +271,7 @@ export default function WebhooksPage() {
                                                         size="sm"
                                                         onClick={() => handleDeleteWebhook(webhook.id)}
                                                     >
-                                                        <Trash2 className="w-4 h-4 text-red-500" />
+                                                        <Trash2 className="w-4 h-4 text-gray-500 hover:text-red-500 transition-colors" />
                                                     </Button>
                                                 </td>
                                             </tr>

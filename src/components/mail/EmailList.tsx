@@ -265,7 +265,7 @@ export function EmailList({
                                             onDelete?.(email.id)
                                             setMenuOpenId(null)
                                         }}
-                                        className="flex items-center gap-3 w-full px-4 py-2 text-sm text-destructive hover:bg-destructive/10"
+                                        className="flex items-center gap-3 w-full px-4 py-2 text-sm text-gray-500 hover:text-red-500 hover:bg-red-500/10"
                                     >
                                         <Trash2 className="w-4 h-4" />
                                         Delete
@@ -369,7 +369,7 @@ export function EmailToolbar({
                         </button>
                         <button
                             onClick={onDelete}
-                            className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
+                            className="p-1.5 rounded-lg text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors"
                             title="Delete"
                         >
                             <Trash2 className="w-4 h-4" />

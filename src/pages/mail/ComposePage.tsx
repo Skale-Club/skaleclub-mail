@@ -289,7 +289,7 @@ export default function ComposePage() {
                         </button>
                         <button
                             onClick={handleDiscard}
-                            className="p-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
+                            className="p-2 rounded-lg hover:bg-red-500/10 text-gray-500 hover:text-red-500 transition-colors"
                             title="Discard (Esc)"
                         >
                             <Trash2 className="w-5 h-5" />

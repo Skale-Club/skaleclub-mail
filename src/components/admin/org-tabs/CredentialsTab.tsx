@@ -186,7 +186,7 @@ export default function CredentialsTab({ organizationId }: CredentialsTabProps) 
                                         </td>
                                         <td className="px-4 py-3 text-right">
                                             <Button variant="ghost" size="sm" onClick={() => handleDeleteCredential(credential.id)}>
-                                                <Trash2 className="h-4 w-4 text-red-500" />
+                                                <Trash2 className="h-4 w-4 text-gray-500 hover:text-red-500 transition-colors" />
                                             </Button>
                                         </td>
                                     </tr>

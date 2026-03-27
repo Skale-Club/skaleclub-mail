@@ -197,7 +197,7 @@ export default function AdminsPage() {
                                             Resend invite
                                         </Button>
                                         <Button variant="outline" size="sm" onClick={() => handleDeleteAdmin(admin.id)}>
-                                            <Trash2 className="h-4 w-4 text-destructive" />
+                                            <Trash2 className="h-4 w-4 text-gray-500 hover:text-red-500 transition-colors" />
                                         </Button>
                                     </div>
                                 </div>

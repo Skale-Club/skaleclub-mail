@@ -458,7 +458,7 @@ export default function DomainsPage() {
                                 </div>
                                 <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                                     <Button variant="outline" size="sm" onClick={() => handleDeleteDomain(domain.id)}>
-                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                        <Trash2 className="h-4 w-4 text-gray-500 hover:text-red-500 transition-colors" />
                                     </Button>
                                 </div>
                             </div>

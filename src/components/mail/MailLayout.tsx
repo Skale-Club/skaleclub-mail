@@ -46,7 +46,7 @@ const folders: FolderItem[] = [
     { id: 'starred', label: 'Starred', icon: <Star className="w-5 h-5" />, href: '/mail/starred' },
     { id: 'sent', label: 'Sent', icon: <Send className="w-5 h-5" />, href: '/mail/sent' },
     { id: 'drafts', label: 'Drafts', icon: <FileText className="w-5 h-5" />, href: '/mail/drafts' },
-    { id: 'trash', label: 'Trash', icon: <Trash2 className="w-5 h-5" />, href: '/mail/trash' },
+    { id: 'trash', label: 'Trash', icon: <Trash2 className="w-5 h-5 text-gray-500 group-hover:text-red-500 transition-colors" />, href: '/mail/trash' },
 ]
 
 export function MailLayout({ children }: MailLayoutProps) {

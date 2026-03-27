@@ -118,7 +118,7 @@ export function NewSequencePage() {
                                 {steps.length > 1 && (
                                     <button
                                         onClick={() => removeStep(step.id)}
-                                        className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                        className="rounded-lg p-2 text-gray-500 hover:bg-red-500/10 hover:text-red-500 transition-colors"
                                     >
                                         <Trash2 className="h-4 w-4" />
                                     </button>

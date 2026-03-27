@@ -441,7 +441,7 @@ export default function MailSettingsPage() {
                                                                             <RefreshCw className="w-4 h-4" />
                                                                         </Button>
                                                                         <Button variant="outline" size="sm" onClick={() => handleDeleteMailbox(mb.id)}>
-                                                                            <Trash2 className="w-4 h-4 text-destructive" />
+                                                                            <Trash2 className="w-4 h-4 text-gray-500 hover:text-red-500 transition-colors" />
                                                                         </Button>
                                                                     </>
                                                                 )}
@@ -682,7 +682,7 @@ export default function MailSettingsPage() {
                                                                 </div>
                                                             </div>
                                                             <Button variant="outline" size="sm" onClick={() => handleDeleteFilter(filter.id)}>
-                                                                <Trash2 className="w-4 h-4 text-red-500" />
+                                                                <Trash2 className="w-4 h-4 text-gray-500 hover:text-red-500 transition-colors" />
                                                             </Button>
                                                         </div>
                                                     ))}
@@ -760,7 +760,7 @@ export default function MailSettingsPage() {
                                                                     </select>
                                                                 )}
                                                                 <Button variant="ghost" size="sm" onClick={() => removeCondition(index)} disabled={newFilter.conditions.length === 1}>
-                                                                    <Trash className="w-4 h-4" />
+                                                                    <Trash className="w-4 h-4 text-gray-500 hover:text-red-500 transition-colors" />
                                                                 </Button>
                                                             </div>
                                                         ))}
@@ -789,7 +789,7 @@ export default function MailSettingsPage() {
                                                                     <option value="markNotSpam">Mark as not spam</option>
                                                                 </select>
                                                                 <Button variant="ghost" size="sm" onClick={() => removeAction(index)} disabled={newFilter.actions.length === 1}>
-                                                                    <Trash className="w-4 h-4" />
+                                                                    <Trash className="w-4 h-4 text-gray-500 hover:text-red-500 transition-colors" />
                                                                 </Button>
                                                             </div>
                                                         ))}
@@ -906,7 +906,7 @@ export default function MailSettingsPage() {
                                                                         }
                                                                     }
                                                                 }}>
-                                                                    <Trash2 className="w-4 h-4 text-red-500" />
+                                                                    <Trash2 className="w-4 h-4 text-gray-500 hover:text-red-500 transition-colors" />
                                                                 </Button>
                                                             </div>
                                                         </div>
