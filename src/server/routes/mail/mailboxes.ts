@@ -2,8 +2,9 @@ import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { eq, and, desc } from 'drizzle-orm'
 import { db } from '../../../db'
-import { mailboxes, mailFolders, mailMessages } from '../../../db/schema'
+import { mailboxes, mailFolders, mailMessages, users } from '../../../db/schema'
 import { encrypt } from '../../../lib/crypto'
+import { createUserMailbox } from '../../lib/native-mail'
 
 const router = Router()
 
@@ -24,6 +25,12 @@ router.get('/', async (req: Request, res: Response) => {
             return res.status(401).json({ error: 'Unauthorized' })
         }
 
+        // Auto-ensure native mailbox exists for non-admin users with a passwordHash
+        const user = await db.query.users.findFirst({ where: eq(users.id, userId) })
+        if (user && !user.isAdmin && user.passwordHash) {
+            await createUserMailbox(userId, user.email)
+        }
+
         const userMailboxes = await db.query.mailboxes.findMany({
             where: eq(mailboxes.userId, userId),
             orderBy: [desc(mailboxes.createdAt)],
@@ -35,6 +42,7 @@ router.get('/', async (req: Request, res: Response) => {
             displayName: mb.displayName,
             isDefault: mb.isDefault,
             isActive: mb.isActive,
+            isNative: mb.isNative,
             lastSyncAt: mb.lastSyncAt,
             syncError: mb.syncError,
         }))

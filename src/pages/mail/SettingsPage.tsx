@@ -49,6 +49,7 @@ interface Mailbox {
     displayName: string | null
     isDefault: boolean
     isActive: boolean
+    isNative?: boolean
     lastSyncAt: string | null
     syncError: string | null
 }
@@ -396,141 +397,62 @@ export default function MailSettingsPage() {
                                         <CardHeader>
                                             <CardTitle className="flex items-center gap-2">
                                                 <Mail className="w-5 h-5" />
-                                                Connected Email Accounts
+                                                Email Accounts
                                             </CardTitle>
                                             <CardDescription>
-                                                Add external email accounts to send and receive emails
+                                                Manage your email accounts
                                             </CardDescription>
                                         </CardHeader>
                                         <CardContent className="space-y-4">
                                             {isLoadingMailboxes ? (
-                                                <p className="text-gray-500">Loading accounts...</p>
+                                                <p className="text-muted-foreground">Loading accounts...</p>
                                             ) : mailboxes.length === 0 ? (
                                                 <div className="text-center py-8">
-                                                    <Mail className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-                                                    <p className="text-gray-500 mb-4">No email accounts connected yet</p>
-                                                    <Button onClick={() => setShowAddAccount(true)}>
-                                                        <Plus className="w-4 h-4 mr-2" />
-                                                        Add Email Account
-                                                    </Button>
+                                                    <Mail className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                                                    <p className="text-muted-foreground mb-2">No email account available</p>
+                                                    <p className="text-sm text-muted-foreground">Contact your administrator to set up your email account.</p>
                                                 </div>
                                             ) : (
                                                 <div className="space-y-3">
                                                     {mailboxes.map((mb) => (
-                                                        <div key={mb.id} className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-xl">
+                                                        <div key={mb.id} className="flex items-center justify-between p-4 border border-border rounded-xl">
                                                             <div className="flex items-center gap-4">
-                                                                <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                                                                    <Mail className="w-6 h-6 text-blue-600" />
+                                                                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                                                                    <Mail className="w-6 h-6 text-primary" />
                                                                 </div>
                                                                 <div>
-                                                                    <h3 className="font-medium">{mb.email}</h3>
-                                                                    <p className="text-sm text-gray-500">
-                                                                        {mb.isDefault && <span className="text-blue-600">Default • </span>}
-                                                                        {mb.lastSyncAt ? `Last sync: ${new Date(mb.lastSyncAt).toLocaleString()}` : 'Not synced'}
+                                                                    <h3 className="font-medium text-foreground">{mb.email}</h3>
+                                                                    <p className="text-sm text-muted-foreground">
+                                                                        {mb.isDefault && <span className="text-primary">Default • </span>}
+                                                                        {mb.isNative ? 'Organization account' : 'External account'}
+                                                                        {!mb.isNative && mb.lastSyncAt && ` • Last sync: ${new Date(mb.lastSyncAt).toLocaleString()}`}
                                                                     </p>
                                                                 </div>
                                                             </div>
                                                             <div className="flex items-center gap-2">
                                                                 {mb.syncError ? (
-                                                                    <AlertCircle className="w-5 h-5 text-red-500" />
+                                                                    <AlertCircle className="w-5 h-5 text-destructive" />
                                                                 ) : (
                                                                     <CheckCircle className="w-5 h-5 text-green-500" />
                                                                 )}
-                                                                <Button variant="outline" size="sm" onClick={fetchMailboxes}>
-                                                                    <RefreshCw className="w-4 h-4" />
-                                                                </Button>
-                                                                <Button variant="outline" size="sm" onClick={() => handleDeleteMailbox(mb.id)}>
-                                                                    <Trash2 className="w-4 h-4 text-red-500" />
-                                                                </Button>
+                                                                {!mb.isNative && (
+                                                                    <>
+                                                                        <Button variant="outline" size="sm" onClick={fetchMailboxes}>
+                                                                            <RefreshCw className="w-4 h-4" />
+                                                                        </Button>
+                                                                        <Button variant="outline" size="sm" onClick={() => handleDeleteMailbox(mb.id)}>
+                                                                            <Trash2 className="w-4 h-4 text-destructive" />
+                                                                        </Button>
+                                                                    </>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     ))}
-                                                    <Button onClick={() => setShowAddAccount(true)} className="mt-4">
-                                                        <Plus className="w-4 h-4 mr-2" />
-                                                        Add Email Account
-                                                    </Button>
                                                 </div>
                                             )}
                                         </CardContent>
                                     </Card>
 
-                                    <Card>
-                                        <CardHeader>
-                                            <CardTitle className="flex items-center gap-2">
-                                                <Server className="w-5 h-5" />
-                                                How to Connect External Email
-                                            </CardTitle>
-                                            <CardDescription>
-                                                Follow these instructions to connect your email provider
-                                            </CardDescription>
-                                        </CardHeader>
-                                        <CardContent className="space-y-6">
-                                            <div className="grid gap-4 md:grid-cols-2">
-                                                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
-                                                    <h4 className="font-medium text-blue-700 dark:text-blue-300 mb-2">Gmail</h4>
-                                                    <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                                                        <li><strong>SMTP:</strong> smtp.gmail.com</li>
-                                                        <li><strong>IMAP:</strong> imap.gmail.com</li>
-                                                        <li><strong>Port:</strong> 587 (SMTP) / 993 (IMAP)</li>
-                                                        <li><strong>Security:</strong> TLS/SSL</li>
-                                                        <li><strong>Note:</strong> Enable 2-Step Verification and use App Password</li>
-                                                    </ul>
-                                                </div>
-                                                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
-                                                    <h4 className="font-medium text-blue-700 dark:text-blue-300 mb-2">Outlook.com</h4>
-                                                    <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                                                        <li><strong>SMTP:</strong> smtp-mail.outlook.com</li>
-                                                        <li><strong>IMAP:</strong> outlook.office365.com</li>
-                                                        <li><strong>Port:</strong> 587 (SMTP) / 993 (IMAP)</li>
-                                                        <li><strong>Security:</strong> TLS/SSL</li>
-                                                        <li><strong>Note:</strong> Use your regular password</li>
-                                                    </ul>
-                                                </div>
-                                                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
-                                                    <h4 className="font-medium text-blue-700 dark:text-blue-300 mb-2">Yahoo</h4>
-                                                    <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                                                        <li><strong>SMTP:</strong> smtp.mail.yahoo.com</li>
-                                                        <li><strong>IMAP:</strong> imap.mail.yahoo.com</li>
-                                                        <li><strong>Port:</strong> 587 (SMTP) / 993 (IMAP)</li>
-                                                        <li><strong>Security:</strong> TLS/SSL</li>
-                                                        <li><strong>Note:</strong> Use App Password</li>
-                                                    </ul>
-                                                </div>
-                                                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
-                                                    <h4 className="font-medium text-blue-700 dark:text-blue-300 mb-2">iCloud Mail</h4>
-                                                    <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                                                        <li><strong>SMTP:</strong> smtp.mail.me.com</li>
-                                                        <li><strong>IMAP:</strong> imap.mail.me.com</li>
-                                                        <li><strong>Port:</strong> 587 (SMTP) / 993 (IMAP)</li>
-                                                        <li><strong>Security:</strong> TLS/SSL</li>
-                                                        <li><strong>Note:</strong> Enable 2FA and use App Specific Password</li>
-                                                    </ul>
-                                                </div>
-                                            </div>
-
-                                            <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-xl border border-yellow-200 dark:border-yellow-800">
-                                                <h4 className="font-medium text-yellow-800 dark:text-yellow-200 mb-2">Important Notes</h4>
-                                                <ul className="text-sm text-yellow-700 dark:text-yellow-300 space-y-2">
-                                                    <li>• Use your <strong>email address</strong> as username (e.g., yourname@gmail.com)</li>
-                                                    <li>• For Gmail/Yahoo/iCloud, generate an <strong>App Password</strong> in your account security settings</li>
-                                                    <li>• Make sure <strong>IMAP</strong> is enabled in your email provider settings</li>
-                                                    <li>• Port 587 uses STARTTLS, Port 993 uses SSL/TLS</li>
-                                                </ul>
-                                            </div>
-
-                                            <div className="flex items-center gap-2 text-sm text-gray-500">
-                                                <ExternalLink className="w-4 h-4" />
-                                                <a 
-                                                    href="https://support.google.com/mail/answer/7129" 
-                                                    target="_blank" 
-                                                    rel="noopener noreferrer"
-                                                    className="hover:text-blue-600 hover:underline"
-                                                >
-                                                    Learn more about enabling IMAP in Gmail
-                                                </a>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
 
                                     {showAddAccount && (
                                         <Card>

@@ -8,6 +8,7 @@ export interface Mailbox {
     displayName: string | null
     isDefault: boolean
     isActive: boolean
+    isNative?: boolean
     lastSyncAt: string | null
     syncError: string | null
     provider?: 'gmail' | 'outlook' | 'yahoo' | 'icloud' | 'custom'
