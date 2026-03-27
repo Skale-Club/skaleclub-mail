@@ -139,7 +139,8 @@ export default function ComposePage() {
                 cc: email.cc ? parseEmailList(email.cc) : undefined,
                 bcc: email.bcc ? parseEmailList(email.bcc) : undefined,
                 subject: email.subject,
-                bodyText: htmlToPlainText(email.body)
+                bodyText: htmlToPlainText(email.body),
+                bodyHtml: email.body
             })
             setIsSaved(true)
             toast({ title: 'Draft saved', variant: 'success' })
@@ -193,10 +194,10 @@ export default function ComposePage() {
                 <div className="flex items-center justify-center h-full">
                     <div className="text-center max-w-md px-6">
                         <AlertCircle className="w-16 h-16 mx-auto mb-4 text-yellow-500" />
-                        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                        <h2 className="text-xl font-bold text-foreground mb-2">
                             No Email Accounts Connected
                         </h2>
-                        <p className="text-gray-500 dark:text-gray-400 mb-6">
+                        <p className="text-muted-foreground mb-6">
                             Add an email account to start composing emails.
                         </p>
                         <Link
@@ -213,20 +214,20 @@ export default function ComposePage() {
 
     return (
         <MailLayout>
-            <div className="h-full flex flex-col bg-white dark:bg-slate-900">
-                <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-800">
+            <div className="h-full flex flex-col bg-background">
+                <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-border">
                     <div className="flex items-center gap-4">
                         <Link
                             href="/mail/inbox"
-                            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+                            className="p-2 rounded-lg hover:bg-muted transition-colors"
                         >
-                            <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                            <ArrowLeft className="w-5 h-5 text-muted-foreground" />
                         </Link>
-                        <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
+                        <h1 className="text-lg font-semibold text-foreground">
                             New Message
                         </h1>
                         {selectedMailbox && (
-                            <span className="text-sm text-gray-500 dark:text-gray-400 hidden sm:inline">
+                            <span className="text-sm text-muted-foreground hidden sm:inline">
                                 from {selectedMailbox.email}
                             </span>
                         )}
@@ -235,14 +236,14 @@ export default function ComposePage() {
                         <button
                             onClick={handleSaveDraft}
                             disabled={saveDraft.isPending}
-                            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-600 dark:text-gray-400 transition-colors"
+                            className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors"
                             title="Save draft (Ctrl+S)"
                         >
                             <Save className={`w-5 h-5 ${saveDraft.isPending ? 'animate-pulse' : ''}`} />
                         </button>
                         <button
                             onClick={handleDiscard}
-                            className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 transition-colors"
+                            className="p-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
                             title="Discard (Esc)"
                         >
                             <Trash2 className="w-5 h-5" />
@@ -279,7 +280,7 @@ export default function ComposePage() {
                     <div className="max-w-4xl mx-auto p-4 sm:p-6">
                         <div className="space-y-4">
                             <div className="flex items-center gap-4">
-                                <label className="w-12 sm:w-16 text-sm font-medium text-gray-600 dark:text-gray-400 flex-shrink-0">
+                                <label className="w-12 sm:w-16 text-sm font-medium text-muted-foreground flex-shrink-0">
                                     To
                                 </label>
                                 <input
@@ -291,13 +292,13 @@ export default function ComposePage() {
                                 />
                                 <button
                                     onClick={() => setShowCc(!showCc)}
-                                    className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                                    className="text-sm text-muted-foreground hover:text-foreground"
                                 >
                                     Cc
                                 </button>
                                 <button
                                     onClick={() => setShowBcc(!showBcc)}
-                                    className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                                    className="text-sm text-muted-foreground hover:text-foreground"
                                 >
                                     Bcc
                                 </button>
@@ -305,7 +306,7 @@ export default function ComposePage() {
 
                             {showCc && (
                                 <div className="flex items-center gap-4">
-                                    <label className="w-12 sm:w-16 text-sm font-medium text-gray-600 dark:text-gray-400 flex-shrink-0">
+                                    <label className="w-12 sm:w-16 text-sm font-medium text-muted-foreground flex-shrink-0">
                                         Cc
                                     </label>
                                     <input
@@ -320,7 +321,7 @@ export default function ComposePage() {
 
                             {showBcc && (
                                 <div className="flex items-center gap-4">
-                                    <label className="w-12 sm:w-16 text-sm font-medium text-gray-600 dark:text-gray-400 flex-shrink-0">
+                                    <label className="w-12 sm:w-16 text-sm font-medium text-muted-foreground flex-shrink-0">
                                         Bcc
                                     </label>
                                     <input
@@ -334,7 +335,7 @@ export default function ComposePage() {
                             )}
 
                             <div className="flex items-center gap-4">
-                                <label className="w-12 sm:w-16 text-sm font-medium text-gray-600 dark:text-gray-400 flex-shrink-0">
+                                <label className="w-12 sm:w-16 text-sm font-medium text-muted-foreground flex-shrink-0">
                                     Subject
                                 </label>
                                 <input
@@ -342,13 +343,13 @@ export default function ComposePage() {
                                     value={email.subject}
                                     onChange={(e) => setEmail({ ...email, subject: e.target.value })}
                                     placeholder="Enter subject"
-                                    className="flex-1 px-3 py-2 bg-transparent border-0 border-b border-gray-200 dark:border-gray-700 focus:border-blue-500 focus:ring-0 text-gray-900 dark:text-white placeholder-gray-400 text-base sm:text-lg"
+                                    className="flex-1 px-3 py-2 bg-transparent border-0 border-b border-border focus:border-primary focus:ring-0 text-foreground placeholder-muted-foreground text-base sm:text-lg"
                                 />
                             </div>
                         </div>
 
-                        <div className="mt-4 flex items-center gap-2 border-b border-gray-200 dark:border-gray-700 pb-3">
-                            <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-600 dark:text-gray-400 cursor-pointer transition-colors text-sm">
+                        <div className="mt-4 flex items-center gap-2 border-b border-border pb-3">
+                            <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-muted text-muted-foreground cursor-pointer transition-colors text-sm">
                                 <Paperclip className="w-4 h-4" />
                                 <span className="hidden sm:inline">Attach file</span>
                                 <input
@@ -358,7 +359,7 @@ export default function ComposePage() {
                                     className="hidden"
                                 />
                             </label>
-                            <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-600 dark:text-gray-400 cursor-pointer transition-colors text-sm">
+                            <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-muted text-muted-foreground cursor-pointer transition-colors text-sm">
                                 <Image className="w-4 h-4" />
                                 <span className="hidden sm:inline">Insert image</span>
                                 <input
@@ -371,25 +372,25 @@ export default function ComposePage() {
                                 <div className="relative">
                                     <button
                                         onClick={() => setShowSignatureMenu(!showSignatureMenu)}
-                                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-600 dark:text-gray-400 transition-colors text-sm"
+                                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors text-sm"
                                     >
                                         <PenTool className="w-4 h-4" />
                                         <span className="hidden sm:inline">Signature</span>
                                     </button>
                                     {showSignatureMenu && (
-                                        <div className="absolute top-full left-0 mt-1 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-10">
+                                        <div className="absolute top-full left-0 mt-1 w-48 bg-popover border border-border rounded-lg shadow-lg z-10">
                                             {signatures.map(sig => (
                                                 <button
                                                     key={sig.id}
                                                     onClick={() => insertSignature(sig)}
-                                                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300"
+                                                    className="w-full px-4 py-2 text-left text-sm hover:bg-muted text-foreground"
                                                 >
                                                     {sig.name} {sig.isDefault && '(Default)'}
                                                 </button>
                                             ))}
                                             <Link
                                                 href="/mail/settings?tab=signatures"
-                                                className="block px-4 py-2 text-left text-sm text-blue-600 hover:bg-gray-100 dark:hover:bg-slate-700"
+                                                className="block px-4 py-2 text-left text-sm text-primary hover:bg-muted"
                                             >
                                                 Manage Signatures
                                             </Link>
@@ -404,25 +405,25 @@ export default function ComposePage() {
                                 {attachments.map((file, index) => (
                                     <div
                                         key={index}
-                                        className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-slate-800 rounded-lg"
+                                        className="flex items-center gap-2 px-3 py-2 bg-muted rounded-lg"
                                     >
-                                        <Paperclip className="w-4 h-4 text-gray-500" />
+                                        <Paperclip className="w-4 h-4 text-muted-foreground" />
                                         <div className="text-sm">
-                                            <span className="text-gray-700 dark:text-gray-300">{file.name}</span>
-                                            <span className="text-gray-500 ml-2">({formatBytes(file.size)})</span>
+                                            <span className="text-foreground">{file.name}</span>
+                                            <span className="text-muted-foreground ml-2">({formatBytes(file.size)})</span>
                                         </div>
                                         <button
                                             onClick={() => removeAttachment(index)}
-                                            className="p-1 hover:bg-gray-200 dark:hover:bg-slate-700 rounded"
+                                            className="p-1 hover:bg-muted rounded"
                                         >
-                                            <X className="w-3 h-3 text-gray-500" />
+                                            <X className="w-3 h-3 text-muted-foreground" />
                                         </button>
                                     </div>
                                 ))}
                             </div>
                         )}
 
-                        <div className="mt-4 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                        <div className="mt-4 border border-border rounded-lg overflow-hidden">
                             <RichTextEditor
                                 value={email.body}
                                 onChange={(value) => setEmail({ ...email, body: value })}
@@ -436,23 +437,23 @@ export default function ComposePage() {
 
             {discardConfirm && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-6 max-w-md w-full mx-4">
-                        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+                    <div className="bg-background rounded-2xl shadow-2xl p-6 max-w-md w-full mx-4">
+                        <h2 className="text-xl font-bold text-foreground mb-4">
                             Discard this message?
                         </h2>
-                        <p className="text-gray-600 dark:text-gray-400 mb-6">
+                        <p className="text-muted-foreground mb-6">
                             This will permanently delete this message. This action cannot be undone.
                         </p>
                         <div className="flex items-center justify-end gap-3">
                             <button
                                 onClick={() => setDiscardConfirm(false)}
-                                className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg font-medium transition-colors"
+                                className="px-4 py-2 text-foreground hover:bg-muted rounded-lg font-medium transition-colors"
                             >
                                 Keep
                             </button>
                             <button
                                 onClick={confirmDiscard}
-                                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
+                                className="px-4 py-2 bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded-lg font-medium transition-colors"
                             >
                                 Discard
                             </button>

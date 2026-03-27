@@ -1,4 +1,52 @@
-import { apiFetch, fetchWithAuth, ApiError } from '../lib/api'
+import { apiFetch } from '../lib/api'
+
+interface RecipientInput {
+    address: string
+    name?: string
+}
+
+interface AttachmentInput {
+    filename: string
+    content: string
+    contentType?: string
+}
+
+async function fileToBase64(file: File): Promise<string> {
+    const buffer = await file.arrayBuffer()
+    let binary = ''
+    const bytes = new Uint8Array(buffer)
+
+    for (let index = 0; index < bytes.length; index += 1) {
+        binary += String.fromCharCode(bytes[index])
+    }
+
+    return btoa(binary)
+}
+
+function mapRecipients(recipients?: { name?: string; email: string }[]): RecipientInput[] | undefined {
+    if (!recipients?.length) {
+        return undefined
+    }
+
+    return recipients.map(recipient => ({
+        address: recipient.email,
+        ...(recipient.name ? { name: recipient.name } : {}),
+    }))
+}
+
+async function mapAttachments(files?: File[]): Promise<AttachmentInput[] | undefined> {
+    if (!files?.length) {
+        return undefined
+    }
+
+    const attachments = await Promise.all(files.map(async file => ({
+        filename: file.name,
+        content: await fileToBase64(file),
+        ...(file.type ? { contentType: file.type } : {}),
+    })))
+
+    return attachments
+}
 
 export interface Mailbox {
     id: string
@@ -65,6 +113,19 @@ export interface SaveDraftPayload {
     draftId?: string
 }
 
+export interface SendEmailResponse {
+    success: boolean
+    messageId: string
+    message: string
+}
+
+export interface SaveDraftResponse {
+    success: boolean
+    messageId: string
+    draftId: string
+    message: string
+}
+
 export interface Signature {
     id: string
     mailboxId: string
@@ -85,7 +146,7 @@ export const mailApi = {
     },
 
     getFolders(mailboxId: string): Promise<{ folders: { name: string; count: number; unread: number }[] }> {
-        return apiFetch(`/api/mail/${mailboxId}/folders`)
+        return apiFetch(`/api/mail/mailboxes/${mailboxId}/folders`)
     },
 
     getMessages(
@@ -99,11 +160,11 @@ export const mailApi = {
         if (params?.limit) searchParams.set('limit', String(params.limit))
         if (params?.search) searchParams.set('search', params.search)
 
-        return apiFetch(`/api/mail/${mailboxId}/messages?${searchParams}`)
+        return apiFetch(`/api/mail/mailboxes/${mailboxId}/messages?${searchParams}`)
     },
 
     getMessage(mailboxId: string, messageId: string): Promise<{ message: Message }> {
-        return apiFetch(`/api/mail/${mailboxId}/messages/${messageId}`)
+        return apiFetch(`/api/mail/mailboxes/${mailboxId}/messages/${messageId}`)
     },
 
     updateMessage(
@@ -111,26 +172,26 @@ export const mailApi = {
         messageId: string,
         data: { read?: boolean; starred?: boolean; labels?: string[] }
     ): Promise<{ message: Message }> {
-        return apiFetch(`/api/mail/${mailboxId}/messages/${messageId}`, {
+        return apiFetch(`/api/mail/mailboxes/${mailboxId}/messages/${messageId}`, {
             method: 'PUT',
             body: JSON.stringify(data),
         })
     },
 
     deleteMessage(mailboxId: string, messageId: string): Promise<void> {
-        return apiFetch(`/api/mail/${mailboxId}/messages/${messageId}`, {
+        return apiFetch(`/api/mail/mailboxes/${mailboxId}/messages/${messageId}`, {
             method: 'DELETE',
         })
     },
 
     archiveMessage(mailboxId: string, messageId: string): Promise<void> {
-        return apiFetch(`/api/mail/${mailboxId}/messages/${messageId}/archive`, {
+        return apiFetch(`/api/mail/mailboxes/${mailboxId}/messages/${messageId}/archive`, {
             method: 'POST',
         })
     },
 
     moveMessage(mailboxId: string, messageId: string, folder: string): Promise<void> {
-        return apiFetch(`/api/mail/${mailboxId}/messages/${messageId}/move`, {
+        return apiFetch(`/api/mail/mailboxes/${mailboxId}/messages/${messageId}/move`, {
             method: 'POST',
             body: JSON.stringify({ folder }),
         })
@@ -142,48 +203,45 @@ export const mailApi = {
         action: 'read' | 'unread' | 'star' | 'unstar' | 'delete' | 'archive' | 'move',
         folder?: string
     ): Promise<void> {
-        return apiFetch(`/api/mail/${mailboxId}/messages/batch`, {
+        return apiFetch(`/api/mail/mailboxes/${mailboxId}/messages/batch`, {
             method: 'POST',
             body: JSON.stringify({ messageIds, action, folder }),
         })
     },
 
-    async sendEmail(mailboxId: string, payload: SendEmailPayload): Promise<{ message: Message }> {
-        const formData = new FormData()
-        formData.append('to', JSON.stringify(payload.to))
-        if (payload.cc) formData.append('cc', JSON.stringify(payload.cc))
-        if (payload.bcc) formData.append('bcc', JSON.stringify(payload.bcc))
-        formData.append('subject', payload.subject)
-        if (payload.bodyText) formData.append('bodyText', payload.bodyText)
-        if (payload.bodyHtml) formData.append('bodyHtml', payload.bodyHtml)
-        if (payload.replyTo) formData.append('replyTo', payload.replyTo)
-        if (payload.inReplyTo) formData.append('inReplyTo', payload.inReplyTo)
-        if (payload.attachments) {
-            payload.attachments.forEach(file => {
-                formData.append('attachments', file)
-            })
-        }
-
-        const response = await fetchWithAuth(`/api/mail/${mailboxId}/send`, {
+    async sendEmail(mailboxId: string, payload: SendEmailPayload): Promise<SendEmailResponse> {
+        return apiFetch(`/api/mail/mailboxes/${mailboxId}/send`, {
             method: 'POST',
-            body: formData,
+            body: JSON.stringify({
+                to: mapRecipients(payload.to),
+                cc: mapRecipients(payload.cc),
+                bcc: mapRecipients(payload.bcc),
+                subject: payload.subject,
+                plainBody: payload.bodyText,
+                htmlBody: payload.bodyHtml,
+                inReplyTo: payload.inReplyTo,
+                attachments: await mapAttachments(payload.attachments),
+                saveToSent: true,
+            }),
         })
-        if (!response.ok) {
-            const error = await response.json()
-            throw new ApiError(error.error || 'Failed to send email', response.status)
-        }
-        return response.json()
     },
 
-    saveDraft(mailboxId: string, payload: SaveDraftPayload): Promise<{ draft: Message }> {
-        return apiFetch(`/api/mail/${mailboxId}/save-draft`, {
+    saveDraft(mailboxId: string, payload: SaveDraftPayload): Promise<SaveDraftResponse> {
+        return apiFetch(`/api/mail/mailboxes/${mailboxId}/save-draft`, {
             method: 'POST',
-            body: JSON.stringify(payload),
+            body: JSON.stringify({
+                to: mapRecipients(payload.to),
+                cc: mapRecipients(payload.cc),
+                bcc: mapRecipients(payload.bcc),
+                subject: payload.subject,
+                plainBody: payload.bodyText,
+                htmlBody: payload.bodyHtml,
+            }),
         })
     },
 
     syncMailbox(mailboxId: string): Promise<void> {
-        return apiFetch(`/api/mail/${mailboxId}/sync`, {
+        return apiFetch(`/api/mail/mailboxes/${mailboxId}/sync`, {
             method: 'POST',
         })
     },
@@ -199,7 +257,7 @@ export const mailApi = {
         if (params?.page) searchParams.set('page', String(params.page))
         if (params?.limit) searchParams.set('limit', String(params.limit))
 
-        return apiFetch(`/api/mail/${mailboxId}/search?${searchParams}`)
+        return apiFetch(`/api/mail/mailboxes/${mailboxId}/search?${searchParams}`)
     },
 
     getSignatures(mailboxId: string): Promise<{ signatures: Signature[] }> {
