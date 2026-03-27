@@ -5,7 +5,8 @@ import { organizations, organizationUsers, users, messages, statistics } from '.
 import { eq, and, isNotNull, sql, gte, desc } from 'drizzle-orm'
 import { deleteOrganizationCascade } from '../lib/cascade'
 import { isPlatformAdmin } from '../lib/admin'
-import { validateEmailDomainForOrg, createUserMailbox, deleteUserMailbox } from '../lib/native-mail'
+import { validateEmailDomainForOrg, createUserMailbox, deleteUserMailbox, hashPassword } from '../lib/native-mail'
+import { supabaseAdminClient } from '../lib/supabase'
 
 const router = Router()
 const createOrganizationSchema = z.object({
@@ -21,6 +22,7 @@ const updateOrganizationSchema = z.object({
 
 const addMemberSchema = z.object({
     email: z.string().email('Invalid email address'),
+    password: z.string().min(8).optional(),
     role: z.enum(['admin', 'member', 'viewer']).default('member'),
 })
 
@@ -256,24 +258,55 @@ router.post('/:id/members', async (req: Request, res: Response) => {
             }
         }
 
-        const { email, role } = addMemberSchema.parse(req.body)
+        const { email, password, role } = addMemberSchema.parse(req.body)
 
-        const userToAdd = await db.query.users.findFirst({
+        // Domain must match a verified domain in the organization
+        const domainValid = await validateEmailDomainForOrg(email, organizationId)
+        if (!domainValid) {
+            return res.status(400).json({
+                error: 'Email domain does not match any verified domain of this organization.',
+            })
+        }
+
+        let userToAdd = await db.query.users.findFirst({
             where: eq(users.email, email),
         })
 
+        // Auto-create user if they don't exist and a password was provided
         if (!userToAdd) {
-            return res.status(404).json({ error: 'User not found' })
-        }
-
-        // Non-admin users must have email matching a verified domain in the org
-        if (!userToAdd.isAdmin) {
-            const domainValid = await validateEmailDomainForOrg(userToAdd.email, organizationId)
-            if (!domainValid) {
-                return res.status(400).json({
-                    error: 'User email domain does not match any verified domain of this organization.',
-                })
+            if (!password) {
+                return res.status(400).json({ error: 'Password is required to create a new user' })
             }
+
+            // Create in Supabase Auth
+            const { data: authData, error: authError } = await supabaseAdminClient.auth.admin.createUser({
+                email,
+                password,
+                email_confirm: true,
+            })
+
+            if (authError || !authData.user) {
+                return res.status(400).json({ error: authError?.message || 'Failed to create user' })
+            }
+
+            const passwordHash = await hashPassword(password)
+
+            const [newUser] = await db.insert(users).values({
+                id: authData.user.id,
+                email,
+                isAdmin: false,
+                emailVerified: true,
+                passwordHash,
+            }).returning()
+
+            userToAdd = newUser
+        } else if (password) {
+            // User exists but password was provided — update their passwordHash
+            const passwordHash = await hashPassword(password)
+            await db.update(users)
+                .set({ passwordHash, updatedAt: new Date() })
+                .where(eq(users.id, userToAdd.id))
+            await supabaseAdminClient.auth.admin.updateUserById(userToAdd.id, { password })
         }
 
         const existingMembership = await db.query.organizationUsers.findFirst({
@@ -293,8 +326,8 @@ router.post('/:id/members', async (req: Request, res: Response) => {
             role,
         }).returning()
 
-        // Auto-create native mailbox if the user already has a passwordHash
-        if (!userToAdd.isAdmin && userToAdd.passwordHash) {
+        // Auto-create native mailbox
+        if (!userToAdd.isAdmin) {
             await createUserMailbox(userToAdd.id, userToAdd.email)
         }
 
