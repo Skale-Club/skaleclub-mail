@@ -250,7 +250,7 @@ router.post('/:mailboxId/send', async (req: Request, res: Response) => {
             for (const addr of allRecipients) {
                 const recipientUserId = await findLocalUser(addr)
                 if (recipientUserId) {
-                    localRecipients.push({ email: addr, userId: recipientUserId })
+                    localRecipients.push({ email: addr, userId: recipientUserId.userId })
                 } else {
                     externalRecipients.push(addr)
                 }

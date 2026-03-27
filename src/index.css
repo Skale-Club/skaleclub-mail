@@ -114,91 +114,129 @@
     }
 }
 
-.rich-text-editor .ql-container {
-    font-family: 'Inter', sans-serif;
-    font-size: 15px;
+.compose-editor .ql-toolbar {
     border: none;
-    min-height: 200px;
-}
-
-.rich-text-editor .ql-editor {
-    padding: 16px;
-    min-height: 200px;
-    line-height: 1.6;
-}
-
-.rich-text-editor .ql-editor.ql-blank::before {
-    font-style: normal;
-    color: #9ca3af;
-}
-
-.rich-text-editor .ql-toolbar {
-    border: none;
-    border-bottom: 1px solid var(--border);
     background: transparent;
-    padding: 8px 12px;
+    padding: 6px 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
 }
 
-.rich-text-editor .ql-toolbar button {
-    color: #6b7280;
+.compose-editor .ql-toolbar button {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    color: var(--muted-foreground);
 }
 
-.rich-text-editor .ql-toolbar button:hover {
-    color: #374151;
+.compose-editor .ql-toolbar button:hover {
+    background: var(--muted);
+    color: var(--foreground);
 }
 
-.rich-text-editor .ql-toolbar button.ql-active {
-    color: #2563eb;
+.compose-editor .ql-toolbar button.ql-active {
+    background: var(--primary);
+    color: var(--primary-foreground);
 }
 
-.rich-text-editor .ql-toolbar .ql-stroke {
+.compose-editor .ql-toolbar .ql-stroke {
     stroke: currentColor;
 }
 
-.rich-text-editor .ql-toolbar .ql-fill {
+.compose-editor .ql-toolbar .ql-fill {
     fill: currentColor;
 }
 
-.rich-text-editor .ql-toolbar .ql-picker {
-    color: #6b7280;
+.compose-editor .ql-toolbar .ql-stroke.ql-stroke {
+    stroke: currentColor;
 }
 
-.rich-text-editor .ql-toolbar .ql-picker-options {
-    background: white;
+.compose-editor .ql-toolbar .ql-fill.ql-fill {
+    fill: currentColor;
+}
+
+.compose-editor .ql-toolbar .ql-picker-label .ql-stroke {
+    stroke: currentColor;
+}
+
+.compose-editor .ql-toolbar .ql-picker-label .ql-fill {
+    fill: currentColor;
+}
+
+.compose-editor .ql-toolbar .ql-separator {
+    width: 1px;
+    height: 24px;
+    background: var(--border);
+    margin: 4px 4px;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.compose-editor .ql-container {
+    font-family: 'Inter', sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    border: none;
+}
+
+.compose-editor .ql-editor {
+    padding: 20px 24px;
+    min-height: 300px;
+}
+
+.compose-editor .ql-editor.ql-blank::before {
+    font-style: normal;
+    color: var(--muted-foreground);
+}
+
+.compose-editor .ql-picker {
+    color: var(--muted-foreground);
+}
+
+.compose-editor .ql-picker-label {
+    border-radius: 6px;
+    padding: 4px;
+}
+
+.compose-editor .ql-picker-options {
+    background: var(--popover);
     border: 1px solid var(--border);
     border-radius: 8px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    padding: 4px;
+    z-index: 50;
 }
 
-.dark .rich-text-editor .ql-toolbar button {
-    color: #9ca3af;
+.compose-editor .ql-picker-item:hover {
+    color: var(--foreground);
+    background: var(--muted);
 }
 
-.dark .rich-text-editor .ql-toolbar button:hover {
-    color: #e5e7eb;
+.compose-editor .ql-tooltip {
+    background: var(--popover);
+    color: var(--foreground);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
 }
 
-.dark .rich-text-editor .ql-toolbar button.ql-active {
-    color: #3b82f6;
+.compose-editor .ql-tooltip input[type="text"] {
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--foreground);
 }
 
-.dark .rich-text-editor .ql-toolbar .ql-picker {
-    color: #9ca3af;
+.dark .compose-editor .ql-picker-options {
+    background: var(--popover);
+    border: 1px solid var(--border);
 }
 
-.dark .rich-text-editor .ql-toolbar .ql-picker-options {
-    background: #1e293b;
-    border-color: #334155;
+.dark .compose-editor .ql-editor {
+    color: var(--foreground);
 }
 
-.dark .rich-text-editor .ql-toolbar .ql-picker-item:hover {
-    color: #e5e7eb;
-}
-
-.dark .rich-text-editor .ql-editor {
-    color: #e5e7eb;
-}
-
-.dark .rich-text-editor .ql-editor.ql-blank::before {
-    color: #6b7280;
+.dark .compose-editor .ql-editor.ql-blank::before {
+    color: var(--muted-foreground);
 }

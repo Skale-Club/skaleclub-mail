@@ -8,17 +8,24 @@ interface RichTextEditorProps {
     placeholder?: string
     className?: string
     minHeight?: number
+    onFocus?: () => void
+    onBlur?: () => void
 }
 
 const modules = {
     toolbar: [
-        [{ header: [1, 2, 3, false] }],
         ['bold', 'italic', 'underline', 'strike'],
-        [{ color: [] }, { background: [] }],
-        [{ list: 'ordered' }, { list: 'bullet' }],
-        [{ indent: '-1' }, { indent: '+1' }],
+        ['|'],
+        [{ header: [1, 2, 3, false] }],
+        ['|'],
+        [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }],
+        ['|'],
         [{ align: [] }],
+        ['|'],
+        [{ color: [] }, { background: [] }],
+        ['|'],
         ['link', 'image'],
+        ['|'],
         ['clean']
     ]
 }
@@ -27,7 +34,7 @@ const formats = [
     'header',
     'bold', 'italic', 'underline', 'strike',
     'color', 'background',
-    'list', 'bullet', 'indent',
+    'list', 'indent',
     'align',
     'link', 'image'
 ]
@@ -37,12 +44,14 @@ export function RichTextEditor({
     onChange,
     placeholder = 'Write your message...',
     className = '',
-    minHeight = 300
+    minHeight = 300,
+    onFocus,
+    onBlur
 }: RichTextEditorProps) {
     const quillRef = React.useRef<ReactQuill>(null)
 
     return (
-        <div className={`rich-text-editor ${className}`}>
+        <div className={`compose-editor ${className}`}>
             <ReactQuill
                 ref={quillRef}
                 theme="snow"
@@ -51,6 +60,8 @@ export function RichTextEditor({
                 modules={modules}
                 formats={formats}
                 placeholder={placeholder}
+                onFocus={onFocus}
+                onBlur={onBlur}
                 style={{ minHeight: `${minHeight}px` }}
             />
         </div>

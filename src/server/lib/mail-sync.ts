@@ -4,7 +4,7 @@ import { simpleParser } from 'mailparser'
 import { db } from '../../db'
 import { mailboxes, mailFolders, mailMessages } from '../../db/schema'
 import { eq, and, gt, or, isNull, desc } from 'drizzle-orm'
-import { decryptSecret } from '../../lib/crypto'
+import { decryptSecret } from './crypto'
 
 interface SyncResult {
     mailboxId: string

@@ -28,7 +28,7 @@ import { runReadinessChecks } from './lib/health'
 import { supabaseAnonClient } from './lib/supabase'
 
 const app = express()
-const PORT = process.env.PORT || 3001
+const PORT = process.env.PORT || 9001
 const supabaseOrigin = process.env.SUPABASE_URL ? new URL(process.env.SUPABASE_URL).origin : null
 
 app.set('trust proxy', 1)
@@ -82,7 +82,26 @@ app.use('/api/', (_req, res, next) => {
 })
 
 app.get('/health', (_req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() })
+    const uptimeSeconds = Math.floor(process.uptime())
+    const memoryUsage = process.memoryUsage()
+    
+    res.json({ 
+        status: 'ok', 
+        timestamp: new Date().toISOString(),
+        version: process.env.DEPLOY_VERSION || 'unknown',
+        deployedAt: process.env.DEPLOYED_AT || null,
+        uptime: {
+            seconds: uptimeSeconds,
+            human: `${Math.floor(uptimeSeconds / 3600)}h ${Math.floor((uptimeSeconds % 3600) / 60)}m ${uptimeSeconds % 60}s`
+        },
+        memory: {
+            heapUsedMB: Math.round(memoryUsage.heapUsed / 1024 / 1024),
+            heapTotalMB: Math.round(memoryUsage.heapTotal / 1024 / 1024),
+            rssMB: Math.round(memoryUsage.rss / 1024 / 1024)
+        },
+        node: process.version,
+        env: process.env.NODE_ENV || 'development'
+    })
 })
 
 app.get('/health/db', async (_req, res) => {

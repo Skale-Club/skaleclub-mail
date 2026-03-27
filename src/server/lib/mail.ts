@@ -1,5 +1,5 @@
 import { simpleParser, ParsedMail } from 'mailparser'
-import { decryptSecret } from '../../lib/crypto'
+import { decryptSecret } from './crypto'
 import type { Mailbox, MailMessage } from '../../db/schema'
 
 interface ImapConfig {

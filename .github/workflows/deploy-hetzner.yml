@@ -8,6 +8,13 @@ on:
 permissions:
   contents: read
 
+env:
+  IMAGE_NAME: skaleclub-mail
+  DEPLOY_DIR: /opt/skaleclub-mail
+  HEALTH_CHECK_URL: http://localhost:9001/health
+  HEALTH_CHECK_RETRIES: 12
+  HEALTH_CHECK_INTERVAL: 5
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -15,47 +22,82 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Get deploy metadata
+        id: meta
+        run: |
+          echo "version=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "deployed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+          echo "commit_message=$(git log -1 --pretty=%s)" >> $GITHUB_OUTPUT
+
       - name: Deploy to Hetzner
+        id: deploy
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.HETZNER_HOST }}
           username: root
           key: ${{ secrets.HETZNER_SSH_KEY }}
+          command_timeout: 20m
           script: |
+            set -euo pipefail
+            
             REPO_URL="https://github.com/Skale-Club/skaleclub-mail.git"
-            DEPLOY_DIR="/opt/skaleclub-mail"
-
+            DEPLOY_VERSION="${{ steps.meta.outputs.version }}"
+            DEPLOYED_AT="${{ steps.meta.outputs.deployed_at }}"
+            
+            echo "::group::📦 Preparing server"
             # Install Docker if not present
             if ! command -v docker &> /dev/null; then
+              echo "Installing Docker..."
               curl -fsSL https://get.docker.com | sh
               systemctl start docker
               systemctl enable docker
             fi
-
+            
             # Clone or pull latest code
             if [ -d "$DEPLOY_DIR/.git" ]; then
               cd "$DEPLOY_DIR"
+              echo "Pulling latest changes..."
               git fetch origin main
               git reset --hard origin/main
             else
+              echo "Cloning repository..."
               git clone "$REPO_URL" "$DEPLOY_DIR"
               cd "$DEPLOY_DIR"
             fi
-
-            # Build the image
-            docker build \
-              --build-arg VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }} \
-              --build-arg VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }} \
+            echo "::endgroup::"
+            
+            echo "::group::🔧 Building Docker image"
+            # Save previous image for rollback
+            if docker images $IMAGE_NAME:latest --format "{{.ID}}" | grep -q .; then
+              echo "Saving previous image as $IMAGE_NAME:previous..."
+              docker tag $IMAGE_NAME:latest $IMAGE_NAME:previous || true
+            fi
+            
+            # Build new image with --no-cache to ensure fresh build
+            echo "Building image version $DEPLOY_VERSION..."
+            docker build --no-cache \
+              --build-arg VITE_SUPABASE_URL="${{ secrets.VITE_SUPABASE_URL }}" \
+              --build-arg VITE_SUPABASE_ANON_KEY="${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
               --build-arg VITE_APP_NAME="Skale Club Mail" \
-              -t skaleclub-mail:latest .
-
-            # Stop and remove old container
-            docker stop skaleclub-mail || true
-            docker rm skaleclub-mail || true
-
+              -t $IMAGE_NAME:latest \
+              -t $IMAGE_NAME:$DEPLOY_VERSION \
+              .
+            
+            echo "Build completed successfully"
+            echo "::endgroup::"
+            
+            echo "::group::🚀 Deploying new container"
+            # Stop and remove old container (only after successful build)
+            if docker ps -a --filter "name=$IMAGE_NAME" --format "{{.ID}}" | grep -q .; then
+              echo "Stopping old container..."
+              docker stop $IMAGE_NAME || true
+              docker rm $IMAGE_NAME || true
+            fi
+            
             # Run new container
+            echo "Starting new container..."
             docker run -d \
-              --name skaleclub-mail \
+              --name $IMAGE_NAME \
               --restart unless-stopped \
               -p 9001:9001 \
               -p 25:25 \
@@ -63,24 +105,138 @@ jobs:
               -p 993:993 \
               -e NODE_ENV=production \
               -e PORT=9001 \
-              -e SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
-              -e SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
-              -e SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }} \
-              -e DATABASE_URL=${{ secrets.DATABASE_URL }} \
-              -e JWT_SECRET=${{ secrets.JWT_SECRET }} \
-              -e ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }} \
-              -e OUTLOOK_TOKEN_ENCRYPTION_KEY=${{ secrets.OUTLOOK_TOKEN_ENCRYPTION_KEY }} \
-              -e MAIL_DOMAIN=${{ secrets.MAIL_DOMAIN }} \
-              -e SMTP_HOST=${{ secrets.SMTP_HOST }} \
-              -e SMTP_PORT=${{ secrets.SMTP_PORT }} \
-              -e SMTP_USER=${{ secrets.SMTP_USER }} \
-              -e SMTP_PASS=${{ secrets.SMTP_PASS }} \
-              -e SMTP_FROM=${{ secrets.SMTP_FROM }} \
-              -e FRONTEND_URL=${{ secrets.FRONTEND_URL }} \
+              -e DEPLOY_VERSION=$DEPLOY_VERSION \
+              -e DEPLOYED_AT="$DEPLOYED_AT" \
+              -e SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
+              -e SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}" \
+              -e SUPABASE_SERVICE_ROLE_KEY="${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+              -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+              -e JWT_SECRET="${{ secrets.JWT_SECRET }}" \
+              -e ENCRYPTION_KEY="${{ secrets.ENCRYPTION_KEY }}" \
+              -e OUTLOOK_TOKEN_ENCRYPTION_KEY="${{ secrets.OUTLOOK_TOKEN_ENCRYPTION_KEY }}" \
+              -e MAIL_DOMAIN="${{ secrets.MAIL_DOMAIN }}" \
+              -e MAIL_HOST="${{ secrets.MAIL_HOST }}" \
+              -e APP_COMPANY_NAME="${{ secrets.APP_COMPANY_NAME }}" \
+              -e APP_APPLICATION_NAME="${{ secrets.APP_APPLICATION_NAME }}" \
+              -e SMTP_HOST="${{ secrets.SMTP_HOST }}" \
+              -e SMTP_PORT="${{ secrets.SMTP_PORT }}" \
+              -e SMTP_USER="${{ secrets.SMTP_USER }}" \
+              -e SMTP_PASS="${{ secrets.SMTP_PASS }}" \
+              -e SMTP_FROM="${{ secrets.SMTP_FROM }}" \
+              -e FRONTEND_URL="${{ secrets.FRONTEND_URL }}" \
               -e SMTP_SUBMISSION_PORT=587 \
               -e IMAP_PORT=993 \
               -e ENABLE_MAIL_SERVER=true \
-              skaleclub-mail:latest
-
-            # Prune old images
+              $IMAGE_NAME:latest
+            
+            echo "Container started"
+            echo "::endgroup::"
+            
+            echo "::group::🏥 Health Check"
+            # Wait for container to be ready and check health
+            echo "Waiting for application to start..."
+            HEALTH_PASSED=false
+            
+            for i in $(seq 1 $HEALTH_CHECK_RETRIES); do
+              sleep $HEALTH_CHECK_INTERVAL
+              echo "Health check attempt $i/$HEALTH_CHECK_RETRIES..."
+              
+              if curl -sf "$HEALTH_CHECK_URL" > /dev/null 2>&1; then
+                HEALTH_PASSED=true
+                echo "✅ Health check passed!"
+                break
+              fi
+              
+              # Check if container is still running
+              if ! docker ps --filter "name=$IMAGE_NAME" --filter "status=running" -q | grep -q .; then
+                echo "❌ Container is not running!"
+                docker logs $IMAGE_NAME --tail 50 2>&1 || true
+                break
+              fi
+            done
+            
+            if [ "$HEALTH_PASSED" = "false" ]; then
+              echo "❌ Health check failed after $HEALTH_CHECK_RETRIES attempts"
+              echo ""
+              echo "Container logs:"
+              docker logs $IMAGE_NAME --tail 100 2>&1 || true
+              echo ""
+              
+              echo "::group::⏪ Rolling back to previous version"
+              if docker images $IMAGE_NAME:previous --format "{{.ID}}" | grep -q .; then
+                echo "Rolling back to previous image..."
+                docker stop $IMAGE_NAME || true
+                docker rm $IMAGE_NAME || true
+                docker run -d \
+                  --name $IMAGE_NAME \
+                  --restart unless-stopped \
+                  -p 9001:9001 \
+                  -p 25:25 \
+                  -p 587:587 \
+                  -p 993:993 \
+                  -e NODE_ENV=production \
+                  -e PORT=9001 \
+                  -e SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
+                  -e SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}" \
+                  -e SUPABASE_SERVICE_ROLE_KEY="${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+                  -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+                  -e JWT_SECRET="${{ secrets.JWT_SECRET }}" \
+                  -e ENCRYPTION_KEY="${{ secrets.ENCRYPTION_KEY }}" \
+                  -e OUTLOOK_TOKEN_ENCRYPTION_KEY="${{ secrets.OUTLOOK_TOKEN_ENCRYPTION_KEY }}" \
+                  -e MAIL_DOMAIN="${{ secrets.MAIL_DOMAIN }}" \
+                  -e MAIL_HOST="${{ secrets.MAIL_HOST }}" \
+                  -e APP_COMPANY_NAME="${{ secrets.APP_COMPANY_NAME }}" \
+                  -e APP_APPLICATION_NAME="${{ secrets.APP_APPLICATION_NAME }}" \
+                  -e SMTP_HOST="${{ secrets.SMTP_HOST }}" \
+                  -e SMTP_PORT="${{ secrets.SMTP_PORT }}" \
+                  -e SMTP_USER="${{ secrets.SMTP_USER }}" \
+                  -e SMTP_PASS="${{ secrets.SMTP_PASS }}" \
+                  -e SMTP_FROM="${{ secrets.SMTP_FROM }}" \
+                  -e FRONTEND_URL="${{ secrets.FRONTEND_URL }}" \
+                  -e SMTP_SUBMISSION_PORT=587 \
+                  -e IMAP_PORT=993 \
+                  -e ENABLE_MAIL_SERVER=true \
+                  $IMAGE_NAME:previous
+                echo "Rollback completed"
+              else
+                echo "No previous image available for rollback"
+              fi
+              echo "::endgroup::"
+              
+              exit 1
+            fi
+            echo "::endgroup::"
+            
+            echo "::group::🧹 Cleanup"
+            # Prune old images (keep latest, previous, and current version)
             docker image prune -f
+            echo "::endgroup::"
+            
+            echo ""
+            echo "=========================================="
+            echo "✅ DEPLOYMENT SUCCESSFUL"
+            echo "  Version: $DEPLOY_VERSION"
+            echo "  Deployed: $DEPLOYED_AT"
+            echo "=========================================="
+
+      - name: Deployment Summary
+        if: always()
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY <<EOF
+          ## 🚀 Deployment Summary
+          
+          | Field | Value |
+          |-------|-------|
+          | **Status** | ${{ job.status == 'success' && '✅ Success' || '❌ Failed' }} |
+          | **Version** | \`${{ steps.meta.outputs.version }}\` |
+          | **Deployed At** | ${{ steps.meta.outputs.deployed_at }} |
+          | **Commit** | ${{ steps.meta.outputs.commit_message }} |
+          | **Triggered By** | ${{ github.actor }} |
+          | **Branch** | ${{ github.ref_name }} |
+          | **Run ID** | [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+          EOF
+
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          echo "::error::Deployment failed! Check the logs above for details."

@@ -47,19 +47,19 @@ export default function Login() {
     }
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-background p-6">
+        <div className="flex min-h-[100dvh] items-center justify-center bg-background p-4 sm:p-6">
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-secondary via-background to-background -z-10" />
-            <div className="w-full max-w-md z-10">
+            <div className="w-full max-w-md z-10 flex flex-col gap-6 sm:gap-8">
                 <Card className="shadow-lg-soft border-border/40">
-                    <CardHeader className="space-y-0 text-center pb-6">
+                    <CardHeader className="space-y-0 text-center pb-4 sm:pb-6 pt-6 sm:pt-8 px-5 sm:px-6">
                         <div className="flex flex-col items-center justify-center gap-1">
-                            <AppLogo className="h-16 w-16 shadow-sm-soft" alt={`${applicationName} logo`} />
-                            <CardTitle className="text-2xl font-semibold tracking-tight">{applicationName}</CardTitle>
+                            <AppLogo className="h-14 w-14 sm:h-16 sm:w-16 shadow-sm-soft" alt={`${applicationName} logo`} />
+                            <CardTitle className="text-xl sm:text-2xl font-semibold tracking-tight">{applicationName}</CardTitle>
                             <CardDescription>Sign in to your account to continue</CardDescription>
                         </div>
                     </CardHeader>
-                    <CardContent>
-                        <form onSubmit={handleLogin} className="space-y-5">
+                    <CardContent className="px-5 sm:px-6 pb-6 sm:pb-8">
+                        <form onSubmit={handleLogin} className="space-y-4 sm:space-y-5">
                             <div className="space-y-2">
                                 <Label htmlFor="email" className="text-sm font-medium">Email address</Label>
                                 <div className="relative">
@@ -130,7 +130,7 @@ export default function Login() {
                     </CardContent>
                 </Card>
 
-                <div className="mt-8 text-center text-sm text-muted-foreground">
+                <div className="text-center text-sm text-muted-foreground pb-2">
                     Don&apos;t have an account?{' '}
                     <span className="font-medium text-foreground">Contact your administrator</span>
                 </div>

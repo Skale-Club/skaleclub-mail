@@ -469,7 +469,7 @@ export default function ComposePage() {
                             </div>
                         )}
 
-                        <div className="mt-4 border border-border rounded-lg overflow-hidden">
+                        <div className="mt-4 rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden">
                             <RichTextEditor
                                 value={email.body}
                                 onChange={(value) => setEmail({ ...email, body: value })}
