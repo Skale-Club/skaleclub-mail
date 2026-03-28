@@ -56,7 +56,7 @@ export function MailboxProvider({ children }: { children: React.ReactNode }) {
 
     React.useEffect(() => {
         if (authLoading) return
-        if (!user || isAdmin) {
+        if (!user || isAdmin !== false) {
             React.startTransition(() => {
                 setMailboxes([])
                 setSelectedMailbox(null)

@@ -1,7 +1,73 @@
-import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery, InfiniteData } from '@tanstack/react-query'
 import React from 'react'
-import { mailApi, Message, SendEmailPayload, SaveDraftPayload, ContactItem } from '../lib/mail-api'
+import { mailApi, Message, SendEmailPayload, SaveDraftPayload, ContactItem, MessageListResponse } from '../lib/mail-api'
 import { useMailbox } from './useMailbox'
+
+type MessageQuerySnapshot = Array<[readonly unknown[], unknown]>
+
+function isMailboxMessagesQuery(queryKey: readonly unknown[], mailboxId: string | undefined) {
+    if (!mailboxId || queryKey[0] !== 'messages') return false
+    return queryKey.includes(mailboxId)
+}
+
+function updateMessageList(
+    data: MessageListResponse | InfiniteData<MessageListResponse, unknown> | undefined,
+    updater: (message: Message) => Message | null
+) {
+    if (!data) return data
+
+    if ('pages' in data) {
+        return {
+            ...data,
+            pages: data.pages.map((page) => {
+                const messages = page.messages
+                    .map(updater)
+                    .filter((message): message is Message => message !== null)
+
+                return {
+                    ...page,
+                    messages,
+                    total: Math.max(messages.length, page.total - (page.messages.length - messages.length)),
+                }
+            }),
+        }
+    }
+
+    const messages = data.messages
+        .map(updater)
+        .filter((message): message is Message => message !== null)
+
+    return {
+        ...data,
+        messages,
+        total: Math.max(messages.length, data.total - (data.messages.length - messages.length)),
+    }
+}
+
+function snapshotMailboxMessageQueries(queryClient: ReturnType<typeof useQueryClient>, mailboxId: string | undefined): MessageQuerySnapshot {
+    return queryClient.getQueriesData({
+        predicate: (query) => isMailboxMessagesQuery(query.queryKey, mailboxId),
+    })
+}
+
+function restoreMessageQuerySnapshots(queryClient: ReturnType<typeof useQueryClient>, snapshots: MessageQuerySnapshot) {
+    for (const [queryKey, data] of snapshots) {
+        queryClient.setQueryData(queryKey, data)
+    }
+}
+
+function patchMailboxMessageQueries(
+    queryClient: ReturnType<typeof useQueryClient>,
+    mailboxId: string | undefined,
+    updater: (message: Message) => Message | null
+) {
+    queryClient.setQueriesData(
+        {
+            predicate: (query) => isMailboxMessagesQuery(query.queryKey, mailboxId),
+        },
+        (data) => updateMessageList(data as MessageListResponse | InfiniteData<MessageListResponse, unknown> | undefined, updater)
+    )
+}
 
 export function useFolders() {
     const { selectedMailbox } = useMailbox()
@@ -99,6 +165,27 @@ export function useUpdateMessage() {
             if (!selectedMailbox) throw new Error('No mailbox selected')
             return mailApi.updateMessage(selectedMailbox.id, messageId, data)
         },
+        onMutate: async ({ messageId, data }) => {
+            const snapshots = snapshotMailboxMessageQueries(queryClient, selectedMailbox?.id)
+
+            patchMailboxMessageQueries(queryClient, selectedMailbox?.id, (message) => {
+                if (message.id !== messageId) return message
+
+                return {
+                    ...message,
+                    read: data.read ?? message.read,
+                    starred: data.starred ?? message.starred,
+                    labels: data.labels ?? message.labels,
+                }
+            })
+
+            return { snapshots }
+        },
+        onError: (_error, _variables, context) => {
+            if (context?.snapshots) {
+                restoreMessageQuerySnapshots(queryClient, context.snapshots)
+            }
+        },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['messages'] })
             queryClient.invalidateQueries({ queryKey: ['folders'] })
@@ -115,6 +202,20 @@ export function useDeleteMessage() {
             if (!selectedMailbox) throw new Error('No mailbox selected')
             return mailApi.deleteMessage(selectedMailbox.id, messageId)
         },
+        onMutate: async (messageId: string) => {
+            const snapshots = snapshotMailboxMessageQueries(queryClient, selectedMailbox?.id)
+
+            patchMailboxMessageQueries(queryClient, selectedMailbox?.id, (message) =>
+                message.id === messageId ? null : message
+            )
+
+            return { snapshots }
+        },
+        onError: (_error, _variables, context) => {
+            if (context?.snapshots) {
+                restoreMessageQuerySnapshots(queryClient, context.snapshots)
+            }
+        },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['messages'] })
             queryClient.invalidateQueries({ queryKey: ['folders'] })
@@ -130,6 +231,20 @@ export function useArchiveMessage() {
         mutationFn: (messageId: string) => {
             if (!selectedMailbox) throw new Error('No mailbox selected')
             return mailApi.archiveMessage(selectedMailbox.id, messageId)
+        },
+        onMutate: async (messageId: string) => {
+            const snapshots = snapshotMailboxMessageQueries(queryClient, selectedMailbox?.id)
+
+            patchMailboxMessageQueries(queryClient, selectedMailbox?.id, (message) =>
+                message.id === messageId ? null : message
+            )
+
+            return { snapshots }
+        },
+        onError: (_error, _variables, context) => {
+            if (context?.snapshots) {
+                restoreMessageQuerySnapshots(queryClient, context.snapshots)
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['messages'] })
@@ -153,6 +268,21 @@ export function useSpamMessage() {
             if (!selectedMailbox) throw new Error('No mailbox selected')
             return mailApi.spamMessage(selectedMailbox.id, messageId, isSpam)
         },
+        onMutate: async ({ messageId, isSpam }) => {
+            const snapshots = snapshotMailboxMessageQueries(queryClient, selectedMailbox?.id)
+
+            patchMailboxMessageQueries(queryClient, selectedMailbox?.id, (message) => {
+                if (message.id !== messageId) return message
+                return isSpam ? null : message
+            })
+
+            return { snapshots }
+        },
+        onError: (_error, _variables, context) => {
+            if (context?.snapshots) {
+                restoreMessageQuerySnapshots(queryClient, context.snapshots)
+            }
+        },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['messages'] })
             queryClient.invalidateQueries({ queryKey: ['folders'] })
@@ -174,6 +304,20 @@ export function useMoveMessage() {
         }) => {
             if (!selectedMailbox) throw new Error('No mailbox selected')
             return mailApi.moveMessage(selectedMailbox.id, messageId, folderId)
+        },
+        onMutate: async ({ messageId }) => {
+            const snapshots = snapshotMailboxMessageQueries(queryClient, selectedMailbox?.id)
+
+            patchMailboxMessageQueries(queryClient, selectedMailbox?.id, (message) =>
+                message.id === messageId ? null : message
+            )
+
+            return { snapshots }
+        },
+        onError: (_error, _variables, context) => {
+            if (context?.snapshots) {
+                restoreMessageQuerySnapshots(queryClient, context.snapshots)
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['messages'] })
@@ -198,6 +342,40 @@ export function useBatchUpdate() {
         }) => {
             if (!selectedMailbox) throw new Error('No mailbox selected')
             return mailApi.batchUpdate(selectedMailbox.id, messageIds, action, folderId)
+        },
+        onMutate: async ({ messageIds, action }) => {
+            const snapshots = snapshotMailboxMessageQueries(queryClient, selectedMailbox?.id)
+            const messageIdSet = new Set(messageIds)
+
+            patchMailboxMessageQueries(queryClient, selectedMailbox?.id, (message) => {
+                if (!messageIdSet.has(message.id)) return message
+
+                switch (action) {
+                    case 'read':
+                        return { ...message, read: true }
+                    case 'unread':
+                        return { ...message, read: false }
+                    case 'star':
+                        return { ...message, starred: true }
+                    case 'unstar':
+                        return { ...message, starred: false }
+                    case 'delete':
+                    case 'archive':
+                    case 'move':
+                    case 'spam':
+                    case 'unspam':
+                        return null
+                    default:
+                        return message
+                }
+            })
+
+            return { snapshots }
+        },
+        onError: (_error, _variables, context) => {
+            if (context?.snapshots) {
+                restoreMessageQuerySnapshots(queryClient, context.snapshots)
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['messages'] })

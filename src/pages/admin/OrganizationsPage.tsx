@@ -12,7 +12,7 @@ interface Organization {
     slug: string
     timezone: string
     owner_id: string
-    created_at: string
+    createdAt: string
     member_count?: number
     server_count?: number
 }
@@ -84,7 +84,7 @@ export default function OrganizationsPage() {
     return (
         <div className="space-y-6">
             <div className="flex items-center gap-4 justify-between">
-                <div className="relative flex-1 max-w-md">
+                <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                         placeholder="Search organizations..."
@@ -147,9 +147,9 @@ export default function OrganizationsPage() {
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-sm text-muted-foreground">
                                     <span>Timezone: {org.timezone}</span>
-                                    <span>Created: {new Date(org.created_at).toLocaleDateString()}</span>
+                                    <span>Created: {org.createdAt && !isNaN(new Date(org.createdAt).getTime()) ? new Date(org.createdAt).toLocaleDateString() : 'N/A'}</span>
                                 </div>
                             </CardContent>
                         </Card>

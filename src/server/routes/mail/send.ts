@@ -56,6 +56,8 @@ async function relayMessage(
     rawEmail: Buffer
 ): Promise<void> {
     if (process.env.SMTP_HOST && process.env.SMTP_USER) {
+        console.log(`[Send:Relay] Using SMTP relay: host=${process.env.SMTP_HOST} port=${process.env.SMTP_PORT || '587'} user=${process.env.SMTP_USER}`)
+        console.log(`[Send:Relay] Envelope: from=${fromAddress} to=[${toAddresses.join(', ')}]`)
         const transporter = nodemailer.createTransport({
             host: process.env.SMTP_HOST,
             port: parseInt(process.env.SMTP_PORT || '587'),
@@ -66,20 +68,30 @@ async function relayMessage(
             },
         })
 
-        await transporter.sendMail({
+        const info = await transporter.sendMail({
             envelope: { from: fromAddress, to: toAddresses },
             raw: rawEmail,
         })
+        console.log(`[Send:Relay] SMTP relay SUCCESS:`, info.response || info.messageId)
     } else {
+        console.log(`[Send:Relay] ⚠️  NO SMTP_HOST/SMTP_USER configured — attempting DIRECT delivery`)
+        console.log(`[Send:Relay] MAIL_DOMAIN=${process.env.MAIL_DOMAIN || 'localhost'} from=${fromAddress} to=[${toAddresses.join(', ')}]`)
+        console.log(`[Send:Relay] Direct delivery requires: port 25 open, valid MX records, not blocked by ISP`)
         const transporter = nodemailer.createTransport({
             direct: true,
             name: process.env.MAIL_DOMAIN || 'localhost',
         } as nodemailer.TransportOptions)
 
-        await transporter.sendMail({
-            envelope: { from: fromAddress, to: toAddresses },
-            raw: rawEmail,
-        })
+        try {
+            const info = await transporter.sendMail({
+                envelope: { from: fromAddress, to: toAddresses },
+                raw: rawEmail,
+            })
+            console.log(`[Send:Relay] Direct delivery SUCCESS:`, info.response || info.messageId)
+        } catch (directErr) {
+            console.error(`[Send:Relay] Direct delivery FAILED:`, directErr)
+            throw directErr
+        }
     }
 }
 
@@ -376,33 +388,38 @@ router.post('/:mailboxId/send', async (req: Request, res: Response) => {
             }
         }
 
-        // Auto-register contacts from recipients
-        const recipientEntries = [
-            ...data.to,
-            ...(data.cc || []),
-            ...(data.bcc || []),
-        ]
-        for (const recipient of recipientEntries) {
-            const nameParts = recipient.name?.split(' ') || []
-            const firstName = nameParts[0] || null
-            const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : null
+        // Contact sync is secondary. It should never turn a successful send into a visible failure.
+        try {
+            const recipientEntries = [
+                ...data.to,
+                ...(data.cc || []),
+                ...(data.bcc || []),
+            ]
 
-            await db.insert(contacts).values({
-                userId,
-                email: recipient.address.toLowerCase(),
-                firstName,
-                lastName,
-                company: null,
-                emailedCount: 1,
-                lastEmailedAt: new Date(),
-            }).onConflictDoUpdate({
-                target: [contacts.userId, contacts.email],
-                set: {
-                    emailedCount: sql`${contacts.emailedCount} + 1`,
+            for (const recipient of recipientEntries) {
+                const nameParts = recipient.name?.split(' ') || []
+                const firstName = nameParts[0] || null
+                const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : null
+
+                await db.insert(contacts).values({
+                    userId,
+                    email: recipient.address.toLowerCase(),
+                    firstName,
+                    lastName,
+                    company: null,
+                    emailedCount: 1,
                     lastEmailedAt: new Date(),
-                    updatedAt: new Date(),
-                },
-            })
+                }).onConflictDoUpdate({
+                    target: [contacts.userId, contacts.email],
+                    set: {
+                        emailedCount: sql`${contacts.emailedCount} + 1`,
+                        lastEmailedAt: new Date(),
+                        updatedAt: new Date(),
+                    },
+                })
+            }
+        } catch (contactSyncError) {
+            console.warn('[Send] Contact sync skipped:', contactSyncError instanceof Error ? contactSyncError.message : contactSyncError)
         }
 
         const duration = Date.now() - startTime

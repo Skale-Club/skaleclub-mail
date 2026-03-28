@@ -126,7 +126,12 @@ export async function validateEmailDomainForOrg(email: string, organizationId: s
  */
 export async function findLocalUser(email: string): Promise<{ userId: string } | null> {
     const emailDomain = email.split('@')[1]?.toLowerCase()
-    if (!emailDomain) return null
+    if (!emailDomain) {
+        console.log(`[NativeMail] findLocalUser("${email}") → NO DOMAIN PART`)
+        return null
+    }
+
+    console.log(`[NativeMail] findLocalUser("${email}") → checking domain "${emailDomain}"...`)
 
     // Domain must be verified in some org
     const verifiedDomain = await db.query.domains.findFirst({
@@ -135,14 +140,26 @@ export async function findLocalUser(email: string): Promise<{ userId: string } |
             eq(domains.verificationStatus, 'verified')
         ),
     })
-    if (!verifiedDomain) return null
+    if (!verifiedDomain) {
+        // Log all domains to help debug
+        const allDomains = await db.query.domains.findMany()
+        console.log(`[NativeMail] findLocalUser("${email}") → domain "${emailDomain}" NOT VERIFIED`)
+        console.log(`[NativeMail]   All domains in DB:`, allDomains.map(d => `${d.name} (status=${d.verificationStatus}, orgId=${d.organizationId})`))
+        return null
+    }
+
+    console.log(`[NativeMail] findLocalUser("${email}") → domain "${emailDomain}" VERIFIED (orgId=${verifiedDomain.organizationId})`)
 
     // A non-admin user with that exact email must exist
     const user = await db.query.users.findFirst({
         where: eq(users.email, email.toLowerCase()),
     })
 
-    if (!user) return null
+    if (!user) {
+        console.log(`[NativeMail] findLocalUser("${email}") → USER NOT FOUND in users table`)
+        return null
+    }
 
+    console.log(`[NativeMail] findLocalUser("${email}") → FOUND userId=${user.id} isAdmin=${user.isAdmin}`)
     return { userId: user.id }
 }

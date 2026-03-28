@@ -99,14 +99,14 @@ function QuickAction({ title, description, href, icon }: {
             href={href}
             className="flex items-center gap-4 p-4 bg-card rounded-lg border border-border hover:border-primary/50 transition-colors group"
         >
-            <div className="p-2 bg-primary/10 rounded-lg text-primary">
+            <div className="p-2 bg-primary/10 rounded-lg text-primary shrink-0">
                 {icon}
             </div>
-            <div className="flex-1">
-                <h3 className="font-medium text-foreground">{title}</h3>
-                <p className="text-sm text-muted-foreground">{description}</p>
+            <div className="flex-1 min-w-0">
+                <h3 className="font-medium text-foreground truncate">{title}</h3>
+                <p className="text-sm text-muted-foreground truncate">{description}</p>
             </div>
-            <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-primary transition-colors" />
+            <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-primary transition-colors shrink-0" />
         </Link>
     )
 }
@@ -257,7 +257,7 @@ export function OutreachDashboard() {
                 {/* Quick Actions */}
                 <div>
                     <h2 className="text-lg font-semibold text-foreground mb-4">Quick Actions</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                         <QuickAction
                             title="Create Campaign"
                             description="Start a new cold email campaign"

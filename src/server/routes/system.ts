@@ -2,8 +2,8 @@ import { Router, Request, Response } from 'express'
 import { statfs } from 'node:fs/promises'
 import { db, checkDatabaseHealth, getPoolStats } from '../../db'
 import { sql } from 'drizzle-orm'
-import { systemBranding, users, organizations } from '../../db/schema'
-import { eq } from 'drizzle-orm'
+import { systemBranding, users, organizations, domains, mailboxes, mailFolders, mailMessages } from '../../db/schema'
+import { eq, and } from 'drizzle-orm'
 import { z } from 'zod'
 import { getCachedBranding, clearBrandingCache } from '../lib/serverBranding'
 import { supabaseAdminClient } from '../lib/supabase'
@@ -510,6 +510,117 @@ router.get('/db-health', async (req: Request, res: Response) => {
             status: 'unhealthy',
             error: error instanceof Error ? error.message : 'Unknown error'
         })
+    }
+})
+
+// GET /api/system/mail-diag — Diagnostic: check domains, users, mailboxes, env for native mail
+router.get('/mail-diag', async (req: Request, res: Response) => {
+    try {
+        const requestingUser = await getRequestingUser(req)
+        if (!requestingUser?.isAdmin) {
+            return res.status(403).json({ error: 'Forbidden — admin only' })
+        }
+
+        // 1. All domains
+        const allDomains = await db.query.domains.findMany()
+
+        // 2. All non-admin users
+        const allUsers = await db.query.users.findMany()
+        const nonAdminUsers = allUsers.filter(u => !u.isAdmin)
+
+        // 3. All native mailboxes
+        const nativeMailboxes = await db.query.mailboxes.findMany({
+            where: eq(mailboxes.isNative, true),
+        })
+
+        // 4. For each native mailbox, check folders exist
+        const mailboxDetails = await Promise.all(
+            nativeMailboxes.map(async (mb) => {
+                const folders = await db.query.mailFolders.findMany({
+                    where: eq(mailFolders.mailboxId, mb.id),
+                })
+                const messageCount = await db.select({ count: sql<number>`count(*)::int` })
+                    .from(mailMessages)
+                    .where(eq(mailMessages.mailboxId, mb.id))
+                return {
+                    id: mb.id,
+                    email: mb.email,
+                    userId: mb.userId,
+                    isNative: mb.isNative,
+                    folders: folders.map(f => ({ name: f.name, type: f.type, remoteId: f.remoteId })),
+                    messageCount: messageCount[0]?.count ?? 0,
+                }
+            })
+        )
+
+        // 5. Env check
+        const envCheck = {
+            SMTP_HOST: process.env.SMTP_HOST || '❌ NOT SET',
+            SMTP_USER: process.env.SMTP_USER ? '✅ SET' : '❌ NOT SET',
+            SMTP_PASS: process.env.SMTP_PASS ? '✅ SET' : '❌ NOT SET',
+            SMTP_PORT: process.env.SMTP_PORT || '(default 587)',
+            MAIL_HOST: process.env.MAIL_HOST || '❌ NOT SET',
+            MAIL_DOMAIN: process.env.MAIL_DOMAIN || '❌ NOT SET',
+            SMTP_SUBMISSION_PORT: process.env.SMTP_SUBMISSION_PORT || '2587',
+            IMAP_PORT: process.env.IMAP_PORT || '2993',
+            ENABLE_MAIL_SERVER: process.env.ENABLE_MAIL_SERVER || 'not set',
+            RAILWAY_ENVIRONMENT: process.env.RAILWAY_ENVIRONMENT || 'not set',
+        }
+
+        // 6. Test: would vanildo@skale.club be found as local?
+        const testEmail = 'vanildo@skale.club'
+        const testDomain = 'skale.club'
+        const verifiedTestDomain = await db.query.domains.findFirst({
+            where: and(eq(domains.name, testDomain), eq(domains.verificationStatus, 'verified')),
+        })
+        const testUser = await db.query.users.findFirst({
+            where: eq(users.email, testEmail),
+        })
+        const testMailbox = testUser ? await db.query.mailboxes.findFirst({
+            where: and(eq(mailboxes.email, testEmail), eq(mailboxes.userId, testUser.id)),
+        }) : null
+
+        res.json({
+            env: envCheck,
+            domains: allDomains.map(d => ({
+                name: d.name,
+                verificationStatus: d.verificationStatus,
+                organizationId: d.organizationId,
+            })),
+            users: nonAdminUsers.map(u => ({
+                id: u.id,
+                email: u.email,
+                hasPasswordHash: !!u.passwordHash,
+            })),
+            nativeMailboxes: mailboxDetails,
+            diagnosticTest: {
+                testEmail,
+                domainVerified: !!verifiedTestDomain,
+                domainDetails: verifiedTestDomain ? { name: verifiedTestDomain.name, orgId: verifiedTestDomain.organizationId } : null,
+                userExists: !!testUser,
+                userDetails: testUser ? { id: testUser.id, email: testUser.email, isAdmin: testUser.isAdmin } : null,
+                mailboxExists: !!testMailbox,
+                mailboxId: testMailbox?.id || null,
+                wouldDeliverLocally: !!verifiedTestDomain && !!testUser && !!testMailbox,
+                issues: [
+                    !verifiedTestDomain && `Domain "${testDomain}" is NOT verified in any org`,
+                    verifiedTestDomain && !testUser && `User "${testEmail}" does NOT exist in users table`,
+                    testUser && testUser.isAdmin && `User "${testEmail}" is an ADMIN (blocked from native mail)`,
+                    testUser && !testUser.passwordHash && `User "${testEmail}" has NO password hash (cannot auth SMTP/IMAP)`,
+                    testUser && !testMailbox && `User "${testEmail}" has NO native mailbox (call createUserMailbox)`,
+                ].filter(Boolean),
+            },
+            relayConfig: {
+                hasSmtpRelay: !!(process.env.SMTP_HOST && process.env.SMTP_USER),
+                willUseDirect: !(process.env.SMTP_HOST && process.env.SMTP_USER),
+                warning: !(process.env.SMTP_HOST && process.env.SMTP_USER)
+                    ? 'No SMTP relay configured. External emails (e.g. to gmail.com) will attempt direct delivery which usually fails without proper MX/PTR/SPF setup.'
+                    : null,
+            },
+        })
+    } catch (error) {
+        console.error('Error in mail-diag:', error)
+        res.status(500).json({ error: 'Internal server error', message: (error as Error).message })
     }
 })
 

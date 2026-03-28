@@ -84,6 +84,7 @@ async function relayMessage(
 ): Promise<void> {
     // Use system SMTP relay if configured, otherwise try direct delivery
     if (process.env.SMTP_HOST && process.env.SMTP_USER) {
+        console.log(`[SMTP:Relay] Using SMTP relay: host=${process.env.SMTP_HOST} port=${process.env.SMTP_PORT || '587'} user=${process.env.SMTP_USER}`)
         const transporter = nodemailer.createTransport({
             host: process.env.SMTP_HOST,
             port: parseInt(process.env.SMTP_PORT || '587'),
@@ -94,21 +95,29 @@ async function relayMessage(
             },
         })
 
-        await transporter.sendMail({
+        const info = await transporter.sendMail({
             envelope: { from: fromAddress, to: toAddresses },
             raw: rawEmail,
         })
+        console.log(`[SMTP:Relay] SUCCESS:`, info.response || info.messageId)
     } else {
+        console.log(`[SMTP:Relay] ⚠️  NO SMTP_HOST/SMTP_USER — attempting DIRECT delivery from=${fromAddress} to=[${toAddresses.join(', ')}]`)
         // Direct delivery (requires proper MX setup)
         const transporter = nodemailer.createTransport({
             direct: true,
             name: process.env.MAIL_DOMAIN || 'localhost',
         } as nodemailer.TransportOptions)
 
-        await transporter.sendMail({
-            envelope: { from: fromAddress, to: toAddresses },
-            raw: rawEmail,
-        })
+        try {
+            const info = await transporter.sendMail({
+                envelope: { from: fromAddress, to: toAddresses },
+                raw: rawEmail,
+            })
+            console.log(`[SMTP:Relay] Direct delivery SUCCESS:`, info.response || info.messageId)
+        } catch (directErr) {
+            console.error(`[SMTP:Relay] Direct delivery FAILED:`, directErr)
+            throw directErr
+        }
     }
 }
 

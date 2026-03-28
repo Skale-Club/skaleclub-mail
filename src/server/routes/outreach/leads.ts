@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { db } from '../../../db'
 import { leads, leadLists, organizationUsers } from '../../../db/schema'
 import { eq, and, or, like, sql, inArray } from 'drizzle-orm'
+import { isPlatformAdmin } from '../../lib/admin'
 
 const router = Router()
 
@@ -50,8 +51,11 @@ const createLeadListSchema = z.object({
     color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
 })
 
-// Helper to check org membership
+// Helper to check org membership (platform admins bypass membership check)
 async function checkOrgMembership(userId: string, organizationId: string) {
+    const admin = await isPlatformAdmin(userId)
+    if (admin) return { role: 'admin' as const }
+
     const membership = await db.query.organizationUsers.findFirst({
         where: and(
             eq(organizationUsers.organizationId, organizationId),

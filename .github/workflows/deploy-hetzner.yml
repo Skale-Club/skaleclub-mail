@@ -126,10 +126,11 @@ jobs:
               -e SMTP_FROM="${{ secrets.SMTP_FROM }}" \
               -e FRONTEND_URL="${{ secrets.FRONTEND_URL }}" \
               -e SMTP_SUBMISSION_PORT=587 \
+              -e SMTP_INBOUND_PORT=25 \
               -e IMAP_PORT=993 \
               -e ENABLE_MAIL_SERVER=true \
               $IMAGE_NAME:latest
-            
+
             echo "Container started"
             echo "::endgroup::"
 
@@ -207,6 +208,7 @@ jobs:
                   -e SMTP_FROM="${{ secrets.SMTP_FROM }}" \
                   -e FRONTEND_URL="${{ secrets.FRONTEND_URL }}" \
                   -e SMTP_SUBMISSION_PORT=587 \
+                  -e SMTP_INBOUND_PORT=25 \
                   -e IMAP_PORT=993 \
                   -e ENABLE_MAIL_SERVER=true \
                   $IMAGE_NAME:previous

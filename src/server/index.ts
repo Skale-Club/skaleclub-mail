@@ -24,6 +24,7 @@ import outlookRoutes from './routes/outlook'
 import mailRoutes from './routes/mail'
 import notificationRoutes from './routes/notifications'
 import { createSMTPServer } from './smtp-server'
+import { createInboundSMTPServer } from './smtp-inbound'
 import { createIMAPServer, loadImapBranding } from './imap-server'
 import { runReadinessChecks } from './lib/health'
 import { supabaseAnonClient } from './lib/supabase'
@@ -251,8 +252,10 @@ if (!process.env.VERCEL) {
         if (enableMailServer || !process.env.RAILWAY_ENVIRONMENT) {
             try {
                 const smtpServer = createSMTPServer()
+                const inboundServer = createInboundSMTPServer()
                 const imapServer = createIMAPServer()
                 smtpServer.start()
+                inboundServer.start()
                 loadImapBranding().then(() => imapServer.start()).catch((err) => {
                     console.warn('⚠️  IMAP branding load failed, starting IMAP server anyway:', (err as Error).message)
                     imapServer.start()

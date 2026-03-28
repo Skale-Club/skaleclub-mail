@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { apiFetch, clearTokenCache } from '../lib/api-client'
 import { supabase } from '../lib/supabase'
 
@@ -13,19 +13,19 @@ interface User {
 
 interface AuthState {
     user: User | null
-    isAdmin: boolean
+    isAdmin: boolean | null
     isLoading: boolean
 }
 
 const AuthContext = createContext<AuthState>({
     user: null,
-    isAdmin: false,
+    isAdmin: null,
     isLoading: true,
 })
 
 function useProvideAuth(): AuthState {
     const [user, setUser] = useState<User | null>(null)
-    const [isAdmin, setIsAdmin] = useState(false)
+    const [isAdmin, setIsAdmin] = useState<boolean | null>(null)
     const [isLoading, setIsLoading] = useState(true)
 
     async function fetchProfile(token?: string) {
@@ -36,12 +36,11 @@ function useProvideAuth(): AuthState {
                 auth: !token,
                 headers: token ? { Authorization: `Bearer ${token}` } : undefined,
                 signal: controller.signal,
-                retry: false,
             })
             window.clearTimeout(timeout)
             setIsAdmin(data.user?.isAdmin === true)
         } catch {
-            setIsAdmin(false)
+            setIsAdmin(null)
         }
     }
 
@@ -70,7 +69,7 @@ function useProvideAuth(): AuthState {
             } catch (error) {
                 console.error('Error getting session:', error)
                 setUser(null)
-                setIsAdmin(false)
+                setIsAdmin(null)
             } finally {
                 setIsLoading(false)
             }
@@ -97,6 +96,27 @@ function useProvideAuth(): AuthState {
             subscription?.unsubscribe()
         }
     }, [])
+
+    // Retry fetchProfile when isAdmin is null (transient error) and user is logged in
+    const retryCount = useRef(0)
+    useEffect(() => {
+        if (isAdmin !== null || !user || isLoading) {
+            retryCount.current = 0
+            return
+        }
+
+        if (retryCount.current >= 3) {
+            setIsAdmin(false)
+            return
+        }
+
+        const timer = window.setTimeout(() => {
+            retryCount.current++
+            void fetchProfile()
+        }, 2000)
+
+        return () => window.clearTimeout(timer)
+    }, [isAdmin, user, isLoading])
 
     return { user, isAdmin, isLoading }
 }

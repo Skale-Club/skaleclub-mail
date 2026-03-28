@@ -111,8 +111,8 @@ export interface EmailListItem {
     id: string
     messageId: string | null
     subject: string | null
-    from: { name: string | null; address: string | null }
-    to: Array<{ name: string | null; address: string | null }>
+    from: { name: string | null; email: string | null }
+    to: Array<{ name: string | null; email: string | null }>
     date: Date | null
     isRead: boolean
     isStarred: boolean
@@ -155,8 +155,8 @@ export function mailMessageToListItem(msg: MailMessage): EmailListItem {
         id: msg.id,
         messageId: msg.messageId,
         subject: msg.subject,
-        from: { name: msg.fromName, address: msg.fromAddress },
-        to: toAddresses.map(a => ({ name: a.name || null, address: a.address || null })),
+        from: { name: msg.fromName, email: msg.fromAddress },
+        to: toAddresses.map(a => ({ name: a.name || null, email: a.address || null })),
         date: msg.receivedAt || msg.remoteDate || null,
         isRead: msg.isRead,
         isStarred: msg.isStarred,

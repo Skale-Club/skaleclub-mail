@@ -1,7 +1,7 @@
 import React from 'react'
 import { Link } from 'wouter'
 import { useMailbox, getProviderColor, getProviderIcon, Mailbox } from '../../hooks/useMailbox'
-import { Plus, Check, AlertCircle, ChevronDown, Mail, RefreshCw, Settings, LogOut } from 'lucide-react'
+import { Plus, Check, AlertCircle, ChevronDown, Mail, RefreshCw, Settings, LogOut, Copy } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 
 interface AccountSwitcherProps {
@@ -99,8 +99,8 @@ export function AccountSwitcher({ compact = false, showSignOut = false, onSignOu
                         className="fixed inset-0 z-40"
                         onClick={() => setIsOpen(false)}
                     />
-                    <div className="absolute right-0 z-50 bg-popover border border-border rounded-xl shadow-xl py-2 mt-2 w-72">
-                        <div className="max-h-64 overflow-y-auto py-1">
+                    <div className="absolute right-0 z-50 bg-popover border border-border rounded-xl shadow-xl pb-2 mt-2 w-72 overflow-hidden flex flex-col">
+                        <div className="max-h-64 overflow-y-auto">
                             {mailboxes.map((mailbox) => (
                                 <AccountItem
                                     key={mailbox.id}
@@ -114,7 +114,7 @@ export function AccountSwitcher({ compact = false, showSignOut = false, onSignOu
                             ))}
                         </div>
 
-                        <div className="border-t border-border pt-2 mt-1 px-2 space-y-1">
+                        <div className="border-t border-border pt-2 px-2 space-y-1">
                             <button
                                 onClick={() => {
                                     refreshMailboxes()
@@ -173,11 +173,13 @@ function AccountItem({
     isSelected: boolean
     onSelect: () => void
 }) {
+    const [copied, setCopied] = React.useState(false)
+
     return (
         <button
             onClick={onSelect}
             className={`
-                flex items-center gap-3 w-full px-3 py-2.5 text-left transition-colors hover:bg-accent/50
+                flex items-center gap-3 w-full px-3 py-2.5 first:pt-4 last:pb-3 text-left transition-colors hover:bg-accent/50
             `}
         >
             <div className={`w-9 h-9 rounded-full ${getProviderColor(mailbox.provider)} flex items-center justify-center text-white text-sm font-bold flex-shrink-0`}>
@@ -198,7 +200,25 @@ function AccountItem({
                         <AlertCircle className="w-3 h-3 text-red-500 flex-shrink-0" />
                     )}
                 </div>
-                <span className="text-xs text-muted-foreground truncate">{mailbox.email}</span>
+                <div
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        if (mailbox.email) {
+                            navigator.clipboard.writeText(mailbox.email)
+                            setCopied(true)
+                            setTimeout(() => setCopied(false), 2000)
+                        }
+                    }}
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-copy group w-max"
+                    title="Copy email"
+                >
+                    <span className="truncate">{mailbox.email}</span>
+                    {copied ? (
+                        <Check className="w-3 h-3 text-green-500 animate-in zoom-in" />
+                    ) : (
+                        <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    )}
+                </div>
             </div>
 
             <div className="flex items-center gap-2">

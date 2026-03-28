@@ -1,8 +1,9 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { db } from '../../../db'
-import { campaigns, sequences, sequenceSteps, campaignLeads, leads, emailAccounts, organizationUsers } from '../../../db/schema'
+import { campaigns, sequences, sequenceSteps, campaignLeads, leads, emailAccounts, organizationUsers, outreachEmails } from '../../../db/schema'
 import { eq, and, sql, inArray } from 'drizzle-orm'
+import { isPlatformAdmin } from '../../lib/admin'
 
 const router = Router()
 
@@ -58,8 +59,11 @@ const addLeadsToCampaignSchema = z.object({
     emailAccountId: z.string().uuid().optional(),
 })
 
-// Helper to check org membership
+// Helper to check org membership (platform admins bypass membership check)
 async function checkOrgMembership(userId: string, organizationId: string) {
+    const admin = await isPlatformAdmin(userId)
+    if (admin) return { role: 'admin' as const }
+
     const membership = await db.query.organizationUsers.findFirst({
         where: and(
             eq(organizationUsers.organizationId, organizationId),
@@ -112,6 +116,260 @@ router.get('/', async (req: Request, res: Response) => {
         res.json({ campaigns: campaignsList })
     } catch (error) {
         console.error('Error fetching campaigns:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+// Get global stats for all campaigns in an organization
+// NOTE: Must be registered before /:id to avoid Express matching "stats" as an ID
+router.get('/stats', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        const organizationId = req.query.organizationId as string
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        if (!organizationId) {
+            return res.status(400).json({ error: 'organizationId is required' })
+        }
+
+        const membership = await checkOrgMembership(userId, organizationId)
+        if (!membership) {
+            return res.status(403).json({ error: 'Access denied' })
+        }
+
+        // Get all campaigns for the organization
+        const campaignsList = await db.query.campaigns.findMany({
+            where: eq(campaigns.organizationId, organizationId),
+            columns: { id: true, status: true },
+        })
+
+        if (campaignsList.length === 0) {
+            return res.json({
+                totalCampaigns: 0,
+                activeCampaigns: 0,
+                totalLeads: 0,
+                totalEmails: 0,
+                openRate: 0,
+                clickRate: 0,
+                replyRate: 0,
+                bounceRate: 0,
+            })
+        }
+
+        const campaignIds = campaignsList.map(c => c.id)
+
+        // Get aggregated stats from all campaign_leads for this org
+        const statsResult = await db
+            .select({
+                totalLeads: sql<number>`count(*)`,
+                contacted: sql<number>`count(*) filter (where ${campaignLeads.status} != 'new')`,
+                replied: sql<number>`count(*) filter (where ${campaignLeads.status} = 'replied' or ${campaignLeads.status} = 'interested')`,
+                bounced: sql<number>`count(*) filter (where ${campaignLeads.status} = 'bounced')`,
+                totalOpens: sql<number>`coalesce(sum(${campaignLeads.totalOpens}), 0)`,
+                totalClicks: sql<number>`coalesce(sum(${campaignLeads.totalClicks}), 0)`,
+                totalReplies: sql<number>`coalesce(sum(${campaignLeads.totalReplies}), 0)`,
+            })
+            .from(campaignLeads)
+            .where(inArray(campaignLeads.campaignId, campaignIds))
+
+        const stats = statsResult[0] || {
+            totalLeads: 0,
+            contacted: 0,
+            replied: 0,
+            bounced: 0,
+            totalOpens: 0,
+            totalClicks: 0,
+            totalReplies: 0,
+        }
+
+        const activeCampaigns = campaignsList.filter(c => c.status === 'active').length
+
+        // Calculate rates
+        const totalEmails = Number(stats.contacted) || 0
+        const openRate = totalEmails > 0 ? (Number(stats.totalOpens) / totalEmails) * 100 : 0
+        const clickRate = totalEmails > 0 ? (Number(stats.totalClicks) / totalEmails) * 100 : 0
+        const replyRate = totalEmails > 0 ? (Number(stats.replied) / totalEmails) * 100 : 0
+        const bounceRate = totalEmails > 0 ? (Number(stats.bounced) / totalEmails) * 100 : 0
+
+        res.json({
+            totalCampaigns: campaignsList.length,
+            activeCampaigns,
+            totalLeads: Number(stats.totalLeads) || 0,
+            totalEmails,
+            openRate,
+            clickRate,
+            replyRate,
+            bounceRate,
+        })
+    } catch (error) {
+        console.error('Error fetching campaign stats:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+// List all sequences across all campaigns for an organization
+// NOTE: Must be registered before /:id to avoid Express matching "sequences" as an ID
+router.get('/sequences', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        const organizationId = req.query.organizationId as string
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        if (!organizationId) {
+            return res.status(400).json({ error: 'organizationId is required' })
+        }
+
+        const membership = await checkOrgMembership(userId, organizationId)
+        if (!membership) {
+            return res.status(403).json({ error: 'Access denied' })
+        }
+
+        const orgCampaigns = await db.query.campaigns.findMany({
+            where: eq(campaigns.organizationId, organizationId),
+            columns: { id: true },
+        })
+
+        if (orgCampaigns.length === 0) {
+            return res.json({ sequences: [] })
+        }
+
+        const campaignIds = orgCampaigns.map(c => c.id)
+
+        const sequencesList = await db.query.sequences.findMany({
+            where: inArray(sequences.campaignId, campaignIds),
+            with: {
+                campaign: {
+                    columns: {
+                        id: true,
+                        name: true,
+                    },
+                },
+                steps: true,
+            },
+        })
+
+        res.json({ sequences: sequencesList })
+    } catch (error) {
+        console.error('Error fetching sequences:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+// Get aggregated analytics for an organization
+// NOTE: Must be registered before /:id to avoid Express matching "analytics" as an ID
+router.get('/analytics', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        const organizationId = req.query.organizationId as string
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        if (!organizationId) {
+            return res.status(400).json({ error: 'organizationId is required' })
+        }
+
+        const membership = await checkOrgMembership(userId, organizationId)
+        if (!membership) {
+            return res.status(403).json({ error: 'Access denied' })
+        }
+
+        const campaignsList = await db.query.campaigns.findMany({
+            where: eq(campaigns.organizationId, organizationId),
+        })
+
+        const activeCampaigns = campaignsList.filter(c => c.status === 'active').length
+        const totalLeads = campaignsList.reduce((sum, c) => sum + (c.totalLeads || 0), 0)
+        const totalEmailsSent = campaignsList.reduce((sum, c) => sum + (c.leadsContacted || 0), 0)
+        const totalOpens = campaignsList.reduce((sum, c) => sum + (c.totalOpens || 0), 0)
+        const totalClicks = campaignsList.reduce((sum, c) => sum + (c.totalClicks || 0), 0)
+        const totalReplies = campaignsList.reduce((sum, c) => sum + (c.totalReplies || 0), 0)
+        const totalBounces = campaignsList.reduce((sum, c) => sum + (c.totalBounces || 0), 0)
+
+        const avgOpenRate = totalEmailsSent > 0 ? (totalOpens / totalEmailsSent) * 100 : 0
+        const avgClickRate = totalEmailsSent > 0 ? (totalClicks / totalEmailsSent) * 100 : 0
+        const avgReplyRate = totalEmailsSent > 0 ? (totalReplies / totalEmailsSent) * 100 : 0
+        const avgBounceRate = totalEmailsSent > 0 ? (totalBounces / totalEmailsSent) * 100 : 0
+
+        res.json({
+            overview: {
+                totalCampaigns: campaignsList.length,
+                activeCampaigns,
+                totalLeads,
+                totalEmailsSent,
+                totalOpens,
+                totalClicks,
+                totalReplies,
+                totalBounces,
+                avgOpenRate,
+                avgClickRate,
+                avgReplyRate,
+                avgBounceRate,
+            },
+        })
+    } catch (error) {
+        console.error('Error fetching analytics:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+// Get daily analytics for an organization
+router.get('/analytics/daily', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        const organizationId = req.query.organizationId as string
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        if (!organizationId) {
+            return res.status(400).json({ error: 'organizationId is required' })
+        }
+
+        const membership = await checkOrgMembership(userId, organizationId)
+        if (!membership) {
+            return res.status(403).json({ error: 'Access denied' })
+        }
+
+        const orgCampaigns = await db.query.campaigns.findMany({
+            where: eq(campaigns.organizationId, organizationId),
+            columns: { id: true },
+        })
+
+        if (orgCampaigns.length === 0) {
+            return res.json([])
+        }
+
+        const campaignIds = orgCampaigns.map(c => c.id)
+
+        // Get daily stats from outreach_emails for the last 30 days
+        const dailyStats = await db
+            .select({
+                date: sql<string>`date_trunc('day', ${outreachEmails.sentAt})::date::text`,
+                emailsSent: sql<number>`count(*)`,
+                opens: sql<number>`count(*) filter (where ${outreachEmails.openedAt} is not null)`,
+                clicks: sql<number>`count(*) filter (where ${outreachEmails.clickedAt} is not null)`,
+                replies: sql<number>`count(*) filter (where ${outreachEmails.repliedAt} is not null)`,
+            })
+            .from(outreachEmails)
+            .where(and(
+                inArray(outreachEmails.campaignId, campaignIds),
+                sql`${outreachEmails.sentAt} >= now() - interval '30 days'`
+            ))
+            .groupBy(sql`date_trunc('day', ${outreachEmails.sentAt})::date`)
+            .orderBy(sql`date_trunc('day', ${outreachEmails.sentAt})::date`)
+
+        res.json(dailyStats)
+    } catch (error) {
+        console.error('Error fetching daily analytics:', error)
         res.status(500).json({ error: 'Internal server error' })
     }
 })
@@ -359,6 +617,42 @@ router.post('/:campaignId/sequences', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Validation error', details: error.errors })
         }
         console.error('Error creating sequence:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+// Delete sequence
+router.delete('/sequences/:sequenceId', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        const sequenceId = req.params.sequenceId
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        const sequence = await db.query.sequences.findFirst({
+            where: eq(sequences.id, sequenceId),
+            with: {
+                campaign: true,
+            },
+        })
+
+        if (!sequence) {
+            return res.status(404).json({ error: 'Sequence not found' })
+        }
+
+        const membership = await checkOrgMembership(userId, sequence.campaign.organizationId)
+        if (!membership) {
+            return res.status(403).json({ error: 'Access denied' })
+        }
+
+        await db.delete(sequenceSteps).where(eq(sequenceSteps.sequenceId, sequenceId))
+        await db.delete(sequences).where(eq(sequences.id, sequenceId))
+
+        res.json({ success: true })
+    } catch (error) {
+        console.error('Error deleting sequence:', error)
         res.status(500).json({ error: 'Internal server error' })
     }
 })
@@ -707,95 +1001,6 @@ router.delete('/:campaignId/leads/:leadId', async (req: Request, res: Response) 
 })
 
 // ============ CAMPAIGN STATS ============
-
-// Get global stats for all campaigns in an organization
-router.get('/stats', async (req: Request, res: Response) => {
-    try {
-        const userId = req.headers['x-user-id'] as string
-        const organizationId = req.query.organizationId as string
-
-        if (!userId) {
-            return res.status(401).json({ error: 'Unauthorized' })
-        }
-
-        if (!organizationId) {
-            return res.status(400).json({ error: 'organizationId is required' })
-        }
-
-        const membership = await checkOrgMembership(userId, organizationId)
-        if (!membership) {
-            return res.status(403).json({ error: 'Access denied' })
-        }
-
-        // Get all campaigns for the organization
-        const campaignsList = await db.query.campaigns.findMany({
-            where: eq(campaigns.organizationId, organizationId),
-            columns: { id: true, status: true },
-        })
-
-        if (campaignsList.length === 0) {
-            return res.json({
-                totalCampaigns: 0,
-                activeCampaigns: 0,
-                totalLeads: 0,
-                totalEmails: 0,
-                openRate: 0,
-                clickRate: 0,
-                replyRate: 0,
-                bounceRate: 0,
-            })
-        }
-
-        const campaignIds = campaignsList.map(c => c.id)
-
-        // Get aggregated stats from all campaign_leads for this org
-        const statsResult = await db
-            .select({
-                totalLeads: sql<number>`count(*)`,
-                contacted: sql<number>`count(*) filter (where ${campaignLeads.status} != 'new')`,
-                replied: sql<number>`count(*) filter (where ${campaignLeads.status} = 'replied' or ${campaignLeads.status} = 'interested')`,
-                bounced: sql<number>`count(*) filter (where ${campaignLeads.status} = 'bounced')`,
-                totalOpens: sql<number>`coalesce(sum(${campaignLeads.totalOpens}), 0)`,
-                totalClicks: sql<number>`coalesce(sum(${campaignLeads.totalClicks}), 0)`,
-                totalReplies: sql<number>`coalesce(sum(${campaignLeads.totalReplies}), 0)`,
-            })
-            .from(campaignLeads)
-            .where(inArray(campaignLeads.campaignId, campaignIds))
-
-        const stats = statsResult[0] || {
-            totalLeads: 0,
-            contacted: 0,
-            replied: 0,
-            bounced: 0,
-            totalOpens: 0,
-            totalClicks: 0,
-            totalReplies: 0,
-        }
-
-        const activeCampaigns = campaignsList.filter(c => c.status === 'active').length
-
-        // Calculate rates
-        const totalEmails = Number(stats.contacted) || 0
-        const openRate = totalEmails > 0 ? (Number(stats.totalOpens) / totalEmails) * 100 : 0
-        const clickRate = totalEmails > 0 ? (Number(stats.totalClicks) / totalEmails) * 100 : 0
-        const replyRate = totalEmails > 0 ? (Number(stats.replied) / totalEmails) * 100 : 0
-        const bounceRate = totalEmails > 0 ? (Number(stats.bounced) / totalEmails) * 100 : 0
-
-        res.json({
-            totalCampaigns: campaignsList.length,
-            activeCampaigns,
-            totalLeads: Number(stats.totalLeads) || 0,
-            totalEmails,
-            openRate,
-            clickRate,
-            replyRate,
-            bounceRate,
-        })
-    } catch (error) {
-        console.error('Error fetching campaign stats:', error)
-        res.status(500).json({ error: 'Internal server error' })
-    }
-})
 
 // Get campaign statistics
 router.get('/:id/stats', async (req: Request, res: Response) => {

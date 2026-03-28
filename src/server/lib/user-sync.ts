@@ -1,5 +1,5 @@
 import type { Request } from 'express'
-import { db } from '../../db'
+import { db, withRetry } from '../../db'
 import { users } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 
@@ -29,9 +29,11 @@ export function getAuthenticatedUserFromRequest(req: Request): AuthenticatedUser
 }
 
 export async function ensureLocalUser(snapshot: AuthenticatedUserSnapshot) {
-    const existing = await db.query.users.findFirst({
-        where: eq(users.id, snapshot.id),
-    })
+    const existing = await withRetry(
+        () => db.query.users.findFirst({ where: eq(users.id, snapshot.id) }),
+        2,
+        100
+    )
 
     if (existing) {
         const shouldUpdate =

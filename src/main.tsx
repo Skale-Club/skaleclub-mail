@@ -1,16 +1,16 @@
 import React, { Suspense } from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { Route, Switch } from 'wouter'
+import { Route, Switch, useLocation } from 'wouter'
 import { Toaster } from './components/ui/toaster'
 import { ThemeProvider } from './components/theme-provider'
 import { AuthProvider, useAuth } from './hooks/useAuth'
 import { MailboxProvider } from './hooks/useMailbox'
+import { useCompose } from './hooks/useCompose'
 import { useBranding } from './lib/branding'
 import AdminLayout from './components/admin/AdminLayout'
 import { OrganizationProvider } from './hooks/useOrganization'
 import { ComposeProvider } from './hooks/useCompose'
-import { ComposeDialog } from './components/mail/ComposeDialog'
 import './index.css'
 
 const Login = React.lazy(() => import('./pages/Login'))
@@ -31,7 +31,6 @@ const LeadsPage = React.lazy(() => import('./pages/outreach/LeadsPage'))
 const InboxesPage = React.lazy(() => import('./pages/outreach/InboxesPage'))
 const NewInboxPage = React.lazy(() => import('./pages/outreach/inboxes/NewInboxPage'))
 const SequencesPage = React.lazy(() => import('./pages/outreach/SequencesPage'))
-const NewSequencePage = React.lazy(() => import('./pages/outreach/sequences/NewSequencePage'))
 const OutreachAnalyticsPage = React.lazy(() => import('./pages/outreach/AnalyticsPage'))
 const OutreachSettingsPage = React.lazy(() => import('./pages/outreach/SettingsPage'))
 
@@ -47,6 +46,9 @@ const ComposePage = React.lazy(() => import('./pages/mail/ComposePage'))
 const MailSettingsPage = React.lazy(() => import('./pages/mail/SettingsPage'))
 const SearchPage = React.lazy(() => import('./pages/mail/SearchPage'))
 const EmailDetailPage = React.lazy(() => import('./pages/mail/EmailDetailPage'))
+const LazyComposeDialog = React.lazy(() =>
+    import('./components/mail/ComposeDialog').then((module) => ({ default: module.ComposeDialog }))
+)
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -75,16 +77,19 @@ function Spinner() {
 
 function AdminCheck({ children }: { children: React.ReactNode }) {
     const { user, isAdmin, isLoading } = useAuth()
+    const [, navigate] = useLocation()
 
     if (isLoading) return <Spinner />
 
     if (!user) {
-        window.location.href = '/login'
+        navigate('/login')
         return null
     }
 
+    if (isAdmin === null) return <Spinner />
+
     if (!isAdmin) {
-        window.location.href = '/mail/inbox'
+        navigate('/mail/inbox')
         return null
     }
 
@@ -93,16 +98,19 @@ function AdminCheck({ children }: { children: React.ReactNode }) {
 
 function MailCheck({ children }: { children: React.ReactNode }) {
     const { user, isAdmin, isLoading } = useAuth()
+    const [, navigate] = useLocation()
 
     if (isLoading) return <Spinner />
 
     if (!user) {
-        window.location.href = '/login'
+        navigate('/login')
         return null
     }
 
+    if (isAdmin === null) return <Spinner />
+
     if (isAdmin) {
-        window.location.href = '/admin'
+        navigate('/admin')
         return null
     }
 
@@ -111,38 +119,112 @@ function MailCheck({ children }: { children: React.ReactNode }) {
 
 function RootRedirect() {
     const { user, isAdmin, isLoading } = useAuth()
+    const [, navigate] = useLocation()
 
     if (isLoading) return <Spinner />
 
     if (!user) {
-        window.location.href = '/login'
+        navigate('/login')
         return null
     }
 
-    window.location.href = isAdmin ? '/admin' : '/mail/inbox'
+    if (isAdmin === null) return <Spinner />
+
+    navigate(isAdmin ? '/admin' : '/mail/inbox')
     return null
 }
 
 function BrandingHead() {
     const { branding, isSuccess } = useBranding()
 
+    const applyBranding = React.useCallback(() => {
+        document.title = branding.applicationName
+
+        const faviconUrl = new URL(branding.faviconUrl, window.location.origin)
+        faviconUrl.searchParams.set('v', window.btoa(branding.faviconUrl).replace(/[+/=]/g, '').slice(0, 16))
+
+        const faviconType = (() => {
+            const pathname = faviconUrl.pathname.toLowerCase()
+
+            if (pathname.endsWith('.svg')) return 'image/svg+xml'
+            if (pathname.endsWith('.png')) return 'image/png'
+            if (pathname.endsWith('.webp')) return 'image/webp'
+            if (pathname.endsWith('.ico')) return 'image/x-icon'
+
+            return undefined
+        })()
+
+        for (const link of document.head.querySelectorAll("link[rel='icon'], link[rel='shortcut icon'], link[rel='apple-touch-icon']")) {
+            if ((link as HTMLLinkElement).dataset.managedBrandingIcon !== 'true') {
+                link.remove()
+            }
+        }
+
+        const descriptors = [
+            { key: 'icon', rel: 'icon' },
+            { key: 'shortcut', rel: 'shortcut icon' },
+            { key: 'apple', rel: 'apple-touch-icon' },
+        ] as const
+
+        for (const descriptor of descriptors) {
+            const link = document.createElement('link')
+            link.dataset.managedBrandingIcon = 'true'
+            link.dataset.iconKey = descriptor.key
+            link.rel = descriptor.rel
+            link.href = faviconUrl.toString()
+
+            if (faviconType) {
+                link.type = faviconType
+            }
+
+            if (faviconType === 'image/svg+xml' && descriptor.rel !== 'apple-touch-icon') {
+                link.sizes = 'any'
+            }
+
+            const existing = document.head.querySelector(
+                `link[data-managed-branding-icon="true"][data-icon-key="${descriptor.key}"]`
+            )
+
+            if (existing) {
+                existing.replaceWith(link)
+            } else {
+                document.head.appendChild(link)
+            }
+        }
+    }, [branding.applicationName, branding.faviconUrl])
+
     React.useEffect(() => {
         if (!isSuccess) return
 
-        document.title = branding.applicationName
+        applyBranding()
 
-        let favicon = document.querySelector("link[rel='icon']") as HTMLLinkElement | null
-
-        if (!favicon) {
-            favicon = document.createElement('link')
-            favicon.rel = 'icon'
-            document.head.appendChild(favicon)
+        const handleVisibilityRestore = () => {
+            if (document.visibilityState === 'hidden') return
+            applyBranding()
         }
 
-        favicon.href = branding.faviconUrl
-    }, [isSuccess, branding.applicationName, branding.faviconUrl])
+        document.addEventListener('visibilitychange', handleVisibilityRestore)
+        window.addEventListener('pageshow', handleVisibilityRestore)
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityRestore)
+            window.removeEventListener('pageshow', handleVisibilityRestore)
+        }
+    }, [applyBranding, isSuccess])
 
     return null
+}
+
+function ComposeDialogHost() {
+    const { isOpen } = useCompose()
+
+    if (!isOpen) return null
+
+    return (
+        <Suspense fallback={null}>
+            <LazyComposeDialog />
+        </Suspense>
+    )
 }
 
 function PageSuspense({ children }: { children: React.ReactNode }) {
@@ -272,7 +354,7 @@ function App() {
                                 <Route path="/outreach/sequences/new">
                                     <AdminCheck>
                                         <OrganizationProvider>
-                                            <PageSuspense><NewSequencePage /></PageSuspense>
+                                            <PageSuspense><SequencesPage /></PageSuspense>
                                         </OrganizationProvider>
                                     </AdminCheck>
                                 </Route>
@@ -362,7 +444,7 @@ function App() {
                                 </Route>
                             </Switch>
                             <Toaster />
-                            <ComposeDialog />
+                            <ComposeDialogHost />
                         </div>
                         </ComposeProvider>
                     </MailboxProvider>

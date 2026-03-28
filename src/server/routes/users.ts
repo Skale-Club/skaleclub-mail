@@ -151,6 +151,18 @@ router.get('/organizations', async (req: Request, res: Response) => {
 
         await ensureLocalUser(authUser)
 
+        const isAdmin = await isPlatformAdmin(authUser.id)
+
+        if (isAdmin) {
+            // Platform admins see all organizations
+            const allOrgs = await db.query.organizations.findMany()
+            const organizationsList = allOrgs.map((org) => ({
+                ...org,
+                role: 'admin' as const,
+            }))
+            return res.json({ organizations: organizationsList })
+        }
+
         const memberships = await db.query.organizationUsers.findMany({
             where: eq(organizationUsers.userId, authUser.id),
             with: {

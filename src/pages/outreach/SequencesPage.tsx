@@ -1,25 +1,49 @@
 import React from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { Link } from 'wouter'
-import { Plus, Mail, ChevronDown } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link, useLocation } from 'wouter'
+import { Plus, Mail, ChevronDown, Clock, Trash2 } from 'lucide-react'
 import { OutreachLayout } from '../../components/outreach/OutreachLayout'
-import { apiFetch } from '../../lib/api-client'
+import { apiFetch, apiRequest } from '../../lib/api-client'
 import { useOrganization } from '../../hooks/useOrganization'
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '../../components/ui/Dialog'
+import { Button } from '../../components/ui/button'
+import { toast } from '../../components/ui/toaster'
 
 interface Sequence {
     id: string
     campaignId: string
     name: string
-    type: 'email' | 'delay'
-    order: number
-    delayDays: number
-    subject: string | null
-    bodyHtml: string | null
-    bodyText: string | null
-    trackOpens: boolean
-    trackClicks: boolean
+    description: string | null
     isActive: boolean
+    steps: SequenceStep[]
+    campaign?: {
+        id: string
+        name: string
+    }
     createdAt: string
+}
+
+interface SequenceStep {
+    id: string
+    stepOrder: number
+    type: 'email' | 'delay' | 'condition'
+    delayHours: number
+    subject: string | null
+    htmlBody: string | null
+    plainBody: string | null
+}
+
+interface CampaignOption {
+    id: string
+    name: string
+    isActive: boolean
 }
 
 async function fetchSequences(organizationId: string): Promise<Sequence[]> {
@@ -27,15 +51,75 @@ async function fetchSequences(organizationId: string): Promise<Sequence[]> {
     return data.sequences || []
 }
 
+async function fetchCampaignOptions(organizationId: string): Promise<CampaignOption[]> {
+    const data = await apiFetch<{ campaigns?: CampaignOption[] }>(`/api/outreach/campaigns?organizationId=${organizationId}`)
+    return data.campaigns || []
+}
+
+interface DraftStep {
+    id: string
+    type: 'email' | 'delay'
+    stepOrder: number
+    delayHours: number
+    subject: string
+    htmlBody: string
+    plainBody: string
+}
+
+const createDraftStep = (stepOrder: number, type: 'email' | 'delay' = 'email'): DraftStep => ({
+    id: crypto.randomUUID(),
+    type,
+    stepOrder,
+    delayHours: type === 'delay' ? 72 : 0,
+    subject: '',
+    htmlBody: '',
+    plainBody: '',
+})
+
+async function createSequenceWithSteps(params: {
+    campaignId: string
+    name: string
+    description?: string
+    steps: DraftStep[]
+}) {
+    const sequenceResponse = await apiFetch<{ sequence: Sequence }>(`/api/outreach/campaigns/${params.campaignId}/sequences`, {
+        method: 'POST',
+        body: JSON.stringify({
+            name: params.name,
+            description: params.description || undefined,
+        }),
+    })
+
+    for (const step of params.steps) {
+        await apiRequest(`/api/outreach/campaigns/sequences/${sequenceResponse.sequence.id}/steps`, {
+            method: 'POST',
+            body: JSON.stringify({
+                stepOrder: step.stepOrder,
+                type: step.type,
+                delayHours: step.delayHours,
+                subject: step.type === 'email' ? step.subject : undefined,
+                htmlBody: step.type === 'email' ? step.htmlBody : undefined,
+                plainBody: step.type === 'email' ? step.plainBody || undefined : undefined,
+            }),
+        })
+    }
+
+    return sequenceResponse.sequence
+}
+
+async function deleteSequence(sequenceId: string) {
+    await apiRequest(`/api/outreach/campaigns/sequences/${sequenceId}`, {
+        method: 'DELETE',
+    })
+}
+
 function SequenceCard({
     sequence,
     stepsCount,
-    onEdit,
     onDelete,
 }: {
     sequence: Sequence
     stepsCount: number
-    onEdit: (id: string) => void
     onDelete: (id: string) => void
 }) {
     const [showMenu, setShowMenu] = React.useState(false)
@@ -54,6 +138,11 @@ function SequenceCard({
                         </span>
                         <span className="text-sm text-muted-foreground">{stepsCount} steps</span>
                     </div>
+                    {sequence.campaign?.name && (
+                        <p className="mt-2 text-sm text-muted-foreground">
+                            Campaign: {sequence.campaign.name}
+                        </p>
+                    )}
                 </div>
                 <div className="relative">
                     <button
@@ -67,15 +156,10 @@ function SequenceCard({
                             <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
                             <div className="absolute right-0 top-8 z-20 w-40 rounded-lg border border-border bg-popover py-1 shadow-lg">
                                 <button
-                                    onClick={() => { onEdit(sequence.id); setShowMenu(false) }}
-                                    className="w-full px-4 py-2 text-left text-sm hover:bg-accent"
-                                >
-                                    Edit
-                                </button>
-                                <button
                                     onClick={() => { onDelete(sequence.id); setShowMenu(false) }}
-                                    className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                    className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                                 >
+                                    <Trash2 className="h-4 w-4" />
                                     Delete
                                 </button>
                             </div>
@@ -87,13 +171,293 @@ function SequenceCard({
     )
 }
 
+function NewSequenceDialog({
+    open,
+    onOpenChange,
+    campaigns,
+    isLoadingCampaigns,
+    onSubmit,
+    isSaving,
+}: {
+    open: boolean
+    onOpenChange: (open: boolean) => void
+    campaigns: CampaignOption[]
+    isLoadingCampaigns: boolean
+    onSubmit: (payload: { campaignId: string; name: string; description: string; steps: DraftStep[] }) => void
+    isSaving: boolean
+}) {
+    const [campaignId, setCampaignId] = React.useState('')
+    const [name, setName] = React.useState('')
+    const [description, setDescription] = React.useState('')
+    const [steps, setSteps] = React.useState<DraftStep[]>([createDraftStep(1)])
+
+    React.useEffect(() => {
+        if (!open) return
+        setCampaignId(prev => prev || campaigns[0]?.id || '')
+    }, [open, campaigns])
+
+    const resetForm = React.useCallback(() => {
+        setCampaignId(campaigns[0]?.id || '')
+        setName('')
+        setDescription('')
+        setSteps([createDraftStep(1)])
+    }, [campaigns])
+
+    const handleOpenChange = (nextOpen: boolean) => {
+        onOpenChange(nextOpen)
+        if (!nextOpen) {
+            resetForm()
+        }
+    }
+
+    const addStep = (type: 'email' | 'delay') => {
+        setSteps(prev => [...prev, createDraftStep(prev.length + 1, type)])
+    }
+
+    const updateStep = (id: string, updates: Partial<DraftStep>) => {
+        setSteps(prev => prev.map(step => step.id === id ? { ...step, ...updates } : step))
+    }
+
+    const removeStep = (id: string) => {
+        setSteps(prev => prev
+            .filter(step => step.id !== id)
+            .map((step, index) => ({ ...step, stepOrder: index + 1 })))
+    }
+
+    const handleSubmit = () => {
+        if (!campaignId) {
+            toast({ title: 'Select a campaign before creating the sequence', variant: 'destructive' })
+            return
+        }
+
+        if (!name.trim()) {
+            toast({ title: 'Sequence name is required', variant: 'destructive' })
+            return
+        }
+
+        const hasInvalidEmailStep = steps.some(step => step.type === 'email' && (!step.subject.trim() || !step.htmlBody.trim()))
+        if (hasInvalidEmailStep) {
+            toast({ title: 'Each email step needs a subject and message', variant: 'destructive' })
+            return
+        }
+
+        onSubmit({
+            campaignId,
+            name: name.trim(),
+            description: description.trim(),
+            steps,
+        })
+    }
+
+    const noCampaigns = !isLoadingCampaigns && campaigns.length === 0
+
+    return (
+        <Dialog open={open} onOpenChange={handleOpenChange}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                    <DialogTitle>New Sequence</DialogTitle>
+                    <DialogDescription>
+                        Build the follow-up sequence in a popup and save it directly to a campaign.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-6 py-2">
+                    <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                            <label className="mb-1 block text-sm font-medium text-foreground">Campaign</label>
+                            <select
+                                value={campaignId}
+                                onChange={(e) => setCampaignId(e.target.value)}
+                                disabled={isLoadingCampaigns || noCampaigns}
+                                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-foreground"
+                            >
+                                <option value="">
+                                    {isLoadingCampaigns ? 'Loading campaigns...' : 'Select a campaign'}
+                                </option>
+                                {campaigns.map((campaign) => (
+                                    <option key={campaign.id} value={campaign.id}>
+                                        {campaign.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="mb-1 block text-sm font-medium text-foreground">Sequence Name</label>
+                            <input
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                placeholder="Main follow-up"
+                                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-foreground"
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="mb-1 block text-sm font-medium text-foreground">Description</label>
+                        <textarea
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                            rows={2}
+                            placeholder="Optional internal note about this sequence"
+                            className="w-full rounded-lg border border-input bg-background px-3 py-2 text-foreground"
+                        />
+                    </div>
+
+                    {noCampaigns ? (
+                        <div className="rounded-lg border border-dashed border-border bg-muted/30 p-6 text-sm text-muted-foreground">
+                            Create a campaign first. Sequences are always attached to a campaign in the current data model.
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {steps.map((step, index) => (
+                                <div key={step.id} className="rounded-xl border border-border bg-card">
+                                    <div className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-3">
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent font-semibold text-foreground">
+                                                {index + 1}
+                                            </div>
+                                            <div>
+                                                <p className="font-medium text-foreground">
+                                                    {step.type === 'email' ? 'Email Step' : 'Delay Step'}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {step.type === 'email' ? 'Send a message' : 'Wait before the next email'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        {steps.length > 1 && (
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => removeStep(step.id)}
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-4 p-4">
+                                        {step.type === 'delay' ? (
+                                            <div className="max-w-xs">
+                                                <label className="mb-1 block text-sm font-medium text-foreground">Delay in Hours</label>
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    value={step.delayHours}
+                                                    onChange={(e) => updateStep(step.id, { delayHours: Math.max(0, Number(e.target.value) || 0) })}
+                                                    className="w-full rounded-lg border border-input bg-background px-3 py-2 text-foreground"
+                                                />
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div>
+                                                    <label className="mb-1 block text-sm font-medium text-foreground">Subject</label>
+                                                    <input
+                                                        value={step.subject}
+                                                        onChange={(e) => updateStep(step.id, { subject: e.target.value })}
+                                                        placeholder="Quick question about {{companyName}}"
+                                                        className="w-full rounded-lg border border-input bg-background px-3 py-2 text-foreground"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="mb-1 block text-sm font-medium text-foreground">HTML Body</label>
+                                                    <textarea
+                                                        value={step.htmlBody}
+                                                        onChange={(e) => updateStep(step.id, { htmlBody: e.target.value })}
+                                                        rows={6}
+                                                        placeholder="<p>Hi {{firstName}}, ...</p>"
+                                                        className="w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-sm text-foreground"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="mb-1 block text-sm font-medium text-foreground">Plain Text Body</label>
+                                                    <textarea
+                                                        value={step.plainBody}
+                                                        onChange={(e) => updateStep(step.id, { plainBody: e.target.value })}
+                                                        rows={4}
+                                                        placeholder="Hi {{firstName}}, ..."
+                                                        className="w-full rounded-lg border border-input bg-background px-3 py-2 text-foreground"
+                                                    />
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+
+                            <div className="flex flex-wrap justify-center gap-3">
+                                <Button type="button" variant="outline" onClick={() => addStep('email')}>
+                                    <Mail className="mr-2 h-4 w-4" />
+                                    Add Email
+                                </Button>
+                                <Button type="button" variant="outline" onClick={() => addStep('delay')}>
+                                    <Clock className="mr-2 h-4 w-4" />
+                                    Add Delay
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <DialogFooter>
+                    <Button type="button" variant="ghost" onClick={() => handleOpenChange(false)}>
+                        Cancel
+                    </Button>
+                    <Button type="button" onClick={handleSubmit} disabled={isSaving || noCampaigns}>
+                        {isSaving ? 'Saving...' : 'Save Sequence'}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
 export function SequencesPage() {
     const { currentOrganization } = useOrganization()
+    const [location, setLocation] = useLocation()
+    const queryClient = useQueryClient()
+    const isCreateOpen = location === '/outreach/sequences/new'
+
     const { data: sequences, isLoading } = useQuery({
         queryKey: ['sequences', currentOrganization?.id],
         queryFn: () => fetchSequences(currentOrganization!.id),
         enabled: !!currentOrganization,
     })
+    const { data: campaigns = [], isLoading: campaignsLoading } = useQuery({
+        queryKey: ['campaigns', 'sequence-options', currentOrganization?.id],
+        queryFn: () => fetchCampaignOptions(currentOrganization!.id),
+        enabled: !!currentOrganization?.id,
+    })
+
+    const createMutation = useMutation({
+        mutationFn: createSequenceWithSteps,
+        onSuccess: () => {
+            toast({ title: 'Sequence created successfully', variant: 'success' })
+            queryClient.invalidateQueries({ queryKey: ['sequences'] })
+            setLocation('/outreach/sequences')
+        },
+        onError: (error: Error) => {
+            toast({ title: 'Failed to create sequence', description: error.message, variant: 'destructive' })
+        },
+    })
+
+    const deleteMutation = useMutation({
+        mutationFn: deleteSequence,
+        onSuccess: () => {
+            toast({ title: 'Sequence deleted', variant: 'success' })
+            queryClient.invalidateQueries({ queryKey: ['sequences'] })
+        },
+        onError: (error: Error) => {
+            toast({ title: 'Failed to delete sequence', description: error.message, variant: 'destructive' })
+        },
+    })
+
+    const handleDelete = (id: string) => {
+        if (confirm('Are you sure you want to delete this sequence?')) {
+            deleteMutation.mutate(id)
+        }
+    }
 
     return (
         <OutreachLayout>
@@ -110,13 +474,14 @@ export function SequencesPage() {
                             Create email sequences for automated follow-ups
                         </p>
                     </div>
-                    <Link
-                        href="/outreach/sequences/new"
+                    <button
+                        type="button"
+                        onClick={() => setLocation('/outreach/sequences/new')}
                         className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90"
                     >
                         <Plus className="h-5 w-5" />
                         New Sequence
-                    </Link>
+                    </button>
                 </div>
 
                 {isLoading ? (
@@ -134,9 +499,8 @@ export function SequencesPage() {
                             <SequenceCard
                                 key={sequence.id}
                                 sequence={sequence}
-                                stepsCount={0}
-                                onEdit={(id) => console.log('Edit', id)}
-                                onDelete={(id) => console.log('Delete', id)}
+                                stepsCount={sequence.steps?.length || 0}
+                                onDelete={handleDelete}
                             />
                         ))}
                     </div>
@@ -147,17 +511,26 @@ export function SequencesPage() {
                         <p className="mb-4 text-muted-foreground">
                             Create your first email sequence to automate follow-ups
                         </p>
-                        <Link
-                            href="/outreach/sequences/new"
+                        <button
+                            type="button"
+                            onClick={() => setLocation('/outreach/sequences/new')}
                             className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90"
                         >
                             <Plus className="h-5 w-5" />
                             Create Sequence
-                        </Link>
+                        </button>
                     </div>
                 )}
             </div>
             )}
+            <NewSequenceDialog
+                open={isCreateOpen}
+                onOpenChange={(open) => setLocation(open ? '/outreach/sequences/new' : '/outreach/sequences')}
+                campaigns={campaigns}
+                isLoadingCampaigns={campaignsLoading}
+                onSubmit={(payload) => createMutation.mutate(payload)}
+                isSaving={createMutation.isPending}
+            />
         </OutreachLayout>
     )
 }

@@ -154,30 +154,42 @@ export async function processInboundEmail(
 }> {
     const domain = recipientAddress.split('@')[1]?.toLowerCase()
     if (!domain) {
+        console.log(`[RouteMatcher] processInboundEmail("${recipientAddress}") → NO DOMAIN`)
         return { organizationId: null, routes: [], action: 'none' }
     }
 
+    console.log(`[RouteMatcher] processInboundEmail("${recipientAddress}") → checking domain "${domain}"...`)
+
     const organizationId = await findOrganizationForDomain(domain)
     if (!organizationId) {
+        console.log(`[RouteMatcher] processInboundEmail("${recipientAddress}") → domain "${domain}" has NO ORG (not verified or not registered)`)
         return { organizationId: null, routes: [], action: 'none' }
     }
+
+    console.log(`[RouteMatcher] processInboundEmail("${recipientAddress}") → orgId=${organizationId}, checking routes...`)
 
     const matchedRoutes = await findMatchingRoutes(organizationId, recipientAddress)
 
     if (matchedRoutes.length === 0) {
+        console.log(`[RouteMatcher] processInboundEmail("${recipientAddress}") → NO MATCHING ROUTES → action=none`)
         return { organizationId, routes: [], action: 'none' }
     }
 
+    console.log(`[RouteMatcher] processInboundEmail("${recipientAddress}") → ${matchedRoutes.length} route(s) matched:`, matchedRoutes.map(r => `${r.route.name}(${r.endpoint.type})`))
+
     // If any route rejects, reject the entire message
     if (matchedRoutes.some((r) => r.endpoint.type === 'reject')) {
+        console.log(`[RouteMatcher] → action=REJECT`)
         return { organizationId, routes: matchedRoutes, action: 'reject' }
     }
 
     // If any route holds, hold the message
     if (matchedRoutes.some((r) => r.endpoint.type === 'hold')) {
+        console.log(`[RouteMatcher] → action=HOLD`)
         return { organizationId, routes: matchedRoutes, action: 'hold' }
     }
 
+    console.log(`[RouteMatcher] → action=DELIVER`)
     return { organizationId, routes: matchedRoutes, action: 'deliver' }
 }
 

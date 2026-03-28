@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { db } from '../../../db'
 import { emailAccounts, organizationUsers } from '../../../db/schema'
 import { eq, and } from 'drizzle-orm'
+import { isPlatformAdmin } from '../../lib/admin'
 import { encryptSecret, decryptSecret } from '../../lib/crypto'
 import nodemailer from 'nodemailer'
 import { ImapFlow } from 'imapflow'
@@ -50,8 +51,11 @@ const updateEmailAccountSchema = z.object({
     status: z.enum(['pending', 'verified', 'failed', 'paused']).optional(),
 })
 
-// Helper to check org membership
+// Helper to check org membership (platform admins bypass membership check)
 async function checkOrgMembership(userId: string, organizationId: string) {
+    const admin = await isPlatformAdmin(userId)
+    if (admin) return { role: 'admin' as const }
+
     const membership = await db.query.organizationUsers.findFirst({
         where: and(
             eq(organizationUsers.organizationId, organizationId),
