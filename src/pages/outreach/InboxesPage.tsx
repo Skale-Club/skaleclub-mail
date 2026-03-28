@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { OutreachLayout } from '../../components/outreach/OutreachLayout'
 import { apiFetch, apiRequest } from '../../lib/api-client'
+import { useOrganization } from '../../hooks/useOrganization'
 
 interface EmailAccount {
     id: string
@@ -38,22 +39,22 @@ interface EmailAccountsResponse {
     total: number
 }
 
-async function fetchEmailAccounts(): Promise<EmailAccountsResponse> {
-    const data = await apiFetch<{ emailAccounts?: EmailAccount[] }>('/api/outreach/email-accounts')
+async function fetchEmailAccounts(organizationId: string): Promise<EmailAccountsResponse> {
+    const data = await apiFetch<{ emailAccounts?: EmailAccount[] }>(`/api/outreach/email-accounts?organizationId=${organizationId}`)
     return {
         accounts: data.emailAccounts || [],
         total: (data.emailAccounts || []).length,
     }
 }
 
-async function verifyEmailAccount(id: string): Promise<void> {
-    await apiRequest(`/api/outreach/email-accounts/${id}/verify`, {
+async function verifyEmailAccount(organizationId: string, id: string): Promise<void> {
+    await apiRequest(`/api/outreach/email-accounts/${id}/verify?organizationId=${organizationId}`, {
         method: 'POST',
     })
 }
 
-async function deleteEmailAccount(id: string): Promise<void> {
-    await apiRequest(`/api/outreach/email-accounts/${id}`, {
+async function deleteEmailAccount(organizationId: string, id: string): Promise<void> {
+    await apiRequest(`/api/outreach/email-accounts/${id}?organizationId=${organizationId}`, {
         method: 'DELETE',
     })
 }
@@ -200,22 +201,24 @@ function InboxCard({ account, onVerify, onDelete }: {
 }
 
 export function InboxesPage() {
+    const { currentOrganization } = useOrganization()
     const queryClient = useQueryClient()
 
     const { data: accountsData, isLoading } = useQuery({
-        queryKey: ['email-accounts'],
-        queryFn: fetchEmailAccounts,
+        queryKey: ['email-accounts', currentOrganization?.id],
+        queryFn: () => fetchEmailAccounts(currentOrganization!.id),
+        enabled: !!currentOrganization,
     })
 
     const verifyMutation = useMutation({
-        mutationFn: (id: string) => verifyEmailAccount(id),
+        mutationFn: (id: string) => verifyEmailAccount(currentOrganization!.id, id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['email-accounts'] })
         },
     })
 
     const deleteMutation = useMutation({
-        mutationFn: (id: string) => deleteEmailAccount(id),
+        mutationFn: (id: string) => deleteEmailAccount(currentOrganization!.id, id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['email-accounts'] })
         },
@@ -238,6 +241,11 @@ export function InboxesPage() {
 
     return (
         <OutreachLayout>
+            {!currentOrganization ? (
+                <div className="flex items-center justify-center h-64">
+                    <p className="text-muted-foreground">Select an organization to view inboxes</p>
+                </div>
+            ) : (
             <div className="space-y-6">
                 {/* Header */}
                 <div className="flex items-center justify-between">
@@ -365,6 +373,7 @@ export function InboxesPage() {
                     </ul>
                 </div>
             </div>
+            )}
         </OutreachLayout>
     )
 }

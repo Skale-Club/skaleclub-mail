@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { OutreachLayout } from '../../components/outreach/OutreachLayout'
 import { apiFetch } from '../../lib/api-client'
+import { useOrganization } from '../../hooks/useOrganization'
 
 interface DashboardStats {
     totalCampaigns: number
@@ -37,12 +38,12 @@ interface RecentCampaign {
     replyRate: number
 }
 
-async function fetchDashboardStats(): Promise<DashboardStats> {
-    return apiFetch<DashboardStats>('/api/outreach/campaigns/stats')
+async function fetchDashboardStats(organizationId: string): Promise<DashboardStats> {
+    return apiFetch<DashboardStats>(`/api/outreach/campaigns/stats?organizationId=${organizationId}`)
 }
 
-async function fetchRecentCampaigns(): Promise<RecentCampaign[]> {
-    const data = await apiFetch<{ campaigns?: RecentCampaign[] }>('/api/outreach/campaigns?limit=5')
+async function fetchRecentCampaigns(organizationId: string): Promise<RecentCampaign[]> {
+    const data = await apiFetch<{ campaigns?: RecentCampaign[] }>(`/api/outreach/campaigns?organizationId=${organizationId}&limit=5`)
     return data.campaigns || []
 }
 
@@ -142,18 +143,27 @@ function CampaignRow({ campaign }: { campaign: RecentCampaign }) {
 }
 
 export function OutreachDashboard() {
+    const { currentOrganization } = useOrganization()
+
     const { data: stats, isLoading: statsLoading } = useQuery({
-        queryKey: ['outreach-stats'],
-        queryFn: fetchDashboardStats,
+        queryKey: ['outreach-stats', currentOrganization?.id],
+        queryFn: () => fetchDashboardStats(currentOrganization!.id),
+        enabled: !!currentOrganization,
     })
 
     const { data: campaigns, isLoading: campaignsLoading } = useQuery({
-        queryKey: ['recent-campaigns'],
-        queryFn: fetchRecentCampaigns,
+        queryKey: ['recent-campaigns', currentOrganization?.id],
+        queryFn: () => fetchRecentCampaigns(currentOrganization!.id),
+        enabled: !!currentOrganization,
     })
 
     return (
         <OutreachLayout>
+            {!currentOrganization ? (
+                <div className="flex items-center justify-center h-64">
+                    <p className="text-muted-foreground">Select an organization to view outreach data</p>
+                </div>
+            ) : (
             <div className="space-y-6">
                 {/* Header */}
                 <div className="flex items-center justify-between">
@@ -329,6 +339,7 @@ export function OutreachDashboard() {
                     )}
                 </div>
             </div>
+            )}
         </OutreachLayout>
     )
 }

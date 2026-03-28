@@ -708,6 +708,95 @@ router.delete('/:campaignId/leads/:leadId', async (req: Request, res: Response) 
 
 // ============ CAMPAIGN STATS ============
 
+// Get global stats for all campaigns in an organization
+router.get('/stats', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        const organizationId = req.query.organizationId as string
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        if (!organizationId) {
+            return res.status(400).json({ error: 'organizationId is required' })
+        }
+
+        const membership = await checkOrgMembership(userId, organizationId)
+        if (!membership) {
+            return res.status(403).json({ error: 'Access denied' })
+        }
+
+        // Get all campaigns for the organization
+        const campaignsList = await db.query.campaigns.findMany({
+            where: eq(campaigns.organizationId, organizationId),
+            columns: { id: true },
+        })
+
+        if (campaignsList.length === 0) {
+            return res.json({
+                totalCampaigns: 0,
+                activeCampaigns: 0,
+                totalLeads: 0,
+                totalEmails: 0,
+                openRate: 0,
+                clickRate: 0,
+                replyRate: 0,
+                bounceRate: 0,
+            })
+        }
+
+        const campaignIds = campaignsList.map(c => c.id)
+
+        // Get aggregated stats from all campaign_leads for this org
+        const statsResult = await db
+            .select({
+                totalLeads: sql<number>`count(*)`,
+                contacted: sql<number>`count(*) filter (where ${campaignLeads.status} != 'new')`,
+                replied: sql<number>`count(*) filter (where ${campaignLeads.status} = 'replied' or ${campaignLeads.status} = 'interested')`,
+                bounced: sql<number>`count(*) filter (where ${campaignLeads.status} = 'bounced')`,
+                totalOpens: sql<number>`coalesce(sum(${campaignLeads.totalOpens}), 0)`,
+                totalClicks: sql<number>`coalesce(sum(${campaignLeads.totalClicks}), 0)`,
+                totalReplies: sql<number>`coalesce(sum(${campaignLeads.totalReplies}), 0)`,
+            })
+            .from(campaignLeads)
+            .where(inArray(campaignLeads.campaignId, campaignIds))
+
+        const stats = statsResult[0] || {
+            totalLeads: 0,
+            contacted: 0,
+            replied: 0,
+            bounced: 0,
+            totalOpens: 0,
+            totalClicks: 0,
+            totalReplies: 0,
+        }
+
+        const activeCampaigns = campaignsList.filter(c => c.status === 'active').length
+
+        // Calculate rates
+        const totalEmails = Number(stats.contacted) || 0
+        const openRate = totalEmails > 0 ? (Number(stats.totalOpens) / totalEmails) * 100 : 0
+        const clickRate = totalEmails > 0 ? (Number(stats.totalClicks) / totalEmails) * 100 : 0
+        const replyRate = totalEmails > 0 ? (Number(stats.replied) / totalEmails) * 100 : 0
+        const bounceRate = totalEmails > 0 ? (Number(stats.bounced) / totalEmails) * 100 : 0
+
+        res.json({
+            totalCampaigns: campaignsList.length,
+            activeCampaigns,
+            totalLeads: Number(stats.totalLeads) || 0,
+            totalEmails,
+            openRate,
+            clickRate,
+            replyRate,
+            bounceRate,
+        })
+    } catch (error) {
+        console.error('Error fetching campaign stats:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
 // Get campaign statistics
 router.get('/:id/stats', async (req: Request, res: Response) => {
     try {

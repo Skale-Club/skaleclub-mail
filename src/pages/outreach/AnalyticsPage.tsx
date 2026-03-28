@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { TrendingUp, Mail, Users, Target, Eye, MousePointer } from 'lucide-react'
 import { OutreachLayout } from '../../components/outreach/OutreachLayout'
 import { apiFetch } from '../../lib/api-client'
+import { useOrganization } from '../../hooks/useOrganization'
 
 interface AnalyticsData {
     overview: {
@@ -31,12 +32,12 @@ type DailyStat = {
 
 type StatColor = 'blue' | 'green' | 'purple' | 'orange' | 'red'
 
-async function fetchAnalytics(): Promise<AnalyticsData> {
-    return apiFetch<AnalyticsData>('/api/outreach/campaigns/analytics')
+async function fetchAnalytics(organizationId: string): Promise<AnalyticsData> {
+    return apiFetch<AnalyticsData>(`/api/outreach/campaigns/analytics?organizationId=${organizationId}`)
 }
 
-async function fetchDailyStats(): Promise<DailyStat[]> {
-    return apiFetch<DailyStat[]>('/api/outreach/campaigns/analytics/daily')
+async function fetchDailyStats(organizationId: string): Promise<DailyStat[]> {
+    return apiFetch<DailyStat[]>(`/api/outreach/campaigns/analytics/daily?organizationId=${organizationId}`)
 }
 
 function StatCard({
@@ -121,18 +122,26 @@ function MiniChart({
 }
 
 export function AnalyticsPage() {
+    const { currentOrganization } = useOrganization()
     const { data: overview, isLoading: overviewLoading } = useQuery({
-        queryKey: ['outreach-analytics'],
-        queryFn: fetchAnalytics,
+        queryKey: ['outreach-analytics', currentOrganization?.id],
+        queryFn: () => fetchAnalytics(currentOrganization!.id),
+        enabled: !!currentOrganization,
     })
 
     const { data: dailyStats, isLoading: dailyLoading } = useQuery({
-        queryKey: ['outreach-daily-stats'],
-        queryFn: fetchDailyStats,
+        queryKey: ['outreach-daily-stats', currentOrganization?.id],
+        queryFn: () => fetchDailyStats(currentOrganization!.id),
+        enabled: !!currentOrganization,
     })
 
     return (
         <OutreachLayout>
+            {!currentOrganization ? (
+                <div className="flex items-center justify-center h-64">
+                    <p className="text-muted-foreground">Select an organization to view analytics</p>
+                </div>
+            ) : (
             <div className="space-y-6">
                 <div className="flex items-center justify-between">
                     <div>
@@ -292,6 +301,7 @@ export function AnalyticsPage() {
                     )}
                 </div>
             </div>
+            )}
         </OutreachLayout>
     )
 }

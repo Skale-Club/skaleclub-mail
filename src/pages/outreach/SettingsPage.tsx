@@ -13,6 +13,7 @@ import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
 import { apiFetch, apiRequest } from '../../lib/api-client'
+import { useOrganization } from '../../hooks/useOrganization'
 
 interface OutreachSettings {
     general: {
@@ -37,12 +38,12 @@ interface OutreachSettings {
     }
 }
 
-async function fetchSettings(): Promise<OutreachSettings> {
-    return apiFetch<OutreachSettings>('/api/outreach/settings')
+async function fetchSettings(organizationId: string): Promise<OutreachSettings> {
+    return apiFetch<OutreachSettings>(`/api/outreach/settings?organizationId=${organizationId}`)
 }
 
-async function updateSettings(settings: Partial<OutreachSettings>): Promise<void> {
-    await apiRequest('/api/outreach/settings', {
+async function updateSettings(organizationId: string, settings: Partial<OutreachSettings>): Promise<void> {
+    await apiRequest(`/api/outreach/settings?organizationId=${organizationId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)
@@ -50,14 +51,16 @@ async function updateSettings(settings: Partial<OutreachSettings>): Promise<void
 }
 
 export function SettingsPage() {
+    const { currentOrganization } = useOrganization()
     const queryClient = useQueryClient()
     const { data: settings, isLoading } = useQuery({
-        queryKey: ['outreach-settings'],
-        queryFn: fetchSettings,
+        queryKey: ['outreach-settings', currentOrganization?.id],
+        queryFn: () => fetchSettings(currentOrganization!.id),
+        enabled: !!currentOrganization,
     })
 
     const updateMutation = useMutation({
-        mutationFn: updateSettings,
+        mutationFn: (settings: Partial<OutreachSettings>) => updateSettings(currentOrganization!.id, settings),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['outreach-settings'] })
         }
@@ -108,6 +111,11 @@ export function SettingsPage() {
 
     return (
         <OutreachLayout>
+            {!currentOrganization ? (
+                <div className="flex items-center justify-center h-64">
+                    <p className="text-muted-foreground">Select an organization to view settings</p>
+                </div>
+            ) : (
             <div className="space-y-6 max-w-4xl">
                 {/* Header */}
                 <div className="flex items-center justify-between">
@@ -342,6 +350,7 @@ export function SettingsPage() {
                     </div>
                 </div>
             </div>
+            )}
         </OutreachLayout>
     )
 }

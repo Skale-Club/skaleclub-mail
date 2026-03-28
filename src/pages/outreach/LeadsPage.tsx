@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { OutreachLayout } from '../../components/outreach/OutreachLayout'
 import { apiFetch, apiRequest } from '../../lib/api-client'
+import { useOrganization } from '../../hooks/useOrganization'
 
 interface Lead {
     id: string
@@ -47,10 +48,10 @@ interface LeadsResponse {
     total: number
 }
 
-async function fetchLeads(params: { status?: string; listId?: string; search?: string }): Promise<LeadsResponse> {
-    const query = new URLSearchParams()
+async function fetchLeads(organizationId: string, params: { status?: string; listId?: string; search?: string }): Promise<LeadsResponse> {
+    const query = new URLSearchParams({ organizationId })
     if (params.status && params.status !== 'all') query.set('status', params.status)
-    if (params.listId && params.listId !== 'all') query.set('listId', params.listId)
+    if (params.listId && params.listId !== 'all') query.set('leadListId', params.listId)
     if (params.search) query.set('search', params.search)
 
     const data = await apiFetch<{ leads?: Lead[]; pagination?: { total?: number } }>(`/api/outreach/leads?${query.toString()}`)
@@ -60,13 +61,13 @@ async function fetchLeads(params: { status?: string; listId?: string; search?: s
     }
 }
 
-async function fetchLeadLists(): Promise<LeadList[]> {
-    const data = await apiFetch<{ leadLists?: LeadList[] }>('/api/outreach/leads/lists')
+async function fetchLeadLists(organizationId: string): Promise<LeadList[]> {
+    const data = await apiFetch<{ leadLists?: LeadList[] }>(`/api/outreach/leads/lists?organizationId=${organizationId}`)
     return data.leadLists || []
 }
 
-async function deleteLead(id: string): Promise<void> {
-    await apiRequest(`/api/outreach/leads/${id}`, {
+async function deleteLead(organizationId: string, id: string): Promise<void> {
+    await apiRequest(`/api/outreach/leads/${id}?organizationId=${organizationId}`, {
         method: 'DELETE',
     })
 }
@@ -156,6 +157,7 @@ function LeadRow({ lead, onDelete }: { lead: Lead; onDelete: (id: string) => voi
 }
 
 export function LeadsPage() {
+    const { currentOrganization } = useOrganization()
     const [search, setSearch] = React.useState('')
     const [statusFilter, setStatusFilter] = React.useState('all')
     const [listFilter, setListFilter] = React.useState('all')
@@ -163,17 +165,19 @@ export function LeadsPage() {
     const queryClient = useQueryClient()
 
     const { data: leadsData, isLoading: leadsLoading } = useQuery({
-        queryKey: ['leads', statusFilter, listFilter, search],
-        queryFn: () => fetchLeads({ status: statusFilter, listId: listFilter, search }),
+        queryKey: ['leads', currentOrganization?.id, statusFilter, listFilter, search],
+        queryFn: () => fetchLeads(currentOrganization!.id, { status: statusFilter, listId: listFilter, search }),
+        enabled: !!currentOrganization,
     })
 
     const { data: leadLists } = useQuery({
-        queryKey: ['lead-lists'],
-        queryFn: fetchLeadLists,
+        queryKey: ['lead-lists', currentOrganization?.id],
+        queryFn: () => fetchLeadLists(currentOrganization!.id),
+        enabled: !!currentOrganization,
     })
 
     const deleteMutation = useMutation({
-        mutationFn: (id: string) => deleteLead(id),
+        mutationFn: (id: string) => deleteLead(currentOrganization!.id, id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['leads'] })
         },
@@ -197,6 +201,11 @@ export function LeadsPage() {
 
     return (
         <OutreachLayout>
+            {!currentOrganization ? (
+                <div className="flex items-center justify-center h-64">
+                    <p className="text-muted-foreground">Select an organization to view leads</p>
+                </div>
+            ) : (
             <div className="space-y-6">
                 {/* Header */}
                 <div className="flex items-center justify-between">
@@ -408,7 +417,7 @@ export function LeadsPage() {
                                     <Link
                                         href="/outreach/leads/new"
                                         className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-                                    >
+                                        >
                                         <Plus className="w-5 h-5" />
                                         Add Lead
                                     </Link>
@@ -418,6 +427,7 @@ export function LeadsPage() {
                     )}
                 </div>
             </div>
+            )}
         </OutreachLayout>
     )
 }

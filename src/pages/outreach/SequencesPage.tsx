@@ -4,6 +4,7 @@ import { Link } from 'wouter'
 import { Plus, Mail, ChevronDown } from 'lucide-react'
 import { OutreachLayout } from '../../components/outreach/OutreachLayout'
 import { apiFetch } from '../../lib/api-client'
+import { useOrganization } from '../../hooks/useOrganization'
 
 interface Sequence {
     id: string
@@ -21,8 +22,8 @@ interface Sequence {
     createdAt: string
 }
 
-async function fetchSequences(): Promise<Sequence[]> {
-    const data = await apiFetch<{ sequences?: Sequence[] }>('/api/outreach/campaigns/sequences')
+async function fetchSequences(organizationId: string): Promise<Sequence[]> {
+    const data = await apiFetch<{ sequences?: Sequence[] }>(`/api/outreach/campaigns/sequences?organizationId=${organizationId}`)
     return data.sequences || []
 }
 
@@ -87,13 +88,20 @@ function SequenceCard({
 }
 
 export function SequencesPage() {
+    const { currentOrganization } = useOrganization()
     const { data: sequences, isLoading } = useQuery({
-        queryKey: ['sequences'],
-        queryFn: fetchSequences,
+        queryKey: ['sequences', currentOrganization?.id],
+        queryFn: () => fetchSequences(currentOrganization!.id),
+        enabled: !!currentOrganization,
     })
 
     return (
         <OutreachLayout>
+            {!currentOrganization ? (
+                <div className="flex items-center justify-center h-64">
+                    <p className="text-muted-foreground">Select an organization to view sequences</p>
+                </div>
+            ) : (
             <div className="space-y-6">
                 <div className="flex items-center justify-between">
                     <div>
@@ -149,6 +157,7 @@ export function SequencesPage() {
                     </div>
                 )}
             </div>
+            )}
         </OutreachLayout>
     )
 }

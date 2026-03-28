@@ -1,6 +1,7 @@
 import React from 'react'
 import { Link, useLocation } from 'wouter'
 import { useAuth } from '../../hooks/useAuth'
+import { useOrganization } from '../../hooks/useOrganization'
 import { useBranding } from '../../lib/branding'
 import { supabase } from '../../lib/supabase'
 import { AppLogo } from '../AppLogo'
@@ -18,6 +19,8 @@ import {
     LogOut,
     Menu,
     X,
+    Building2,
+    ChevronDown,
 } from 'lucide-react'
 
 import { ModeToggle } from '../mode-toggle'
@@ -45,12 +48,22 @@ const navItems: NavItem[] = [
 export function OutreachLayout({ children }: OutreachLayoutProps) {
     const { user } = useAuth()
     const { branding } = useBranding()
+    const { organizations, currentOrganization, setCurrentOrganization, isLoading } = useOrganization()
     const [location, navigate] = useLocation()
     const [sidebarOpen, setSidebarOpen] = React.useState(false)
+    const [orgSelectorOpen, setOrgSelectorOpen] = React.useState(false)
 
     const handleSignOut = async () => {
         await supabase.auth.signOut()
         navigate('/login')
+    }
+
+    const handleOrganizationChange = (orgId: string) => {
+        const org = organizations.find(o => o.id === orgId)
+        if (org) {
+            setCurrentOrganization(org)
+        }
+        setOrgSelectorOpen(false)
     }
 
     const isActiveRoute = (href: string) => {
@@ -95,6 +108,44 @@ export function OutreachLayout({ children }: OutreachLayoutProps) {
                         >
                             <X className="w-5 h-5" />
                         </Button>
+                    </div>
+
+                    {/* Organization Selector */}
+                    <div className="px-4 py-3 border-b">
+                        {isLoading ? (
+                            <div className="h-10 bg-muted animate-pulse rounded-md" />
+                        ) : organizations.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">No organizations</p>
+                        ) : (
+                            <div className="relative">
+                                <button
+                                    onClick={() => setOrgSelectorOpen(!orgSelectorOpen)}
+                                    className="flex items-center gap-2 w-full px-3 py-2 text-sm bg-muted/50 hover:bg-muted rounded-md border border-border transition-colors"
+                                >
+                                    <Building2 className="w-4 h-4 text-muted-foreground" />
+                                    <span className="flex-1 text-left truncate font-medium">
+                                        {currentOrganization?.name || 'Select Organization'}
+                                    </span>
+                                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                                </button>
+                                {orgSelectorOpen && (
+                                    <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-md shadow-lg z-10 max-h-60 overflow-y-auto">
+                                        {organizations.map((org) => (
+                                            <button
+                                                key={org.id}
+                                                onClick={() => handleOrganizationChange(org.id)}
+                                                className={`w-full px-3 py-2 text-sm text-left hover:bg-accent transition-colors ${
+                                                    currentOrganization?.id === org.id ? 'bg-accent text-accent-foreground' : ''
+                                                }`}
+                                            >
+                                                <span className="block truncate">{org.name}</span>
+                                                <span className="block text-xs text-muted-foreground capitalize">{org.role}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     {/* Navigation */}

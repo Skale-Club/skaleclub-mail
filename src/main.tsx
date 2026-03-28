@@ -22,7 +22,7 @@ import RoutesPage from './pages/admin/RoutesPage'
 import WebhooksPage from './pages/admin/WebhooksPage'
 import MessagesPage from './pages/admin/MessagesPage'
 
-import { OutreachDashboard } from './pages/outreach/OutreachDashboard'
+import { OrganizationProvider } from './hooks/useOrganization'
 import { CampaignsPage } from './pages/outreach/CampaignsPage'
 import { LeadsPage } from './pages/outreach/LeadsPage'
 import { InboxesPage } from './pages/outreach/InboxesPage'
@@ -234,47 +234,65 @@ function App() {
 
                         <Route path="/outreach">
                             <AdminCheck>
-                                <OutreachDashboard />
+                                <OrganizationProvider>
+                                    <OutreachDashboard />
+                                </OrganizationProvider>
                             </AdminCheck>
                         </Route>
                         <Route path="/outreach/campaigns">
                             <AdminCheck>
-                                <CampaignsPage />
+                                <OrganizationProvider>
+                                    <CampaignsPage />
+                                </OrganizationProvider>
                             </AdminCheck>
                         </Route>
                         <Route path="/outreach/leads">
                             <AdminCheck>
-                                <LeadsPage />
+                                <OrganizationProvider>
+                                    <LeadsPage />
+                                </OrganizationProvider>
                             </AdminCheck>
                         </Route>
                         <Route path="/outreach/inboxes">
                             <AdminCheck>
-                                <InboxesPage />
+                                <OrganizationProvider>
+                                    <InboxesPage />
+                                </OrganizationProvider>
                             </AdminCheck>
                         </Route>
                         <Route path="/outreach/inboxes/new">
                             <AdminCheck>
-                                <NewInboxPage />
+                                <OrganizationProvider>
+                                    <NewInboxPage />
+                                </OrganizationProvider>
                             </AdminCheck>
                         </Route>
                         <Route path="/outreach/sequences">
                             <AdminCheck>
-                                <SequencesPage />
+                                <OrganizationProvider>
+                                    <SequencesPage />
+                                </OrganizationProvider>
                             </AdminCheck>
                         </Route>
                         <Route path="/outreach/sequences/new">
                             <AdminCheck>
-                                <NewSequencePage />
+                                <OrganizationProvider>
+                                    <NewSequencePage />
+                                </OrganizationProvider>
                             </AdminCheck>
                         </Route>
                         <Route path="/outreach/analytics">
                             <AdminCheck>
-                                <OutreachAnalyticsPage />
+                                <OrganizationProvider>
+                                    <OutreachAnalyticsPage />
+                                </OrganizationProvider>
                             </AdminCheck>
                         </Route>
                         <Route path="/outreach/settings">
                             <AdminCheck>
-                                <OutreachSettingsPage />
+                                <OrganizationProvider>
+                                    <OutreachSettingsPage />
+                                </OrganizationProvider>
                             </AdminCheck>
                         </Route>
 

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { OutreachLayout } from '../../components/outreach/OutreachLayout'
 import { apiFetch, apiRequest } from '../../lib/api-client'
+import { useOrganization } from '../../hooks/useOrganization'
 
 interface Campaign {
     id: string
@@ -37,24 +38,24 @@ interface CampaignsResponse {
     total: number
 }
 
-async function fetchCampaigns(params: { status?: string; search?: string }): Promise<CampaignsResponse> {
-    const query = new URLSearchParams()
+async function fetchCampaigns(organizationId: string, params: { status?: string; search?: string }): Promise<CampaignsResponse> {
+    const query = new URLSearchParams({ organizationId })
     if (params.status && params.status !== 'all') query.set('status', params.status)
     if (params.search) query.set('search', params.search)
 
     return apiFetch<CampaignsResponse>(`/api/outreach/campaigns?${query.toString()}`)
 }
 
-async function updateCampaignStatus(id: string, status: string): Promise<void> {
-    await apiRequest(`/api/outreach/campaigns/${id}/status`, {
-        method: 'PATCH',
+async function updateCampaignStatus(organizationId: string, id: string, status: string): Promise<void> {
+    await apiRequest(`/api/outreach/campaigns/${id}?organizationId=${organizationId}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
     })
 }
 
-async function deleteCampaign(id: string): Promise<void> {
-    await apiRequest(`/api/outreach/campaigns/${id}`, {
+async function deleteCampaign(organizationId: string, id: string): Promise<void> {
+    await apiRequest(`/api/outreach/campaigns/${id}?organizationId=${organizationId}`, {
         method: 'DELETE',
     })
 }
@@ -184,23 +185,26 @@ function CampaignCard({ campaign, onStatusChange, onDelete }: {
 }
 
 export function CampaignsPage() {
+    const { currentOrganization } = useOrganization()
     const [search, setSearch] = React.useState('')
     const [statusFilter, setStatusFilter] = React.useState('all')
     const queryClient = useQueryClient()
+
     const { data, isLoading } = useQuery({
-        queryKey: ['campaigns', statusFilter, search],
-        queryFn: () => fetchCampaigns({ status: statusFilter, search }),
+        queryKey: ['campaigns', currentOrganization?.id, statusFilter, search],
+        queryFn: () => fetchCampaigns(currentOrganization!.id, { status: statusFilter, search }),
+        enabled: !!currentOrganization,
     })
 
     const statusMutation = useMutation({
-        mutationFn: ({ id, status }: { id: string; status: string }) => updateCampaignStatus(id, status),
+        mutationFn: ({ id, status }: { id: string; status: string }) => updateCampaignStatus(currentOrganization!.id, id, status),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['campaigns'] })
         },
     })
 
     const deleteMutation = useMutation({
-        mutationFn: (id: string) => deleteCampaign(id),
+        mutationFn: (id: string) => deleteCampaign(currentOrganization!.id, id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['campaigns'] })
         },
@@ -218,6 +222,11 @@ export function CampaignsPage() {
 
     return (
         <OutreachLayout>
+            {!currentOrganization ? (
+                <div className="flex items-center justify-center h-64">
+                    <p className="text-muted-foreground">Select an organization to view campaigns</p>
+                </div>
+            ) : (
             <div className="space-y-6">
                 {/* Header */}
                 <div className="flex items-center justify-between">
@@ -318,6 +327,7 @@ export function CampaignsPage() {
                     </div>
                 )}
             </div>
+            )}
         </OutreachLayout>
     )
 }
