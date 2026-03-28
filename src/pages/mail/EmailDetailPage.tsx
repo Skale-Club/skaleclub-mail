@@ -4,6 +4,7 @@ import { MailLayout } from '../../components/mail/MailLayout'
 import { toast } from '../../components/ui/toaster'
 import { useMailbox } from '../../hooks/useMailbox'
 import { useMessage, useUpdateMessage, useDeleteMessage, useArchiveMessage, mapMessageToEmailItem } from '../../hooks/useMail'
+import { EmailHtmlViewer } from '../../components/mail/EmailHtmlViewer'
 import { EmailThreadView } from '../../components/mail/EmailThread'
 import { EmailThread, ThreadMessage } from '../../lib/email-threading'
 import {
@@ -155,7 +156,6 @@ export default function EmailDetailPage() {
 
     const [menuOpen, setMenuOpen] = React.useState(false)
     const [viewMode, setViewMode] = React.useState<'single' | 'thread'>('thread')
-    const readTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const { data: apiMessage, isLoading: messageLoading, error } = useMessage(params.id)
     const updateMessage = useUpdateMessage()
@@ -204,6 +204,7 @@ export default function EmailDetailPage() {
                     date: emailItem.date,
                     subject: emailItem.subject,
                     body: apiMessage.message.bodyText || apiMessage.message.bodyHtml || '',
+                    htmlBody: apiMessage.message.bodyHtml || apiMessage.message.htmlBody,
                     snippet: emailItem.snippet,
                     read: emailItem.read,
                     starred: emailItem.starred,
@@ -227,33 +228,16 @@ export default function EmailDetailPage() {
 
     const email = thread?.messages[thread.messages.length - 1] || null
 
-    // Auto-mark as read after 2 seconds of viewing
+    // Mark as read as soon as the user opens the email.
     React.useEffect(() => {
-        readTimerRef.current = null
-
         if (!email || !selectedMailbox || email.read) return
 
-        readTimerRef.current = setTimeout(() => {
-            updateMessage.mutate({ messageId: email.id, data: { read: true } })
-        }, 2000)
-
-        return () => {
-            if (readTimerRef.current) {
-                clearTimeout(readTimerRef.current)
-                readTimerRef.current = null
-            }
-        }
+        updateMessage.mutate({ messageId: email.id, data: { read: true } })
     }, [email?.id, email?.read, selectedMailbox, updateMessage])
 
     const handleToggleRead = (messageId?: string) => {
         const id = messageId || email?.id
         if (!id || !email || !selectedMailbox) return
-
-        // If marking as unread, cancel any pending read timer
-        if (!email.read && readTimerRef.current) {
-            clearTimeout(readTimerRef.current)
-            readTimerRef.current = null
-        }
 
         updateMessage.mutate({ messageId: id, data: { read: !email.read } })
         toast({
@@ -439,7 +423,7 @@ export default function EmailDetailPage() {
                         )}
                         <button
                             onClick={() => handleToggleRead()}
-                            className={`p-2 rounded-lg transition-colors ${
+                            className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
                                 email?.read
                                     ? 'text-muted-foreground hover:text-foreground hover:bg-muted'
                                     : 'text-primary hover:bg-primary/10'
@@ -447,6 +431,9 @@ export default function EmailDetailPage() {
                             title={email?.read ? 'Mark as unread' : 'Mark as read'}
                         >
                             {email?.read ? <Mail className="w-5 h-5" /> : <MailOpen className="w-5 h-5" />}
+                            <span className="hidden sm:inline text-sm font-medium">
+                                {email?.read ? 'Mark as unread' : 'Mark as read'}
+                            </span>
                         </button>
                         <button
                             onClick={handleArchive}
@@ -594,10 +581,11 @@ function SingleEmailView({
                         </div>
                     </div>
 
-                    <div className="prose dark:prose-invert max-w-none">
-                        <div className="text-foreground whitespace-pre-wrap leading-relaxed">
-                            {message.body}
-                        </div>
+                    <div className="mt-4">
+                        <EmailHtmlViewer
+                            html={message.htmlBody}
+                            plainText={message.body || message.snippet}
+                        />
                     </div>
 
                     {message.attachments && message.attachments.length > 0 && (

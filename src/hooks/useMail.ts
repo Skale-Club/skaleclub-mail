@@ -138,9 +138,10 @@ export function useInfiniteMessages(folderType: string, limit = 30) {
 }
 
 export function useMessage(messageId: string | null) {
+    const queryClient = useQueryClient()
     const { selectedMailbox } = useMailbox()
 
-    return useQuery({
+    const query = useQuery({
         queryKey: ['message', selectedMailbox?.id, messageId],
         queryFn: () => {
             if (!selectedMailbox || !messageId) throw new Error('Missing required params')
@@ -148,6 +149,20 @@ export function useMessage(messageId: string | null) {
         },
         enabled: !!selectedMailbox && !!messageId,
     })
+
+    React.useEffect(() => {
+        if (!query.data?.message?.id) return
+
+        patchMailboxMessageQueries(queryClient, selectedMailbox?.id, (message) => {
+            if (message.id !== query.data.message.id) return message
+            return {
+                ...message,
+                read: true,
+            }
+        })
+    }, [query.data?.message?.id, queryClient, selectedMailbox?.id])
+
+    return query
 }
 
 export function useUpdateMessage() {

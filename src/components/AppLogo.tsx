@@ -6,16 +6,17 @@ interface AppLogoProps {
     alt?: string
 }
 
+const loadedLogoSources = new Set<string>()
+
 export const AppLogo = memo(function AppLogo({ className = '', alt }: AppLogoProps) {
     const { branding, isSuccess } = useBranding()
-    const [loaded, setLoaded] = useState(false)
-    const prevSrc = useRef<string | null>(null)
-
     const src = isSuccess ? branding.logoUrl : '/brand-mark.svg'
+    const [loaded, setLoaded] = useState(() => loadedLogoSources.has(src))
+    const prevSrc = useRef<string | null>(src)
 
     useEffect(() => {
-        if (prevSrc.current !== null && prevSrc.current !== src) {
-            setLoaded(false)
+        if (prevSrc.current !== src) {
+            setLoaded(loadedLogoSources.has(src))
         }
         prevSrc.current = src
     }, [src])
@@ -25,7 +26,11 @@ export const AppLogo = memo(function AppLogo({ className = '', alt }: AppLogoPro
             src={src}
             alt={alt || `${branding.applicationName} logo`}
             className={`${className} transition-opacity duration-200 ${loaded ? 'opacity-100' : 'opacity-0'}`}
-            onLoad={() => setLoaded(true)}
+            onLoad={() => {
+                loadedLogoSources.add(src)
+                setLoaded(true)
+            }}
+            onError={() => setLoaded(true)}
         />
     )
 })

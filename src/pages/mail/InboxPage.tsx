@@ -9,6 +9,7 @@ import { useMailbox } from '../../hooks/useMailbox'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import {
     useMessages,
+    useMessage,
     useUpdateMessage,
     useDeleteMessage,
     useArchiveMessage,
@@ -17,6 +18,7 @@ import {
     useSyncMailbox,
     mapMessageToEmailItem
 } from '../../hooks/useMail'
+import { EmailHtmlViewer } from '../../components/mail/EmailHtmlViewer'
 import { Inbox as InboxIcon, Mail, MailOpen, AlertCircle } from 'lucide-react'
 
 export default function InboxPage() {
@@ -27,7 +29,6 @@ export default function InboxPage() {
     const [selectedEmail, setSelectedEmail] = React.useState<string | null>(null)
     const [selectedEmails, setSelectedEmails] = React.useState<Set<string>>(new Set())
     const [filter, setFilter] = React.useState<'all' | 'unread' | 'starred' | 'attachments'>('all')
-    const readTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const { data, isLoading, isFetching, refetch } = useMessages('inbox', 1, 50)
     const updateMessage = useUpdateMessage()
@@ -55,16 +56,6 @@ export default function InboxPage() {
         return emails.findIndex(email => email.id === selectedEmail)
     }, [emails, selectedEmail])
 
-    // Cleanup timer on unmount
-    React.useEffect(() => {
-        return () => {
-            if (readTimerRef.current) {
-                clearTimeout(readTimerRef.current)
-                readTimerRef.current = null
-            }
-        }
-    }, [])
-
     const handleRefresh = async () => {
         if (selectedMailbox) {
             syncMailbox.mutate()
@@ -75,10 +66,10 @@ export default function InboxPage() {
     }
 
     const handleSelectEmail = (id: string) => {
-        // Cancel any pending read timer for previous selection
-        if (readTimerRef.current) {
-            clearTimeout(readTimerRef.current)
-            readTimerRef.current = null
+        const email = emails.find(email => email.id === id)
+
+        if (selectedMailbox && email && !email.read) {
+            updateMessage.mutate({ messageId: id, data: { read: true } })
         }
 
         if (isMobile) {
@@ -86,28 +77,11 @@ export default function InboxPage() {
             return
         }
         setSelectedEmail(id)
-
-        if (selectedMailbox) {
-            const email = emails.find(email => email.id === id)
-            if (email && !email.read) {
-                // Delay mark-as-read by 2 seconds (market standard pattern)
-                readTimerRef.current = setTimeout(() => {
-                    updateMessage.mutate({ messageId: id, data: { read: true } })
-                    readTimerRef.current = null
-                }, 2000)
-            }
-        }
     }
 
     const handleToggleRead = (id: string) => {
         const email = emails.find(e => e.id === id)
         if (!email || !selectedMailbox) return
-
-        // If marking as unread, cancel any pending read timer
-        if (email.read && readTimerRef.current) {
-            clearTimeout(readTimerRef.current)
-            readTimerRef.current = null
-        }
 
         updateMessage.mutate({ messageId: id, data: { read: !email.read } })
         toast({
@@ -362,6 +336,7 @@ export default function InboxPage() {
                             selectedEmails={selectedEmails}
                             onSelect={handleSelectEmail}
                             onSelectMultiple={(ids) => setSelectedEmails(new Set(ids))}
+                            onToggleRead={handleToggleRead}
                             onStar={handleStar}
                             onDelete={handleDelete}
                             onArchive={handleArchive}
@@ -397,17 +372,20 @@ export default function InboxPage() {
 }
 
 function EmailDetail({ email, onToggleRead }: { email: EmailItem; onToggleRead?: (id: string) => void }) {
+    const { data: messageData } = useMessage(email.id)
+    const fullMessage = messageData?.message
+
     return (
         <div className="flex-1 overflow-y-auto">
             <div className="p-4">
                 <div className="max-w-3xl mx-auto">
                     <div className="flex items-center gap-3 py-2 border-b border-border mb-3">
                         <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium text-xs flex-shrink-0">
-                            {email.from.name?.[0]?.toUpperCase()}
+                            {email.from.name?.[0]?.toUpperCase() || email.from.email?.[0]?.toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
-                                <p className="text-sm font-semibold text-foreground truncate">{email.from.name}</p>
+                                <p className="text-sm font-semibold text-foreground truncate">{email.from.name || email.from.email}</p>
                                 <p className="text-xs text-muted-foreground flex-shrink-0">{email.date.toLocaleString()}</p>
                             </div>
                             <p className="text-xs text-muted-foreground truncate">To: {email.to.map(t => t.name || t.email).join(', ')}</p>
@@ -430,10 +408,11 @@ function EmailDetail({ email, onToggleRead }: { email: EmailItem; onToggleRead?:
                         </div>
                     )}
 
-                    <div className="prose dark:prose-invert max-w-none mt-8 text-sm sm:text-base">
-                        <div className="text-foreground whitespace-pre-wrap">
-                            {email.snippet}
-                        </div>
+                    <div className="mt-4">
+                        <EmailHtmlViewer
+                            html={fullMessage?.bodyHtml || fullMessage?.htmlBody}
+                            plainText={fullMessage?.bodyText || fullMessage?.plainBody || email.snippet}
+                        />
                     </div>
 
                     <div className="mt-8 pt-6 border-t border-border">

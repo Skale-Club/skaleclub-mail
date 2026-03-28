@@ -1,6 +1,8 @@
 import React from 'react'
 import { Link } from 'wouter'
 import { EmailItem } from './EmailList'
+import { EmailHtmlViewer } from './EmailHtmlViewer'
+import { useMessage } from '../../hooks/useMail'
 import {
     Star,
     Mail,
@@ -23,6 +25,8 @@ interface EmailDetailViewProps {
 }
 
 export function EmailDetailView({ email, onStar, onDelete, onArchive, onToggleRead }: EmailDetailViewProps) {
+    const { data: messageData } = useMessage(email.id)
+    const fullMessage = messageData?.message
     const avatarColor = getAvatarColor(email.from.email)
     const initials = getInitials(email.from.name || email.from.email)
 
@@ -132,10 +136,11 @@ export function EmailDetailView({ email, onStar, onDelete, onArchive, onToggleRe
                         </div>
                     )}
 
-                    <div className="prose dark:prose-invert max-w-none mt-8 text-sm sm:text-base">
-                        <div className="text-foreground whitespace-pre-wrap">
-                            {email.snippet}
-                        </div>
+                    <div className="mt-4">
+                        <EmailHtmlViewer
+                            html={fullMessage?.bodyHtml || fullMessage?.htmlBody}
+                            plainText={fullMessage?.bodyText || fullMessage?.plainBody || email.snippet}
+                        />
                     </div>
 
                     {email.hasAttachments && (

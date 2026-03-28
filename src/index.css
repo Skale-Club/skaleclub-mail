@@ -240,3 +240,20 @@
 .dark .compose-editor .ql-editor.ql-blank::before {
     color: var(--muted-foreground);
 }
+
+/* Borderless overriding for premium floating compose dialog */
+.compose-editor-borderless .ql-toolbar.ql-snow {
+    border: none !important;
+    border-bottom: 1px solid hsl(var(--border) / 0.5) !important;
+    padding: 8px 0 !important;
+    margin-bottom: 8px;
+}
+
+.compose-editor-borderless .ql-container.ql-snow {
+    border: none !important;
+}
+
+.compose-editor-borderless .ql-editor {
+    padding: 12px 0 32px 0 !important;
+    min-height: 200px !important;
+}

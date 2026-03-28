@@ -247,10 +247,10 @@ export function ComposeDialog() {
 
     if (mailboxes.length === 0) {
         return (
-            <div className="fixed bottom-0 right-[10%] w-[500px] z-50 bg-background border border-border shadow-2xl rounded-t-xl overflow-hidden flex flex-col h-[400px]">
-                <div className="bg-muted px-4 py-3 flex items-center justify-between">
-                    <span className="font-medium text-sm">New Message</span>
-                    <button onClick={closeCompose} className="text-muted-foreground hover:text-foreground">
+            <div className="fixed bottom-0 sm:bottom-6 right-0 sm:right-8 w-full sm:w-[500px] z-50 bg-background border border-border shadow-2xl sm:rounded-2xl overflow-hidden flex flex-col h-[400px]">
+                <div className="bg-background/80 backdrop-blur-md border-b border-border/50 px-4 py-3 flex items-center justify-between">
+                    <span className="font-semibold text-sm">New Message</span>
+                    <button onClick={closeCompose} className="p-1.5 hover:bg-muted-foreground/10 rounded-md text-muted-foreground hover:text-foreground transition-colors">
                         <X className="w-4 h-4" />
                     </button>
                 </div>
@@ -271,14 +271,14 @@ export function ComposeDialog() {
 
     if (isMinimized) {
         return (
-            <div className="fixed bottom-0 right-4 sm:right-[10%] w-[300px] z-50 bg-background border border-border shadow-2xl rounded-t-xl cursor-pointer hover:bg-muted transition-colors" onClick={() => setIsMinimized(false)}>
+            <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-8 w-auto min-w-[300px] z-[60] bg-background border border-border shadow-2xl rounded-2xl cursor-pointer hover:bg-muted/50 transition-all duration-300 ease-in-out" onClick={() => setIsMinimized(false)}>
                 <div className="px-4 py-3 flex items-center justify-between">
-                    <span className="font-medium text-sm truncate">{email.subject || 'New Message'}</span>
-                    <div className="flex items-center gap-2">
-                        <button onClick={(e) => { e.stopPropagation(); setIsMinimized(false); }} className="text-muted-foreground hover:text-foreground">
+                    <span className="font-semibold text-sm truncate pr-4">{email.subject || 'New Message'}</span>
+                    <div className="flex items-center gap-1.5">
+                        <button onClick={(e) => { e.stopPropagation(); setIsMinimized(false); }} className="p-1.5 hover:bg-muted-foreground/10 rounded-md text-muted-foreground hover:text-foreground">
                             <Maximize2 className="w-4 h-4" />
                         </button>
-                        <button onClick={(e) => { e.stopPropagation(); handleClose(); }} className="text-muted-foreground hover:text-foreground">
+                        <button onClick={(e) => { e.stopPropagation(); handleClose(); }} className="p-1.5 hover:bg-muted-foreground/10 rounded-md text-muted-foreground hover:text-foreground">
                             <X className="w-4 h-4" />
                         </button>
                     </div>
@@ -288,29 +288,29 @@ export function ComposeDialog() {
     }
 
     return (
-        <div className={`fixed bottom-0 right-0 sm:right-[5%] z-50 bg-background border border-border shadow-2xl sm:rounded-t-xl overflow-hidden flex flex-col transition-all duration-200 ${isMaximized ? 'w-full h-full sm:w-[80vw] sm:h-[90vh] sm:bottom-[5vh] sm:right-[10vw] sm:rounded-xl' : 'w-full h-full sm:w-[600px] sm:h-[600px]'}`}>
+        <div className={`fixed z-[60] bg-background border border-border shadow-2xl overflow-hidden flex flex-col transition-all duration-300 ease-in-out ${isMaximized ? 'w-full h-full sm:w-[80vw] sm:h-[90vh] sm:bottom-[5vh] sm:right-[10vw] sm:rounded-2xl' : 'w-full h-full bottom-0 right-0 sm:w-[600px] sm:h-[600px] sm:bottom-6 sm:right-8 sm:rounded-2xl'}`}>
             {/* Header */}
-            <div className="bg-muted/50 px-4 py-2 flex items-center justify-between border-b border-border">
-                <span className="font-medium text-sm">
+            <div className="bg-background/80 backdrop-blur-md px-4 py-3 flex items-center justify-between border-b border-border/50">
+                <span className="font-semibold text-sm">
                     {replyToId ? 'Reply' : forwardId ? 'Forward' : draftId ? 'Edit Draft' : 'New Message'}
                 </span>
-                <div className="flex items-center gap-2">
-                    <button onClick={() => setIsMinimized(true)} className="p-1.5 hover:bg-muted-foreground/20 rounded-md text-muted-foreground hover:text-foreground transition-colors">
+                <div className="flex items-center gap-1.5">
+                    <button onClick={() => setIsMinimized(true)} className="p-1.5 hover:bg-muted-foreground/10 rounded-md text-muted-foreground hover:text-foreground transition-colors">
                         <Minus className="w-4 h-4" />
                     </button>
-                    <button onClick={() => setIsMaximized(!isMaximized)} className="hidden sm:block p-1.5 hover:bg-muted-foreground/20 rounded-md text-muted-foreground hover:text-foreground transition-colors">
+                    <button onClick={() => setIsMaximized(!isMaximized)} className="hidden sm:block p-1.5 hover:bg-muted-foreground/10 rounded-md text-muted-foreground hover:text-foreground transition-colors">
                         <Maximize2 className="w-4 h-4" />
                     </button>
-                    <button onClick={handleClose} className="p-1.5 hover:bg-muted-foreground/20 rounded-md text-muted-foreground hover:text-foreground transition-colors">
+                    <button onClick={handleClose} className="p-1.5 hover:bg-muted-foreground/10 rounded-md text-muted-foreground hover:text-foreground transition-colors">
                         <X className="w-4 h-4" />
                     </button>
                 </div>
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto flex flex-col">
-                <div className="px-4 py-2 border-b border-border flex items-center">
-                    <span className="w-12 text-sm text-muted-foreground">To</span>
+            <div className="flex-1 overflow-y-auto flex flex-col bg-background">
+                <div className="px-6 py-2 flex items-center group relative border-b border-transparent hover:border-border/10">
+                    <span className="w-12 text-sm text-muted-foreground font-medium">To</span>
                     <div className="flex-1">
                         <ContactAutocomplete
                             value={email.to}
@@ -318,15 +318,15 @@ export function ComposeDialog() {
                             placeholder=""
                         />
                     </div>
-                    <div className="flex items-center gap-2 text-sm">
-                        <button onClick={() => setShowCc(!showCc)} className="text-muted-foreground hover:text-foreground">Cc</button>
-                        <button onClick={() => setShowBcc(!showBcc)} className="text-muted-foreground hover:text-foreground">Bcc</button>
+                    <div className="flex items-center gap-3 text-sm opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity absolute right-6">
+                        {!showCc && <button onClick={() => setShowCc(true)} className="text-muted-foreground hover:text-foreground font-medium">Cc</button>}
+                        {!showBcc && <button onClick={() => setShowBcc(true)} className="text-muted-foreground hover:text-foreground font-medium">Bcc</button>}
                     </div>
                 </div>
 
                 {showCc && (
-                    <div className="px-4 py-2 border-b border-border flex items-center">
-                        <span className="w-12 text-sm text-muted-foreground">Cc</span>
+                    <div className="px-6 py-2 flex items-center border-b border-transparent hover:border-border/10">
+                        <span className="w-12 text-sm text-muted-foreground font-medium">Cc</span>
                         <div className="flex-1">
                             <ContactAutocomplete
                                 value={email.cc}
@@ -338,8 +338,8 @@ export function ComposeDialog() {
                 )}
 
                 {showBcc && (
-                    <div className="px-4 py-2 border-b border-border flex items-center">
-                        <span className="w-12 text-sm text-muted-foreground">Bcc</span>
+                    <div className="px-6 py-2 flex items-center border-b border-transparent hover:border-border/10">
+                        <span className="w-12 text-sm text-muted-foreground font-medium">Bcc</span>
                         <div className="flex-1">
                             <ContactAutocomplete
                                 value={email.bcc}
@@ -350,35 +350,35 @@ export function ComposeDialog() {
                     </div>
                 )}
 
-                <div className="px-4 py-2 border-b border-border flex items-center">
+                <div className="px-6 py-3 border-b border-border/20">
                     <input
                         type="text"
                         value={email.subject}
                         onChange={(e) => setEmail({ ...email, subject: e.target.value })}
                         placeholder="Subject"
-                        className="flex-1 bg-transparent border-0 focus:ring-0 text-sm font-medium placeholder-muted-foreground/70"
+                        className="w-full bg-transparent border-0 focus:ring-0 text-lg font-semibold placeholder-muted-foreground/50 px-0 outline-none"
                     />
                 </div>
 
-                <div className="flex-1 flex flex-col min-h-0 bg-card">
+                <div className="flex-1 flex flex-col min-h-0 bg-transparent px-6 pb-4">
                     <RichTextEditor
                         value={email.body}
                         onChange={(value) => setEmail({ ...email, body: value })}
-                        placeholder=""
+                        placeholder="Write your message..."
                         minHeight={isMaximized ? 400 : 250}
-                        className="flex-1 border-0"
+                        className="flex-1 border-0 compose-editor-borderless mt-2"
                     />
                 </div>
 
                 {attachments.length > 0 && (
-                    <div className="p-3 border-t border-border bg-muted/30 flex flex-wrap gap-2">
+                    <div className="px-6 pb-4 flex flex-wrap gap-2">
                         {attachments.map((file, index) => (
-                            <div key={index} className="flex items-center gap-2 px-2.5 py-1.5 bg-background border border-border rounded-md">
-                                <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />
-                                <span className="text-xs max-w-[150px] truncate">{file.name}</span>
-                                <span className="text-[10px] text-muted-foreground">({formatBytes(file.size)})</span>
-                                <button onClick={() => removeAttachment(index)} className="p-0.5 hover:bg-muted rounded">
-                                    <X className="w-3 h-3 text-muted-foreground" />
+                            <div key={index} className="flex items-center gap-2 px-3 py-2 bg-muted/50 border border-border/50 rounded-lg hover:bg-muted transition-colors">
+                                <Paperclip className="w-4 h-4 text-muted-foreground" />
+                                <span className="text-sm max-w-[150px] truncate font-medium">{file.name}</span>
+                                <span className="text-xs text-muted-foreground">({formatBytes(file.size)})</span>
+                                <button onClick={() => removeAttachment(index)} className="p-1 hover:bg-background rounded-md text-muted-foreground hover:text-foreground transition-colors ml-1">
+                                    <X className="w-3.5 h-3.5" />
                                 </button>
                             </div>
                         ))}
@@ -387,21 +387,24 @@ export function ComposeDialog() {
             </div>
 
             {/* Footer */}
-            <div className="px-4 py-3 bg-muted/30 border-t border-border flex items-center justify-between">
-                <div className="flex items-center gap-2">
+            <div className="px-6 py-4 bg-background border-t border-border/50 flex items-center justify-between">
+                <div className="flex items-center gap-3">
                     <button
                         onClick={handleSend}
                         disabled={sendEmail.isPending}
-                        className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                        className="flex items-center gap-2 px-6 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full text-sm font-semibold transition-all shadow-sm hover:shadow active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
                     >
                         {sendEmail.isPending ? 'Sending...' : 'Send'}
+                        {!sendEmail.isPending && <Send className="w-4 h-4 ml-1" />}
                     </button>
                     
-                    <label className="p-2 hover:bg-muted rounded-lg text-muted-foreground cursor-pointer transition-colors" title="Attach files">
+                    <div className="w-px h-5 bg-border/50 mx-1"></div>
+                    
+                    <label className="p-2.5 hover:bg-muted rounded-full text-muted-foreground hover:text-foreground cursor-pointer transition-colors" title="Attach files">
                         <Paperclip className="w-4 h-4" />
                         <input type="file" multiple onChange={handleAttachment} className="hidden" />
                     </label>
-                    <label className="p-2 hover:bg-muted rounded-lg text-muted-foreground cursor-pointer transition-colors" title="Insert image">
+                    <label className="p-2.5 hover:bg-muted rounded-full text-muted-foreground hover:text-foreground cursor-pointer transition-colors" title="Insert image">
                         <ImageIcon className="w-4 h-4" />
                         <input type="file" accept="image/*" className="hidden" />
                     </label>
@@ -410,20 +413,21 @@ export function ComposeDialog() {
                         <div className="relative">
                             <button
                                 onClick={() => setShowSignatureMenu(!showSignatureMenu)}
-                                className="p-2 hover:bg-muted rounded-lg text-muted-foreground transition-colors"
+                                className="p-2.5 hover:bg-muted rounded-full text-muted-foreground hover:text-foreground transition-colors"
                                 title="Insert signature"
                             >
                                 <PenTool className="w-4 h-4" />
                             </button>
                             {showSignatureMenu && (
-                                <div className="absolute bottom-full left-0 mb-1 w-48 bg-popover border border-border rounded-lg shadow-lg z-10 py-1">
+                                <div className="absolute bottom-full left-0 mb-2 w-56 bg-popover border border-border rounded-xl shadow-xl z-10 py-1.5">
                                     {signatures.map(sig => (
                                         <button
                                             key={sig.id}
                                             onClick={() => insertSignature(sig)}
-                                            className="w-full px-4 py-2 text-left text-sm hover:bg-muted text-foreground"
+                                            className="w-full px-4 py-2 text-left text-sm hover:bg-muted text-foreground transition-colors flex items-center justify-between"
                                         >
-                                            {sig.name} {sig.isDefault && '(Default)'}
+                                            <span className="font-medium">{sig.name}</span>
+                                            {sig.isDefault && <span className="text-[10px] uppercase tracking-wider text-muted-foreground bg-muted-foreground/10 px-1.5 py-0.5 rounded">Default</span>}
                                         </button>
                                     ))}
                                 </div>
@@ -432,12 +436,12 @@ export function ComposeDialog() {
                     )}
                 </div>
 
-                <div className="flex items-center gap-1">
-                    {isSaved && <span className="text-xs text-green-600 mr-2">Saved</span>}
+                <div className="flex items-center gap-2">
+                    {isSaved && <span className="text-xs font-medium text-green-600 dark:text-green-400 bg-green-500/10 px-2.5 py-1 rounded-full mr-2 transition-all">Saved draft</span>}
                     <button
                         onClick={handleDiscard}
-                        className="p-2 hover:bg-red-500/10 hover:text-red-500 rounded-lg text-muted-foreground transition-colors"
-                        title="Discard draft"
+                        className="p-2.5 hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-full transition-colors"
+                        title="Discard"
                     >
                         <Trash2 className="w-4 h-4" />
                     </button>

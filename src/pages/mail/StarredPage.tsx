@@ -6,7 +6,8 @@ import { LoadingState } from '../../components/mail/EmailParts'
 import { toast } from '../../components/ui/toaster'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useMailbox } from '../../hooks/useMailbox'
-import { useMessages, useUpdateMessage, useDeleteMessage, useArchiveMessage, useBatchUpdate, useSyncMailbox, mapMessageToEmailItem } from '../../hooks/useMail'
+import { useMessages, useMessage, useUpdateMessage, useDeleteMessage, useArchiveMessage, useBatchUpdate, useSyncMailbox, mapMessageToEmailItem } from '../../hooks/useMail'
+import { EmailHtmlViewer } from '../../components/mail/EmailHtmlViewer'
 import { Star } from 'lucide-react'
 
 export default function StarredPage() {
@@ -58,6 +59,17 @@ export default function StarredPage() {
         }
         toast({
             title: emails.find(e => e.id === id)?.starred ? 'Removed from starred' : 'Added to starred',
+            variant: 'success'
+        })
+    }
+
+    const handleToggleRead = (id: string) => {
+        const email = emails.find(e => e.id === id)
+        if (!email || !selectedMailbox) return
+
+        updateMessage.mutate({ messageId: id, data: { read: !email.read } })
+        toast({
+            title: email.read ? 'Marked as unread' : 'Marked as read',
             variant: 'success'
         })
     }
@@ -176,6 +188,7 @@ export default function StarredPage() {
                             emails={emails}
                             selectedId={selectedEmail || undefined}
                             onSelect={handleSelectEmail}
+                            onToggleRead={handleToggleRead}
                             onStar={handleStar}
                             onDelete={handleDelete}
                             onArchive={handleArchive}
@@ -207,6 +220,9 @@ export default function StarredPage() {
 }
 
 function EmailDetail({ email }: { email: EmailItem }) {
+    const { data: messageData } = useMessage(email.id)
+    const fullMessage = messageData?.message
+
     return (
         <div className="flex-1 overflow-y-auto">
             <div className="p-4">
@@ -235,8 +251,11 @@ function EmailDetail({ email }: { email: EmailItem }) {
                         </div>
                     )}
 
-                    <div className="prose dark:prose-invert max-w-none text-sm">
-                        <div className="text-foreground whitespace-pre-wrap">{email.snippet}</div>
+                    <div className="mt-4">
+                        <EmailHtmlViewer
+                            html={fullMessage?.bodyHtml || fullMessage?.htmlBody}
+                            plainText={fullMessage?.bodyText || fullMessage?.plainBody || email.snippet}
+                        />
                     </div>
 
                     <div className="mt-8 pt-6 border-t border-border">

@@ -6,7 +6,8 @@ import { LoadingState } from '../../components/mail/EmailParts'
 import { toast } from '../../components/ui/toaster'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useMailbox } from '../../hooks/useMailbox'
-import { useMessages, useDeleteMessage, useBatchUpdate, useSyncMailbox, mapMessageToEmailItem } from '../../hooks/useMail'
+import { useMessages, useMessage, useDeleteMessage, useBatchUpdate, useSyncMailbox, mapMessageToEmailItem } from '../../hooks/useMail'
+import { EmailHtmlViewer } from '../../components/mail/EmailHtmlViewer'
 import { FileText } from 'lucide-react'
 
 export default function DraftsPage() {
@@ -165,6 +166,9 @@ export default function DraftsPage() {
 }
 
 function EmailDetail({ email }: { email: EmailItem }) {
+    const { data: messageData } = useMessage(email.id)
+    const fullMessage = messageData?.message
+
     return (
         <div className="flex-1 overflow-y-auto">
             <div className="p-4">
@@ -183,8 +187,11 @@ function EmailDetail({ email }: { email: EmailItem }) {
                     </div>
                     <h2 className="text-sm font-bold text-foreground mb-3">{email.subject || '(No subject)'}</h2>
 
-                    <div className="prose dark:prose-invert max-w-none text-sm">
-                        <div className="text-foreground whitespace-pre-wrap">{email.snippet}</div>
+                    <div className="mt-4">
+                        <EmailHtmlViewer
+                            html={fullMessage?.bodyHtml || fullMessage?.htmlBody}
+                            plainText={fullMessage?.bodyText || fullMessage?.plainBody || email.snippet}
+                        />
                     </div>
 
                     <div className="mt-8 pt-6 border-t border-border flex items-center gap-3">

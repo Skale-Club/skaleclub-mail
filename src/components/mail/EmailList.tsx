@@ -47,6 +47,7 @@ interface EmailListProps {
     selectedEmails?: Set<string>
     onSelect: (id: string) => void
     onSelectMultiple?: (ids: string[]) => void
+    onToggleRead?: (id: string) => void
     onStar?: (id: string) => void
     onDelete?: (id: string) => void
     onArchive?: (id: string) => void
@@ -63,6 +64,7 @@ export function EmailList({
     selectedEmails = new Set(),
     onSelect,
     onSelectMultiple,
+    onToggleRead,
     onStar,
     onDelete,
     onArchive,
@@ -248,6 +250,19 @@ export function EmailList({
                                         <Forward className="w-4 h-4" />
                                         Forward
                                     </button>
+                                    {onToggleRead && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                onToggleRead(email.id)
+                                                setMenuOpenId(null)
+                                            }}
+                                            className="flex items-center gap-3 w-full px-4 py-2 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground"
+                                        >
+                                            {email.read ? <Mail className="w-4 h-4" /> : <MailOpen className="w-4 h-4" />}
+                                            {email.read ? 'Mark as unread' : 'Mark as read'}
+                                        </button>
+                                    )}
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation()
@@ -368,14 +383,18 @@ export function EmailToolbar({
                     <>
                         <button
                             onClick={onMarkRead}
-                            className="hidden sm:block px-2.5 py-1 text-xs font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                            className="inline-flex items-center gap-2 px-2.5 py-1 text-xs font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                            title="Mark as read"
                         >
+                            <MailOpen className="w-4 h-4" />
                             Mark as read
                         </button>
                         <button
                             onClick={onMarkUnread}
-                            className="hidden sm:block px-2.5 py-1 text-xs font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                            className="inline-flex items-center gap-2 px-2.5 py-1 text-xs font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                            title="Mark as unread"
                         >
+                            <Mail className="w-4 h-4" />
                             Mark as unread
                         </button>
                         <button

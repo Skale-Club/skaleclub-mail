@@ -28,6 +28,8 @@ import { useFolders } from '../../hooks/useMail'
 import { NotificationBell } from './NotificationBell'
 import { useCompose } from '../../hooks/useCompose'
 
+const MailLayoutContext = React.createContext(false)
+
 interface MailLayoutProps {
     children: React.ReactNode
 }
@@ -218,7 +220,7 @@ function MobileBottomNav({ location, onOpenSidebar, openCompose }: MobileBottomN
     )
 }
 
-export function MailLayout({ children }: MailLayoutProps) {
+function MailLayoutFrame({ children }: MailLayoutProps) {
     const { branding } = useBranding()
     const isMobile = useIsMobile()
     const { isOpen: shortcutsOpen, openHelp: openShortcuts, closeHelp: closeShortcuts } = useKeyboardShortcutHelp()
@@ -350,5 +352,19 @@ export function MailLayout({ children }: MailLayoutProps) {
             
             <KeyboardShortcutsHelp isOpen={shortcutsOpen} onClose={closeShortcuts} />
         </div>
+    )
+}
+
+export function MailLayout({ children }: MailLayoutProps) {
+    const isNestedLayout = React.useContext(MailLayoutContext)
+
+    if (isNestedLayout) {
+        return <>{children}</>
+    }
+
+    return (
+        <MailLayoutContext.Provider value={true}>
+            <MailLayoutFrame>{children}</MailLayoutFrame>
+        </MailLayoutContext.Provider>
     )
 }

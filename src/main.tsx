@@ -11,6 +11,7 @@ import { useBranding } from './lib/branding'
 import AdminLayout from './components/admin/AdminLayout'
 import { OrganizationProvider } from './hooks/useOrganization'
 import { ComposeProvider } from './hooks/useCompose'
+import { MailLayout } from './components/mail/MailLayout'
 import './index.css'
 
 const Login = React.lazy(() => import('./pages/Login'))
@@ -231,7 +232,57 @@ function PageSuspense({ children }: { children: React.ReactNode }) {
     return <Suspense fallback={<Spinner />}>{children}</Suspense>
 }
 
+function MailRoutes() {
+    return (
+        <MailLayout>
+            <Switch>
+                <Route path="/mail/inbox">
+                    <PageSuspense><InboxPage /></PageSuspense>
+                </Route>
+                <Route path="/mail/sent">
+                    <PageSuspense><SentPage /></PageSuspense>
+                </Route>
+                <Route path="/mail/drafts">
+                    <PageSuspense><DraftsPage /></PageSuspense>
+                </Route>
+                <Route path="/mail/trash">
+                    <PageSuspense><TrashPage /></PageSuspense>
+                </Route>
+                <Route path="/mail/starred">
+                    <PageSuspense><StarredPage /></PageSuspense>
+                </Route>
+                <Route path="/mail/spam">
+                    <PageSuspense><SpamPage /></PageSuspense>
+                </Route>
+                <Route path="/mail/archive">
+                    <PageSuspense><ArchivePage /></PageSuspense>
+                </Route>
+                <Route path="/mail/contacts">
+                    <PageSuspense><ContactsPage /></PageSuspense>
+                </Route>
+                <Route path="/mail/:folder/:id">
+                    <PageSuspense><EmailDetailPage /></PageSuspense>
+                </Route>
+                <Route path="/mail/compose">
+                    <PageSuspense><ComposePage /></PageSuspense>
+                </Route>
+                <Route path="/mail/settings">
+                    <PageSuspense><MailSettingsPage /></PageSuspense>
+                </Route>
+                <Route path="/mail/search">
+                    <PageSuspense><SearchPage /></PageSuspense>
+                </Route>
+                <Route path="/mail">
+                    <PageSuspense><InboxPage /></PageSuspense>
+                </Route>
+            </Switch>
+        </MailLayout>
+    )
+}
+
 function App() {
+    const [location] = useLocation()
+
     return (
         <ThemeProvider defaultTheme="system">
             <QueryClientProvider client={queryClient}>
@@ -240,6 +291,11 @@ function App() {
                         <ComposeProvider>
                             <BrandingHead />
                             <div className="min-h-screen bg-background">
+                                {location.startsWith('/mail') ? (
+                                    <MailCheck>
+                                        <MailRoutes />
+                                    </MailCheck>
+                                ) : (
                                 <Switch>
                                 <Route path="/login">
                                     <PageSuspense><Login /></PageSuspense>
@@ -373,76 +429,11 @@ function App() {
                                     </AdminCheck>
                                 </Route>
 
-                                <Route path="/mail/inbox">
-                                    <MailCheck>
-                                        <PageSuspense><InboxPage /></PageSuspense>
-                                    </MailCheck>
-                                </Route>
-                                <Route path="/mail/sent">
-                                    <MailCheck>
-                                        <PageSuspense><SentPage /></PageSuspense>
-                                    </MailCheck>
-                                </Route>
-                                <Route path="/mail/drafts">
-                                    <MailCheck>
-                                        <PageSuspense><DraftsPage /></PageSuspense>
-                                    </MailCheck>
-                                </Route>
-                                <Route path="/mail/trash">
-                                    <MailCheck>
-                                        <PageSuspense><TrashPage /></PageSuspense>
-                                    </MailCheck>
-                                </Route>
-                                <Route path="/mail/starred">
-                                    <MailCheck>
-                                        <PageSuspense><StarredPage /></PageSuspense>
-                                    </MailCheck>
-                                </Route>
-                                <Route path="/mail/spam">
-                                    <MailCheck>
-                                        <PageSuspense><SpamPage /></PageSuspense>
-                                    </MailCheck>
-                                </Route>
-                                <Route path="/mail/archive">
-                                    <MailCheck>
-                                        <PageSuspense><ArchivePage /></PageSuspense>
-                                    </MailCheck>
-                                </Route>
-                                <Route path="/mail/contacts">
-                                    <MailCheck>
-                                        <PageSuspense><ContactsPage /></PageSuspense>
-                                    </MailCheck>
-                                </Route>
-                                <Route path="/mail/:folder/:id">
-                                    <MailCheck>
-                                        <PageSuspense><EmailDetailPage /></PageSuspense>
-                                    </MailCheck>
-                                </Route>
-                                <Route path="/mail/compose">
-                                    <MailCheck>
-                                        <PageSuspense><ComposePage /></PageSuspense>
-                                    </MailCheck>
-                                </Route>
-                                <Route path="/mail/settings">
-                                    <MailCheck>
-                                        <PageSuspense><MailSettingsPage /></PageSuspense>
-                                    </MailCheck>
-                                </Route>
-                                <Route path="/mail/search">
-                                    <MailCheck>
-                                        <PageSuspense><SearchPage /></PageSuspense>
-                                    </MailCheck>
-                                </Route>
-                                <Route path="/mail">
-                                    <MailCheck>
-                                        <PageSuspense><InboxPage /></PageSuspense>
-                                    </MailCheck>
-                                </Route>
-
                                 <Route path="/">
                                     <RootRedirect />
                                 </Route>
                             </Switch>
+                                )}
                             <Toaster />
                             <ComposeDialogHost />
                         </div>

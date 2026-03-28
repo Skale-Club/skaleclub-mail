@@ -1,6 +1,7 @@
 import React from 'react'
 import { Link } from 'wouter'
 import { ThreadMessage, EmailThread, getThreadParticipants } from '../../lib/email-threading'
+import { EmailHtmlViewer } from './EmailHtmlViewer'
 import { getAvatarColor, getInitials } from '../../lib/utils'
 import {
     ChevronDown,
@@ -226,10 +227,11 @@ function ThreadMessageCard({
 
             {isExpanded && (
                 <div className="px-4 pb-4">
-                    <div className="prose prose-sm dark:prose-invert max-w-none mt-4 pl-13">
-                        <div className="text-foreground whitespace-pre-wrap">
-                            {message.body}
-                        </div>
+                    <div className="mt-4 pl-13">
+                        <EmailHtmlViewer
+                            html={message.htmlBody}
+                            plainText={message.body || message.snippet}
+                        />
                     </div>
 
                     {message.attachments && message.attachments.length > 0 && (

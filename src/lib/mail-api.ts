@@ -97,6 +97,64 @@ export interface MessageListResponse {
     hasMore: boolean
 }
 
+type RawMessage = Partial<Message> & {
+    isRead?: boolean
+    isStarred?: boolean
+    receivedAt?: string
+}
+
+type RawMessageListResponse = {
+    messages?: RawMessage[]
+    total?: number
+    hasMore?: boolean
+    pagination?: {
+        total?: number
+        page?: number
+        limit?: number
+        totalPages?: number
+    }
+}
+
+function normalizeMessage(message: RawMessage): Message {
+    return {
+        id: message.id || '',
+        mailboxId: message.mailboxId || '',
+        folder: message.folder || '',
+        messageId: message.messageId || '',
+        inReplyTo: message.inReplyTo,
+        references: message.references,
+        from: message.from || { name: '', email: '' },
+        to: message.to || [],
+        cc: message.cc,
+        bcc: message.bcc,
+        subject: message.subject || '',
+        bodyText: message.bodyText ?? message.plainBody,
+        bodyHtml: message.bodyHtml ?? message.htmlBody,
+        plainBody: message.plainBody,
+        htmlBody: message.htmlBody,
+        snippet: message.snippet,
+        headers: message.headers,
+        date: message.date || message.receivedAt || message.createdAt || new Date().toISOString(),
+        read: message.read ?? message.isRead ?? false,
+        starred: message.starred ?? message.isStarred ?? false,
+        attachments: message.attachments,
+        hasAttachments: message.hasAttachments ?? Boolean(message.attachments?.length),
+        labels: message.labels,
+        createdAt: message.createdAt || message.receivedAt || new Date().toISOString(),
+    }
+}
+
+function normalizeMessageListResponse(payload: RawMessageListResponse): MessageListResponse {
+    const messages = (payload.messages || []).map(normalizeMessage)
+    const total = payload.total ?? payload.pagination?.total ?? messages.length
+
+    return {
+        messages,
+        total,
+        hasMore: payload.hasMore ?? messages.length < total,
+    }
+}
+
 export interface SendEmailPayload {
     to: { name?: string; email: string }[]
     cc?: { name?: string; email: string }[]
@@ -179,11 +237,15 @@ export const mailApi = {
         if (params?.limit !== undefined) searchParams.set('limit', String(params.limit))
         if (params?.search) searchParams.set('search', params.search)
 
-        return apiFetch(`/api/mail/mailboxes/${mailboxId}/messages?${searchParams}`)
+        return apiFetch<RawMessageListResponse>(`/api/mail/mailboxes/${mailboxId}/messages?${searchParams}`)
+            .then(normalizeMessageListResponse)
     },
 
     getMessage(mailboxId: string, messageId: string): Promise<{ message: Message }> {
-        return apiFetch(`/api/mail/mailboxes/${mailboxId}/messages/${messageId}`)
+        return apiFetch<{ message: RawMessage }>(`/api/mail/mailboxes/${mailboxId}/messages/${messageId}`)
+            .then((payload) => ({
+                message: normalizeMessage(payload.message),
+            }))
     },
 
     updateMessage(
@@ -191,10 +253,15 @@ export const mailApi = {
         messageId: string,
         data: { read?: boolean; starred?: boolean; labels?: string[] }
     ): Promise<{ message: Message }> {
-        return apiFetch(`/api/mail/mailboxes/${mailboxId}/messages/${messageId}`, {
+        return apiFetch<{ message: RawMessage }>(`/api/mail/mailboxes/${mailboxId}/messages/${messageId}`, {
             method: 'PUT',
-            body: JSON.stringify(data),
-        })
+            body: JSON.stringify({
+                isRead: data.read,
+                isStarred: data.starred,
+            }),
+        }).then((payload) => ({
+            message: normalizeMessage(payload.message),
+        }))
     },
 
     deleteMessage(mailboxId: string, messageId: string): Promise<void> {
@@ -284,7 +351,8 @@ export const mailApi = {
         if (params?.page !== undefined) searchParams.set('page', String(params.page))
         if (params?.limit !== undefined) searchParams.set('limit', String(params.limit))
 
-        return apiFetch(`/api/mail/mailboxes/${mailboxId}/search?${searchParams}`)
+        return apiFetch<RawMessageListResponse>(`/api/mail/mailboxes/${mailboxId}/search?${searchParams}`)
+            .then(normalizeMessageListResponse)
     },
 
     getSignatures(mailboxId: string): Promise<{ signatures: Signature[] }> {

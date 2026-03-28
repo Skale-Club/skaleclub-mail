@@ -19,6 +19,7 @@ export interface ThreadMessage {
     date: Date
     subject: string
     body: string
+    htmlBody?: string
     snippet: string
     read: boolean
     starred: boolean
