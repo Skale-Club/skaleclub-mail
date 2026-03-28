@@ -7,17 +7,22 @@ import { isPlatformAdmin } from '../../lib/admin'
 const router = Router()
 
 router.use(async (req, res, next) => {
-    const userId = req.headers['x-user-id'] as string | undefined
+    try {
+        const userId = req.headers['x-user-id'] as string | undefined
 
-    if (!userId) {
-        return res.status(401).json({ error: 'Unauthorized' })
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        if (!await isPlatformAdmin(userId)) {
+            return res.status(403).json({ error: 'Forbidden' })
+        }
+
+        next()
+    } catch (error) {
+        console.error('Error in outreach admin middleware:', error)
+        res.status(500).json({ error: 'Internal server error' })
     }
-
-    if (!await isPlatformAdmin(userId)) {
-        return res.status(403).json({ error: 'Forbidden' })
-    }
-
-    next()
 })
 
 // Email Accounts routes

@@ -193,7 +193,7 @@ export function CampaignsPage() {
     const { data, isLoading } = useQuery({
         queryKey: ['campaigns', currentOrganization?.id, statusFilter, search],
         queryFn: () => fetchCampaigns(currentOrganization!.id, { status: statusFilter, search }),
-        enabled: !!currentOrganization,
+        enabled: !!currentOrganization?.id,
     })
 
     const statusMutation = useMutation({

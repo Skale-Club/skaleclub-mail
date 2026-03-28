@@ -730,7 +730,7 @@ router.get('/stats', async (req: Request, res: Response) => {
         // Get all campaigns for the organization
         const campaignsList = await db.query.campaigns.findMany({
             where: eq(campaigns.organizationId, organizationId),
-            columns: { id: true },
+            columns: { id: true, status: true },
         })
 
         if (campaignsList.length === 0) {

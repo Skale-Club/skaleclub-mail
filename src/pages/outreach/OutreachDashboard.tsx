@@ -148,13 +148,13 @@ export function OutreachDashboard() {
     const { data: stats, isLoading: statsLoading } = useQuery({
         queryKey: ['outreach-stats', currentOrganization?.id],
         queryFn: () => fetchDashboardStats(currentOrganization!.id),
-        enabled: !!currentOrganization,
+        enabled: !!currentOrganization?.id,
     })
 
     const { data: campaigns, isLoading: campaignsLoading } = useQuery({
         queryKey: ['recent-campaigns', currentOrganization?.id],
         queryFn: () => fetchRecentCampaigns(currentOrganization!.id),
-        enabled: !!currentOrganization,
+        enabled: !!currentOrganization?.id,
     })
 
     return (
