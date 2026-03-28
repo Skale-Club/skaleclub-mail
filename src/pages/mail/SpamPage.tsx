@@ -227,8 +227,7 @@ export default function SpamPage() {
                                 </div>
                             </div>
                             )
-                        })()
-                        ) : (
+                        })() : (
                             <div className="flex-1 flex items-center justify-center text-muted-foreground">
                                 <div className="text-center">
                                     <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
