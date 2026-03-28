@@ -87,6 +87,9 @@ export function createInboundSMTPServer() {
     const server = new SMTPServer({
         name: process.env.MAIL_DOMAIN || 'skale.club',
         secure: false,
+        // Hide STARTTLS — we don't have a TLS cert for port 25 yet.
+        // Gmail/Outlook will fall back to plaintext delivery which is fine.
+        hideSTARTTLS: true,
         // No auth required — external servers don't authenticate
         authOptional: true,
         disabledCommands: ['AUTH'],
