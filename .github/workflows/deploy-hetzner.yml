@@ -132,6 +132,18 @@ jobs:
             
             echo "Container started"
             echo "::endgroup::"
+
+            echo "::group::🌐 Caddy — ensure mail.skale.club route"
+            CADDYFILE=/etc/caddy/Caddyfile
+            if ! grep -q "mail.skale.club" "$CADDYFILE"; then
+              echo "Adding mail.skale.club block to Caddyfile..."
+              printf '\nmail.skale.club {\n  encode zstd gzip\n\n  reverse_proxy localhost:9001\n}\n' >> "$CADDYFILE"
+              caddy reload --config "$CADDYFILE"
+              echo "Caddy reloaded with mail.skale.club"
+            else
+              echo "mail.skale.club already present in Caddyfile, skipping"
+            fi
+            echo "::endgroup::"
             
             echo "::group::🏥 Health Check"
             # Wait for container to be ready and check health
