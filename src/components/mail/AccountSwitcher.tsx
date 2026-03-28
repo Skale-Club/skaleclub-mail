@@ -1,13 +1,17 @@
 import React from 'react'
 import { Link } from 'wouter'
 import { useMailbox, getProviderColor, getProviderIcon, Mailbox } from '../../hooks/useMailbox'
-import { Plus, Check, AlertCircle, ChevronDown, Mail, RefreshCw, Settings } from 'lucide-react'
+import { Plus, Check, AlertCircle, ChevronDown, Mail, RefreshCw, Settings, LogOut } from 'lucide-react'
+import { useAuth } from '../../hooks/useAuth'
 
 interface AccountSwitcherProps {
     compact?: boolean
+    showSignOut?: boolean
+    onSignOut?: () => void
 }
 
-export function AccountSwitcher({ compact = false }: AccountSwitcherProps) {
+export function AccountSwitcher({ compact = false, showSignOut = false, onSignOut }: AccountSwitcherProps) {
+    const { user } = useAuth()
     const { mailboxes, selectedMailbox, setSelectedMailbox, isLoading, refreshMailboxes } = useMailbox()
     const [isOpen, setIsOpen] = React.useState(false)
 
@@ -32,19 +36,33 @@ export function AccountSwitcher({ compact = false }: AccountSwitcherProps) {
         )
     }
 
+    const userInitial = user?.user_metadata?.firstName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || 'U'
+    const userName = user?.user_metadata?.firstName || user?.email?.split('@')[0] || 'User'
+
     return (
-        <div className="relative w-full">
+        <div className="relative">
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 className={`
-                    flex items-center gap-2 rounded-xl transition-colors w-full
-                    ${compact
-                        ? 'p-2 hover:bg-accent'
-                        : 'px-3 py-2 bg-accent/50 hover:bg-accent'
+                    flex items-center gap-2 rounded-xl transition-colors
+                    ${showSignOut
+                        ? 'px-2 sm:px-3 py-2 hover:bg-accent'
+                        : compact
+                            ? 'p-2 hover:bg-accent w-full'
+                            : 'px-3 py-2 bg-accent/50 hover:bg-accent w-full'
                     }
                 `}
             >
-                {selectedMailbox ? (
+                {showSignOut ? (
+                    <>
+                        <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-semibold text-sm">
+                            {userInitial}
+                        </div>
+                        <span className="hidden sm:block text-sm font-medium text-foreground">
+                            {userName}
+                        </span>
+                    </>
+                ) : selectedMailbox ? (
                     <>
                         <div className={`w-8 h-8 rounded-full ${getProviderColor(selectedMailbox.provider)} flex items-center justify-center text-white text-sm font-bold`}>
                             {getProviderIcon(selectedMailbox.provider)}
@@ -53,7 +71,7 @@ export function AccountSwitcher({ compact = false }: AccountSwitcherProps) {
                             <>
                                 <div className="flex flex-col items-start min-w-0">
                                     <span className="text-sm font-medium text-foreground truncate max-w-[120px] sm:max-w-[180px]">
-                                        {selectedMailbox.displayName || selectedMailbox.email.split('@')[0]}
+                                        {selectedMailbox.displayName || selectedMailbox.email?.split('@')[0]}
                                     </span>
                                     <span className="text-xs text-muted-foreground truncate max-w-[120px] sm:max-w-[180px]">
                                         {selectedMailbox.email}
@@ -72,7 +90,7 @@ export function AccountSwitcher({ compact = false }: AccountSwitcherProps) {
                         <Mail className="w-4 h-4 text-gray-600 dark:text-gray-300" />
                     </div>
                 )}
-                <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''} hidden sm:block`} />
             </button>
 
             {isOpen && (
@@ -81,13 +99,7 @@ export function AccountSwitcher({ compact = false }: AccountSwitcherProps) {
                         className="fixed inset-0 z-40"
                         onClick={() => setIsOpen(false)}
                     />
-                    <div className="absolute left-0 right-0 z-50 bg-popover border border-border rounded-xl shadow-xl py-2 mt-2">
-                        <div className="px-3 py-2 border-b border-border">
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                Email Accounts
-                            </p>
-                        </div>
-
+                    <div className="absolute right-0 z-50 bg-popover border border-border rounded-xl shadow-xl py-2 mt-2 w-72">
                         <div className="max-h-64 overflow-y-auto py-1">
                             {mailboxes.map((mailbox) => (
                                 <AccountItem
@@ -130,6 +142,21 @@ export function AccountSwitcher({ compact = false }: AccountSwitcherProps) {
                                 Add Another Account
                             </Link>
                         </div>
+
+                        {showSignOut && onSignOut && (
+                            <div className="border-t border-border mt-2 pt-2 px-2">
+                                <button
+                                    onClick={() => {
+                                        setIsOpen(false)
+                                        onSignOut()
+                                    }}
+                                    className="flex items-center gap-3 w-full px-3 py-2 text-sm text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                                >
+                                    <LogOut className="w-4 h-4" />
+                                    Sign Out
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </>
             )}
@@ -150,11 +177,7 @@ function AccountItem({
         <button
             onClick={onSelect}
             className={`
-                flex items-center gap-3 w-full px-3 py-2.5 text-left transition-colors
-                ${isSelected 
-                    ? 'bg-accent text-accent-foreground' 
-                    : 'hover:bg-accent/50'
-                }
+                flex items-center gap-3 w-full px-3 py-2.5 text-left transition-colors hover:bg-accent/50
             `}
         >
             <div className={`w-9 h-9 rounded-full ${getProviderColor(mailbox.provider)} flex items-center justify-center text-white text-sm font-bold flex-shrink-0`}>
@@ -164,22 +187,18 @@ function AccountItem({
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-foreground truncate">
-                        {mailbox.displayName || mailbox.email.split('@')[0]}
+                        {mailbox.displayName || mailbox.email?.split('@')[0]}
                     </span>
                     {mailbox.isDefault && (
                         <span className="px-1.5 py-0.5 text-xs bg-primary/10 text-primary rounded">
                             Default
                         </span>
                     )}
-                </div>
-                <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground truncate">
-                        {mailbox.email}
-                    </span>
                     {mailbox.syncError && (
                         <AlertCircle className="w-3 h-3 text-red-500 flex-shrink-0" />
                     )}
                 </div>
+                <span className="text-xs text-muted-foreground truncate">{mailbox.email}</span>
             </div>
 
             <div className="flex items-center gap-2">

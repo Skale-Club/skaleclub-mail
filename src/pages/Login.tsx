@@ -91,6 +91,12 @@ export default function Login() {
                                         placeholder="Enter your password"
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault()
+                                                handleLogin(e as any)
+                                            }
+                                        }}
                                         required
                                         className="h-11 pl-10 pr-10 bg-background"
                                     />

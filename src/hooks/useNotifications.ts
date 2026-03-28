@@ -24,8 +24,8 @@ export function useUnreadCount() {
     return useQuery({
         queryKey: ['notifications', 'unread-count'],
         queryFn: () => mailApi.getUnreadCount(),
-        staleTime: 15000,
-        refetchInterval: 30000,
+        staleTime: 60000,
+        refetchInterval: 120000,
     })
 }
 

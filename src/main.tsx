@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { Suspense } from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Route, Switch } from 'wouter'
@@ -8,49 +8,53 @@ import { AuthProvider, useAuth } from './hooks/useAuth'
 import { MailboxProvider } from './hooks/useMailbox'
 import { useBranding } from './lib/branding'
 import AdminLayout from './components/admin/AdminLayout'
+import { OrganizationProvider } from './hooks/useOrganization'
+import { ComposeProvider } from './hooks/useCompose'
+import { ComposeDialog } from './components/mail/ComposeDialog'
 import './index.css'
 
-import Login from './pages/Login'
+const Login = React.lazy(() => import('./pages/Login'))
 
-import AdminDashboard from './pages/admin/AdminDashboard'
-import OrganizationsPage from './pages/admin/OrganizationsPage'
-import OrganizationDetailPage from './pages/admin/OrganizationDetailPage'
-import AdminsPage from './pages/admin/AdminsPage'
-import BrandingPage from './pages/admin/BrandingPage'
-import CredentialsPage from './pages/admin/CredentialsPage'
-import RoutesPage from './pages/admin/RoutesPage'
-import WebhooksPage from './pages/admin/WebhooksPage'
-import MessagesPage from './pages/admin/MessagesPage'
+const AdminDashboard = React.lazy(() => import('./pages/admin/AdminDashboard'))
+const OrganizationsPage = React.lazy(() => import('./pages/admin/OrganizationsPage'))
+const OrganizationDetailPage = React.lazy(() => import('./pages/admin/OrganizationDetailPage'))
+const AdminsPage = React.lazy(() => import('./pages/admin/AdminsPage'))
+const BrandingPage = React.lazy(() => import('./pages/admin/BrandingPage'))
+const CredentialsPage = React.lazy(() => import('./pages/admin/CredentialsPage'))
+const RoutesPage = React.lazy(() => import('./pages/admin/RoutesPage'))
+const WebhooksPage = React.lazy(() => import('./pages/admin/WebhooksPage'))
+const MessagesPage = React.lazy(() => import('./pages/admin/MessagesPage'))
 
-import { OrganizationProvider } from './hooks/useOrganization'
-import { CampaignsPage } from './pages/outreach/CampaignsPage'
-import { LeadsPage } from './pages/outreach/LeadsPage'
-import { InboxesPage } from './pages/outreach/InboxesPage'
-import { NewInboxPage } from './pages/outreach/inboxes/NewInboxPage'
-import { SequencesPage } from './pages/outreach/SequencesPage'
-import { NewSequencePage } from './pages/outreach/sequences/NewSequencePage'
-import { AnalyticsPage as OutreachAnalyticsPage } from './pages/outreach/AnalyticsPage'
-import { SettingsPage as OutreachSettingsPage } from './pages/outreach/SettingsPage'
+const OutreachDashboard = React.lazy(() => import('./pages/outreach/OutreachDashboard'))
+const CampaignsPage = React.lazy(() => import('./pages/outreach/CampaignsPage'))
+const LeadsPage = React.lazy(() => import('./pages/outreach/LeadsPage'))
+const InboxesPage = React.lazy(() => import('./pages/outreach/InboxesPage'))
+const NewInboxPage = React.lazy(() => import('./pages/outreach/inboxes/NewInboxPage'))
+const SequencesPage = React.lazy(() => import('./pages/outreach/SequencesPage'))
+const NewSequencePage = React.lazy(() => import('./pages/outreach/sequences/NewSequencePage'))
+const OutreachAnalyticsPage = React.lazy(() => import('./pages/outreach/AnalyticsPage'))
+const OutreachSettingsPage = React.lazy(() => import('./pages/outreach/SettingsPage'))
 
-import InboxPage from './pages/mail/InboxPage'
-import SentPage from './pages/mail/SentPage'
-import DraftsPage from './pages/mail/DraftsPage'
-import TrashPage from './pages/mail/TrashPage'
-import StarredPage from './pages/mail/StarredPage'
-import SpamPage from './pages/mail/SpamPage'
-import ArchivePage from './pages/mail/ArchivePage'
-import ContactsPage from './pages/mail/ContactsPage'
-import ComposePage from './pages/mail/ComposePage'
-import MailSettingsPage from './pages/mail/SettingsPage'
-import SearchPage from './pages/mail/SearchPage'
-import EmailDetailPage from './pages/mail/EmailDetailPage'
+const InboxPage = React.lazy(() => import('./pages/mail/InboxPage'))
+const SentPage = React.lazy(() => import('./pages/mail/SentPage'))
+const DraftsPage = React.lazy(() => import('./pages/mail/DraftsPage'))
+const TrashPage = React.lazy(() => import('./pages/mail/TrashPage'))
+const StarredPage = React.lazy(() => import('./pages/mail/StarredPage'))
+const SpamPage = React.lazy(() => import('./pages/mail/SpamPage'))
+const ArchivePage = React.lazy(() => import('./pages/mail/ArchivePage'))
+const ContactsPage = React.lazy(() => import('./pages/mail/ContactsPage'))
+const ComposePage = React.lazy(() => import('./pages/mail/ComposePage'))
+const MailSettingsPage = React.lazy(() => import('./pages/mail/SettingsPage'))
+const SearchPage = React.lazy(() => import('./pages/mail/SearchPage'))
+const EmailDetailPage = React.lazy(() => import('./pages/mail/EmailDetailPage'))
 
 const queryClient = new QueryClient({
     defaultOptions: {
         queries: {
             retry: (failureCount, error) => {
                 if (error instanceof Error && error.message === 'Unauthorized') return false
-                return failureCount < 3
+                if (error instanceof Error && error.message.includes('Too many requests')) return false
+                return failureCount < 2
             },
             staleTime: 30_000,
             refetchOnWindowFocus: false,
@@ -69,21 +73,6 @@ function Spinner() {
     )
 }
 
-function AuthCheck({ children }: { children: React.ReactNode }) {
-    const { user, isLoading } = useAuth()
-    const pathname = window.location.pathname
-
-    if (isLoading) return <Spinner />
-
-    if (!user && pathname !== '/login') {
-        window.location.href = '/login'
-        return null
-    }
-
-    return <>{children}</>
-}
-
-// Guards /admin/* routes — non-admins are redirected to webmail
 function AdminCheck({ children }: { children: React.ReactNode }) {
     const { user, isAdmin, isLoading } = useAuth()
 
@@ -120,7 +109,6 @@ function MailCheck({ children }: { children: React.ReactNode }) {
     return <>{children}</>
 }
 
-// Root redirect: admins → /admin, members → /mail/inbox
 function RootRedirect() {
     const { user, isAdmin, isLoading } = useAuth()
 
@@ -136,9 +124,11 @@ function RootRedirect() {
 }
 
 function BrandingHead() {
-    const { branding } = useBranding()
+    const { branding, isSuccess } = useBranding()
 
     React.useEffect(() => {
+        if (!isSuccess) return
+
         document.title = branding.applicationName
 
         let favicon = document.querySelector("link[rel='icon']") as HTMLLinkElement | null
@@ -150,9 +140,13 @@ function BrandingHead() {
         }
 
         favicon.href = branding.faviconUrl
-    }, [branding.applicationName, branding.faviconUrl])
+    }, [isSuccess, branding.applicationName, branding.faviconUrl])
 
     return null
+}
+
+function PageSuspense({ children }: { children: React.ReactNode }) {
+    return <Suspense fallback={<Spinner />}>{children}</Suspense>
 }
 
 function App() {
@@ -161,213 +155,216 @@ function App() {
             <QueryClientProvider client={queryClient}>
                 <AuthProvider>
                     <MailboxProvider>
-                        <BrandingHead />
-                        <div className="min-h-screen bg-background">
-                            <Switch>
-                        <Route path="/login">
-                            <Login />
-                        </Route>
+                        <ComposeProvider>
+                            <BrandingHead />
+                            <div className="min-h-screen bg-background">
+                                <Switch>
+                                <Route path="/login">
+                                    <PageSuspense><Login /></PageSuspense>
+                                </Route>
 
-                        <Route path="/admin">
-                            <AdminCheck>
-                                <AdminLayout>
-                                    <AdminDashboard />
-                                </AdminLayout>
-                            </AdminCheck>
-                        </Route>
-                        <Route path="/admin/organizations">
-                            <AdminCheck>
-                                <AdminLayout>
-                                    <OrganizationsPage />
-                                </AdminLayout>
-                            </AdminCheck>
-                        </Route>
-                        <Route path="/admin/organizations/:id">
-                            <AdminCheck>
-                                <AdminLayout>
-                                    <OrganizationDetailPage />
-                                </AdminLayout>
-                            </AdminCheck>
-                        </Route>
-                        <Route path="/admin/admins">
-                            <AdminCheck>
-                                <AdminLayout>
-                                    <AdminsPage />
-                                </AdminLayout>
-                            </AdminCheck>
-                        </Route>
-                        <Route path="/admin/branding">
-                            <AdminCheck>
-                                <AdminLayout>
-                                    <BrandingPage />
-                                </AdminLayout>
-                            </AdminCheck>
-                        </Route>
-                        <Route path="/admin/credentials">
-                            <AdminCheck>
-                                <AdminLayout>
-                                    <CredentialsPage />
-                                </AdminLayout>
-                            </AdminCheck>
-                        </Route>
-                        <Route path="/admin/routes">
-                            <AdminCheck>
-                                <AdminLayout>
-                                    <RoutesPage />
-                                </AdminLayout>
-                            </AdminCheck>
-                        </Route>
-                        <Route path="/admin/webhooks">
-                            <AdminCheck>
-                                <AdminLayout>
-                                    <WebhooksPage />
-                                </AdminLayout>
-                            </AdminCheck>
-                        </Route>
-                        <Route path="/admin/messages">
-                            <AdminCheck>
-                                <AdminLayout>
-                                    <MessagesPage />
-                                </AdminLayout>
-                            </AdminCheck>
-                        </Route>
+                                <Route path="/admin">
+                                    <AdminCheck>
+                                        <AdminLayout>
+                                            <PageSuspense><AdminDashboard /></PageSuspense>
+                                        </AdminLayout>
+                                    </AdminCheck>
+                                </Route>
+                                <Route path="/admin/organizations">
+                                    <AdminCheck>
+                                        <AdminLayout>
+                                            <PageSuspense><OrganizationsPage /></PageSuspense>
+                                        </AdminLayout>
+                                    </AdminCheck>
+                                </Route>
+                                <Route path="/admin/organizations/:id">
+                                    <AdminCheck>
+                                        <AdminLayout>
+                                            <PageSuspense><OrganizationDetailPage /></PageSuspense>
+                                        </AdminLayout>
+                                    </AdminCheck>
+                                </Route>
+                                <Route path="/admin/admins">
+                                    <AdminCheck>
+                                        <AdminLayout>
+                                            <PageSuspense><AdminsPage /></PageSuspense>
+                                        </AdminLayout>
+                                    </AdminCheck>
+                                </Route>
+                                <Route path="/admin/branding">
+                                    <AdminCheck>
+                                        <AdminLayout>
+                                            <PageSuspense><BrandingPage /></PageSuspense>
+                                        </AdminLayout>
+                                    </AdminCheck>
+                                </Route>
+                                <Route path="/admin/credentials">
+                                    <AdminCheck>
+                                        <AdminLayout>
+                                            <PageSuspense><CredentialsPage /></PageSuspense>
+                                        </AdminLayout>
+                                    </AdminCheck>
+                                </Route>
+                                <Route path="/admin/routes">
+                                    <AdminCheck>
+                                        <AdminLayout>
+                                            <PageSuspense><RoutesPage /></PageSuspense>
+                                        </AdminLayout>
+                                    </AdminCheck>
+                                </Route>
+                                <Route path="/admin/webhooks">
+                                    <AdminCheck>
+                                        <AdminLayout>
+                                            <PageSuspense><WebhooksPage /></PageSuspense>
+                                        </AdminLayout>
+                                    </AdminCheck>
+                                </Route>
+                                <Route path="/admin/messages">
+                                    <AdminCheck>
+                                        <AdminLayout>
+                                            <PageSuspense><MessagesPage /></PageSuspense>
+                                        </AdminLayout>
+                                    </AdminCheck>
+                                </Route>
 
-                        <Route path="/outreach">
-                            <AdminCheck>
-                                <OrganizationProvider>
-                                    <OutreachDashboard />
-                                </OrganizationProvider>
-                            </AdminCheck>
-                        </Route>
-                        <Route path="/outreach/campaigns">
-                            <AdminCheck>
-                                <OrganizationProvider>
-                                    <CampaignsPage />
-                                </OrganizationProvider>
-                            </AdminCheck>
-                        </Route>
-                        <Route path="/outreach/leads">
-                            <AdminCheck>
-                                <OrganizationProvider>
-                                    <LeadsPage />
-                                </OrganizationProvider>
-                            </AdminCheck>
-                        </Route>
-                        <Route path="/outreach/inboxes">
-                            <AdminCheck>
-                                <OrganizationProvider>
-                                    <InboxesPage />
-                                </OrganizationProvider>
-                            </AdminCheck>
-                        </Route>
-                        <Route path="/outreach/inboxes/new">
-                            <AdminCheck>
-                                <OrganizationProvider>
-                                    <NewInboxPage />
-                                </OrganizationProvider>
-                            </AdminCheck>
-                        </Route>
-                        <Route path="/outreach/sequences">
-                            <AdminCheck>
-                                <OrganizationProvider>
-                                    <SequencesPage />
-                                </OrganizationProvider>
-                            </AdminCheck>
-                        </Route>
-                        <Route path="/outreach/sequences/new">
-                            <AdminCheck>
-                                <OrganizationProvider>
-                                    <NewSequencePage />
-                                </OrganizationProvider>
-                            </AdminCheck>
-                        </Route>
-                        <Route path="/outreach/analytics">
-                            <AdminCheck>
-                                <OrganizationProvider>
-                                    <OutreachAnalyticsPage />
-                                </OrganizationProvider>
-                            </AdminCheck>
-                        </Route>
-                        <Route path="/outreach/settings">
-                            <AdminCheck>
-                                <OrganizationProvider>
-                                    <OutreachSettingsPage />
-                                </OrganizationProvider>
-                            </AdminCheck>
-                        </Route>
+                                <Route path="/outreach">
+                                    <AdminCheck>
+                                        <OrganizationProvider>
+                                            <PageSuspense><OutreachDashboard /></PageSuspense>
+                                        </OrganizationProvider>
+                                    </AdminCheck>
+                                </Route>
+                                <Route path="/outreach/campaigns">
+                                    <AdminCheck>
+                                        <OrganizationProvider>
+                                            <PageSuspense><CampaignsPage /></PageSuspense>
+                                        </OrganizationProvider>
+                                    </AdminCheck>
+                                </Route>
+                                <Route path="/outreach/leads">
+                                    <AdminCheck>
+                                        <OrganizationProvider>
+                                            <PageSuspense><LeadsPage /></PageSuspense>
+                                        </OrganizationProvider>
+                                    </AdminCheck>
+                                </Route>
+                                <Route path="/outreach/inboxes">
+                                    <AdminCheck>
+                                        <OrganizationProvider>
+                                            <PageSuspense><InboxesPage /></PageSuspense>
+                                        </OrganizationProvider>
+                                    </AdminCheck>
+                                </Route>
+                                <Route path="/outreach/inboxes/new">
+                                    <AdminCheck>
+                                        <OrganizationProvider>
+                                            <PageSuspense><NewInboxPage /></PageSuspense>
+                                        </OrganizationProvider>
+                                    </AdminCheck>
+                                </Route>
+                                <Route path="/outreach/sequences">
+                                    <AdminCheck>
+                                        <OrganizationProvider>
+                                            <PageSuspense><SequencesPage /></PageSuspense>
+                                        </OrganizationProvider>
+                                    </AdminCheck>
+                                </Route>
+                                <Route path="/outreach/sequences/new">
+                                    <AdminCheck>
+                                        <OrganizationProvider>
+                                            <PageSuspense><NewSequencePage /></PageSuspense>
+                                        </OrganizationProvider>
+                                    </AdminCheck>
+                                </Route>
+                                <Route path="/outreach/analytics">
+                                    <AdminCheck>
+                                        <OrganizationProvider>
+                                            <PageSuspense><OutreachAnalyticsPage /></PageSuspense>
+                                        </OrganizationProvider>
+                                    </AdminCheck>
+                                </Route>
+                                <Route path="/outreach/settings">
+                                    <AdminCheck>
+                                        <OrganizationProvider>
+                                            <PageSuspense><OutreachSettingsPage /></PageSuspense>
+                                        </OrganizationProvider>
+                                    </AdminCheck>
+                                </Route>
 
-                        <Route path="/mail/inbox">
-                            <MailCheck>
-                                <InboxPage />
-                            </MailCheck>
-                        </Route>
-                        <Route path="/mail/sent">
-                            <MailCheck>
-                                <SentPage />
-                            </MailCheck>
-                        </Route>
-                        <Route path="/mail/drafts">
-                            <MailCheck>
-                                <DraftsPage />
-                            </MailCheck>
-                        </Route>
-                        <Route path="/mail/trash">
-                            <MailCheck>
-                                <TrashPage />
-                            </MailCheck>
-                        </Route>
-                        <Route path="/mail/starred">
-                            <MailCheck>
-                                <StarredPage />
-                            </MailCheck>
-                        </Route>
-                        <Route path="/mail/spam">
-                            <MailCheck>
-                                <SpamPage />
-                            </MailCheck>
-                        </Route>
-                        <Route path="/mail/archive">
-                            <MailCheck>
-                                <ArchivePage />
-                            </MailCheck>
-                        </Route>
-                        <Route path="/mail/contacts">
-                            <MailCheck>
-                                <ContactsPage />
-                            </MailCheck>
-                        </Route>
-                        <Route path="/mail/:folder/:id">
-                            <MailCheck>
-                                <EmailDetailPage />
-                            </MailCheck>
-                        </Route>
-                        <Route path="/mail/compose">
-                            <MailCheck>
-                                <ComposePage />
-                            </MailCheck>
-                        </Route>
-                        <Route path="/mail/settings">
-                            <MailCheck>
-                                <MailSettingsPage />
-                            </MailCheck>
-                        </Route>
-                        <Route path="/mail/search">
-                            <MailCheck>
-                                <SearchPage />
-                            </MailCheck>
-                        </Route>
-                        <Route path="/mail">
-                            <MailCheck>
-                                <InboxPage />
-                            </MailCheck>
-                        </Route>
+                                <Route path="/mail/inbox">
+                                    <MailCheck>
+                                        <PageSuspense><InboxPage /></PageSuspense>
+                                    </MailCheck>
+                                </Route>
+                                <Route path="/mail/sent">
+                                    <MailCheck>
+                                        <PageSuspense><SentPage /></PageSuspense>
+                                    </MailCheck>
+                                </Route>
+                                <Route path="/mail/drafts">
+                                    <MailCheck>
+                                        <PageSuspense><DraftsPage /></PageSuspense>
+                                    </MailCheck>
+                                </Route>
+                                <Route path="/mail/trash">
+                                    <MailCheck>
+                                        <PageSuspense><TrashPage /></PageSuspense>
+                                    </MailCheck>
+                                </Route>
+                                <Route path="/mail/starred">
+                                    <MailCheck>
+                                        <PageSuspense><StarredPage /></PageSuspense>
+                                    </MailCheck>
+                                </Route>
+                                <Route path="/mail/spam">
+                                    <MailCheck>
+                                        <PageSuspense><SpamPage /></PageSuspense>
+                                    </MailCheck>
+                                </Route>
+                                <Route path="/mail/archive">
+                                    <MailCheck>
+                                        <PageSuspense><ArchivePage /></PageSuspense>
+                                    </MailCheck>
+                                </Route>
+                                <Route path="/mail/contacts">
+                                    <MailCheck>
+                                        <PageSuspense><ContactsPage /></PageSuspense>
+                                    </MailCheck>
+                                </Route>
+                                <Route path="/mail/:folder/:id">
+                                    <MailCheck>
+                                        <PageSuspense><EmailDetailPage /></PageSuspense>
+                                    </MailCheck>
+                                </Route>
+                                <Route path="/mail/compose">
+                                    <MailCheck>
+                                        <PageSuspense><ComposePage /></PageSuspense>
+                                    </MailCheck>
+                                </Route>
+                                <Route path="/mail/settings">
+                                    <MailCheck>
+                                        <PageSuspense><MailSettingsPage /></PageSuspense>
+                                    </MailCheck>
+                                </Route>
+                                <Route path="/mail/search">
+                                    <MailCheck>
+                                        <PageSuspense><SearchPage /></PageSuspense>
+                                    </MailCheck>
+                                </Route>
+                                <Route path="/mail">
+                                    <MailCheck>
+                                        <PageSuspense><InboxPage /></PageSuspense>
+                                    </MailCheck>
+                                </Route>
 
-                        <Route path="/">
-                            <RootRedirect />
-                        </Route>
+                                <Route path="/">
+                                    <RootRedirect />
+                                </Route>
                             </Switch>
                             <Toaster />
+                            <ComposeDialog />
                         </div>
+                        </ComposeProvider>
                     </MailboxProvider>
                 </AuthProvider>
             </QueryClientProvider>

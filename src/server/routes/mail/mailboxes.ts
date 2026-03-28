@@ -36,6 +36,14 @@ router.get('/', async (req: Request, res: Response) => {
             orderBy: [desc(mailboxes.createdAt)],
         })
 
+        // Clear stale syncError from native mailboxes (they don't use IMAP)
+        const nativeWithError = userMailboxes.filter(mb => mb.isNative && mb.syncError)
+        if (nativeWithError.length > 0) {
+            await Promise.all(nativeWithError.map(mb =>
+                db.update(mailboxes).set({ syncError: null }).where(eq(mailboxes.id, mb.id))
+            ))
+        }
+
         const safeMailboxes = userMailboxes.map(mb => ({
             id: mb.id,
             email: mb.email,
@@ -44,7 +52,7 @@ router.get('/', async (req: Request, res: Response) => {
             isActive: mb.isActive,
             isNative: mb.isNative,
             lastSyncAt: mb.lastSyncAt,
-            syncError: mb.syncError,
+            syncError: mb.isNative ? null : mb.syncError,
         }))
 
         res.json({ mailboxes: safeMailboxes })

@@ -431,7 +431,13 @@ export default function MailSettingsPage() {
                                                             </div>
                                                             <div className="flex items-center gap-2">
                                                                 {mb.syncError ? (
-                                                                    <AlertCircle className="w-5 h-5 text-destructive" />
+                                                                    <div className="relative group/err">
+                                                                        <AlertCircle className="w-5 h-5 text-destructive cursor-help" />
+                                                                        <div className="absolute right-0 bottom-full mb-2 w-72 bg-popover text-popover-foreground text-xs rounded-lg border border-border shadow-xl p-3 hidden group-hover/err:block z-50">
+                                                                            <p className="font-semibold text-destructive mb-1">Sync error</p>
+                                                                            <p className="text-muted-foreground break-words">{mb.syncError}</p>
+                                                                        </div>
+                                                                    </div>
                                                                 ) : (
                                                                     <CheckCircle className="w-5 h-5 text-green-500" />
                                                                 )}

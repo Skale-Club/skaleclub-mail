@@ -16,6 +16,7 @@ export default function StarredPage() {
 
     const [selectedEmail, setSelectedEmail] = React.useState<string | null>(null)
     const [selectedEmails, setSelectedEmails] = React.useState<Set<string>>(new Set())
+    const [filter, setFilter] = React.useState<'all' | 'unread' | 'starred' | 'attachments'>('all')
 
     const { data, isLoading, isFetching, refetch } = useMessages('inbox', 1, 200)
     const updateMessage = useUpdateMessage()
@@ -24,12 +25,14 @@ export default function StarredPage() {
     const batchUpdate = useBatchUpdate()
     const syncMailbox = useSyncMailbox()
 
-    const emails = React.useMemo(() => {
-        if (!data?.messages) return []
-        return data.messages
-            .map(mapMessageToEmailItem)
-            .filter(e => e.starred)
-    }, [data])
+    const { emails, unreadCount } = React.useMemo(() => {
+        const base = data?.messages ? data.messages.map(mapMessageToEmailItem).filter(e => e.starred) : []
+        const unread = base.filter(e => !e.read).length
+        let filtered = base
+        if (filter === 'unread') filtered = base.filter(e => !e.read)
+        if (filter === 'attachments') filtered = base.filter(e => e.hasAttachments)
+        return { emails: filtered, unreadCount: unread }
+    }, [data, filter])
 
     const handleRefresh = async () => {
         if (selectedMailbox) {
@@ -133,16 +136,17 @@ export default function StarredPage() {
         <MailLayout>
             <div className="flex h-full">
                 <div className={`w-full ${!isMobile ? 'lg:w-1/2 xl:w-2/5 border-r border-border' : ''} flex flex-col bg-background`}>
-                    <div className="px-5 py-4 border-b border-border">
+                    <div className="px-4 py-2 border-b border-border bg-background">
                         <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <Star className="w-6 h-6 text-yellow-500 fill-current" />
-                                <div>
-                                    <h1 className="text-xl font-bold text-foreground">Starred</h1>
-                                    <p className="text-sm text-muted-foreground">
-                                        {emails.length} starred {emails.length === 1 ? 'email' : 'emails'}
-                                    </p>
-                                </div>
+                            <div className="flex items-center gap-2">
+                                <Star className="w-5 h-5 text-yellow-500 fill-current" />
+                                <h1 className="text-lg font-bold text-foreground">Starred</h1>
+                            </div>
+                            <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                                <button onClick={() => setFilter('all')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === 'all' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>All</button>
+                                <button onClick={() => setFilter('unread')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === 'unread' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Unread {unreadCount > 0 && `(${unreadCount})`}</button>
+                                <button onClick={() => setFilter('starred')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === 'starred' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Starred</button>
+                                <button onClick={() => setFilter('attachments')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === 'attachments' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Attachments</button>
                             </div>
                         </div>
                     </div>
@@ -205,29 +209,24 @@ export default function StarredPage() {
 function EmailDetail({ email }: { email: EmailItem }) {
     return (
         <div className="flex-1 overflow-y-auto">
-            <div className="p-6">
+            <div className="p-4">
                 <div className="max-w-3xl mx-auto">
-                    <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-4">{email.subject}</h2>
-                    <div className="flex items-start gap-4">
-                        <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium text-base flex-shrink-0">
-                            {email.from.name?.[0]?.toUpperCase() || email.from.email[0].toUpperCase()}
+                    <div className="flex items-center gap-3 py-2 border-b border-border mb-3">
+                        <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium text-xs flex-shrink-0">
+                            {email.from.name?.[0]?.toUpperCase() || email.from.email?.[0]?.toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="font-semibold text-foreground text-sm sm:text-base">{email.from.name}</p>
-                                    <p className="text-xs sm:text-sm text-muted-foreground">{email.from.email}</p>
-                                </div>
-                                <p className="text-xs sm:text-sm text-muted-foreground">{email.date.toLocaleString()}</p>
+                            <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-semibold text-foreground truncate">{email.from.name}</p>
+                                <p className="text-xs text-muted-foreground flex-shrink-0">{email.date.toLocaleString()}</p>
                             </div>
-                            <div className="mt-1.5">
-                                <p className="text-xs text-muted-foreground">To: {email.to.map(t => t.name || t.email).join(', ')}</p>
-                            </div>
+                            <p className="text-xs text-muted-foreground truncate">To: {email.to.map(t => t.name || t.email).join(', ')}</p>
                         </div>
                     </div>
+                    <h2 className="text-sm font-bold text-foreground mb-3">{email.subject}</h2>
 
                     {email.labels && email.labels.length > 0 && (
-                        <div className="flex items-center gap-2 mt-4 mb-6">
+                        <div className="flex items-center gap-2 mb-4">
                             {email.labels.map(label => (
                                 <span key={label} className="px-2.5 py-0.5 text-xs rounded-full bg-secondary text-secondary-foreground font-medium">
                                     {label}
@@ -236,7 +235,7 @@ function EmailDetail({ email }: { email: EmailItem }) {
                         </div>
                     )}
 
-                    <div className="prose dark:prose-invert max-w-none mt-8 text-sm sm:text-base">
+                    <div className="prose dark:prose-invert max-w-none text-sm">
                         <div className="text-foreground whitespace-pre-wrap">{email.snippet}</div>
                     </div>
 

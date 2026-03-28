@@ -72,10 +72,21 @@ async function parseResponsePayload(response: Response): Promise<unknown> {
     return response.text()
 }
 
+let cachedToken: string | null = null
+let tokenExpiresAt = 0
+
 async function getValidSession() {
+    const now = Date.now()
+
+    if (cachedToken && tokenExpiresAt > now + 60_000) {
+        return { access_token: cachedToken, expires_at: tokenExpiresAt }
+    }
+
     const { data, error } = await supabase.auth.getSession()
 
     if (error) {
+        cachedToken = null
+        tokenExpiresAt = 0
         throw new ApiClientError(error.message, {
             status: 401,
             path: 'session',
@@ -89,6 +100,8 @@ async function getValidSession() {
     if (expiresSoon) {
         const refreshed = await supabase.auth.refreshSession()
         if (refreshed.error) {
+            cachedToken = null
+            tokenExpiresAt = 0
             throw new ApiClientError(refreshed.error.message, {
                 status: 401,
                 path: 'session',
@@ -98,12 +111,22 @@ async function getValidSession() {
         session = refreshed.data.session
     }
 
+    if (session) {
+        cachedToken = session.access_token
+        tokenExpiresAt = session.expires_at ? session.expires_at * 1000 : 0
+    }
+
     return session
 }
 
 export async function getAccessToken() {
     const session = await getValidSession()
     return session?.access_token
+}
+
+export function clearTokenCache() {
+    cachedToken = null
+    tokenExpiresAt = 0
 }
 
 async function executeRequest(path: string, init: RequestInit, token?: string | null) {
@@ -133,6 +156,7 @@ export async function apiRequest(path: string, options: ApiRequestOptions = {}):
         let response = await executeRequest(path, init, token)
 
         if (response.status === 401 && auth) {
+            clearTokenCache()
             const refreshed = await supabase.auth.refreshSession()
             if (refreshed.error || !refreshed.data.session?.access_token) {
                 throw new ApiClientError(refreshed.error?.message || 'Unauthorized', {

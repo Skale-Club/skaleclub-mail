@@ -9,6 +9,8 @@ import { EmailThread, ThreadMessage } from '../../lib/email-threading'
 import {
     ArrowLeft,
     Star,
+    Mail,
+    MailOpen,
     Trash2,
     Archive,
     Reply,
@@ -153,6 +155,7 @@ export default function EmailDetailPage() {
 
     const [menuOpen, setMenuOpen] = React.useState(false)
     const [viewMode, setViewMode] = React.useState<'single' | 'thread'>('thread')
+    const readTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const { data: apiMessage, isLoading: messageLoading, error } = useMessage(params.id)
     const updateMessage = useUpdateMessage()
@@ -223,6 +226,51 @@ export default function EmailDetailPage() {
     }, [apiMessage, params.id])
 
     const email = thread?.messages[thread.messages.length - 1] || null
+
+    // Auto-mark as read after 2 seconds of viewing
+    React.useEffect(() => {
+        readTimerRef.current = null
+
+        if (!email || !selectedMailbox || email.read) return
+
+        readTimerRef.current = setTimeout(() => {
+            updateMessage.mutate({ messageId: email.id, data: { read: true } })
+        }, 2000)
+
+        return () => {
+            if (readTimerRef.current) {
+                clearTimeout(readTimerRef.current)
+                readTimerRef.current = null
+            }
+        }
+    }, [email?.id, email?.read, selectedMailbox, updateMessage])
+
+    const handleToggleRead = (messageId?: string) => {
+        const id = messageId || email?.id
+        if (!id || !email || !selectedMailbox) return
+
+        // If marking as unread, cancel any pending read timer
+        if (!email.read && readTimerRef.current) {
+            clearTimeout(readTimerRef.current)
+            readTimerRef.current = null
+        }
+
+        updateMessage.mutate({ messageId: id, data: { read: !email.read } })
+        toast({
+            title: email.read ? 'Marked as unread' : 'Marked as read',
+            variant: 'success'
+        })
+    }
+
+    const handleToggleReadForThread = (messageId: string, read: boolean) => {
+        if (!selectedMailbox) return
+
+        updateMessage.mutate({ messageId, data: { read } })
+        toast({
+            title: read ? 'Marked as read' : 'Marked as unread',
+            variant: 'success'
+        })
+    }
 
     const handleStar = () => {
         if (email && selectedMailbox) {
@@ -390,6 +438,17 @@ export default function EmailDetailPage() {
                             </div>
                         )}
                         <button
+                            onClick={() => handleToggleRead()}
+                            className={`p-2 rounded-lg transition-colors ${
+                                email?.read
+                                    ? 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                                    : 'text-primary hover:bg-primary/10'
+                            }`}
+                            title={email?.read ? 'Mark as unread' : 'Mark as read'}
+                        >
+                            {email?.read ? <Mail className="w-5 h-5" /> : <MailOpen className="w-5 h-5" />}
+                        </button>
+                        <button
                             onClick={handleArchive}
                             className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors"
                             title="Archive"
@@ -475,6 +534,7 @@ export default function EmailDetailPage() {
                         onStar={() => {
                             toast({ title: 'Star toggled', variant: 'success' })
                         }}
+                        onToggleRead={handleToggleReadForThread}
                     />
                 ) : (
                     <SingleEmailView
@@ -504,7 +564,7 @@ function SingleEmailView({
         <div className="flex-1 overflow-y-auto">
             <div className="p-4 sm:p-6">
                 <div className="max-w-3xl mx-auto">
-                    <h1 className="text-xl sm:text-2xl font-bold text-foreground mb-4">
+                    <h1 className="text-base font-bold text-foreground mb-3">
                         {message.subject}
                     </h1>
 

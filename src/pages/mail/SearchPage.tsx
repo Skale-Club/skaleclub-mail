@@ -417,16 +417,16 @@ export default function SearchPage() {
                 </div>
 
                 {!isMobile && (
-                    <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col bg-gray-50 dark:bg-slate-900/50">
+                    <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col bg-muted/30">
                         {selectedEmail ? (
                             <EmailDetail email={emails.find(e => e.id === selectedEmail)!} />
                         ) : (
-                            <div className="flex-1 flex items-center justify-center text-gray-500 dark:text-gray-400">
+                            <div className="flex-1 flex items-center justify-center text-muted-foreground">
                                 <div className="text-center">
-                                    <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-slate-800 flex items-center justify-center">
-                                        <SearchIcon className="w-10 h-10 text-gray-400" />
+                                    <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+                                        <SearchIcon className="w-10 h-10 text-muted-foreground" />
                                     </div>
-                                    <p className="text-lg font-medium">Select a result to preview</p>
+                                    <p className="text-lg font-medium text-foreground">Select a result to preview</p>
                                     <p className="text-sm mt-1">Click on an email from the search results</p>
                                 </div>
                             </div>
@@ -440,53 +440,41 @@ export default function SearchPage() {
 
 function EmailDetail({ email }: { email: EmailItem }) {
     return (
-        <div className="flex-1 overflow-y-auto p-6">
-            <div className="max-w-3xl mx-auto">
-                <div className="mb-6">
-                    <h2 className="text-2xl font-bold text-foreground mb-4">
-                        {email.subject}
-                    </h2>
-                    <div className="flex items-start gap-4">
-                        <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-semibold text-lg flex-shrink-0">
-                            {email.from.name?.[0]?.toUpperCase() || email.from.email[0].toUpperCase()}
+        <div className="flex-1 overflow-y-auto">
+            <div className="p-4">
+                <div className="max-w-3xl mx-auto">
+                    <div className="flex items-center gap-3 py-2 border-b border-border mb-3">
+                        <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium text-xs flex-shrink-0">
+                            {email.from.name?.[0]?.toUpperCase() || email.from.email?.[0]?.toUpperCase()}
                         </div>
-                        <div className="flex-1">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="font-semibold text-foreground">
-                                        {email.from.name}
-                                    </p>
-                                    <p className="text-sm text-muted-foreground">
-                                        {email.from.email}
-                                    </p>
-                                </div>
-                                <p className="text-sm text-muted-foreground">
-                                    {email.date.toLocaleString()}
-                                </p>
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-semibold text-foreground truncate">{email.from.name}</p>
+                                <p className="text-xs text-muted-foreground flex-shrink-0">{email.date.toLocaleString()}</p>
                             </div>
+                            <p className="text-xs text-muted-foreground truncate">To: {email.to.map(t => t.name || t.email).join(', ')}</p>
                         </div>
                     </div>
-                </div>
+                    <h2 className="text-sm font-bold text-foreground mb-3">{email.subject}</h2>
 
-                <div className="prose dark:prose-invert max-w-none">
-                    <div className="text-foreground whitespace-pre-wrap">
-                        {email.snippet}
+                    <div className="prose dark:prose-invert max-w-none text-sm">
+                        <div className="text-foreground whitespace-pre-wrap">{email.snippet}</div>
                     </div>
-                </div>
 
-                <div className="mt-8 pt-6 border-t border-border flex items-center gap-3">
-                    <Link
-                        href={`/mail/compose?reply=${email.id}`}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors"
-                    >
-                        Reply
-                    </Link>
-                    <Link
-                        href={`/mail/compose?forward=${email.id}`}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-lg font-medium transition-colors"
-                    >
-                        Forward
-                    </Link>
+                    <div className="mt-8 pt-6 border-t border-border flex items-center gap-3">
+                        <Link
+                            href={`/mail/compose?reply=${email.id}`}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors"
+                        >
+                            Reply
+                        </Link>
+                        <Link
+                            href={`/mail/compose?forward=${email.id}`}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-lg font-medium transition-colors"
+                        >
+                            Forward
+                        </Link>
+                    </div>
                 </div>
             </div>
         </div>

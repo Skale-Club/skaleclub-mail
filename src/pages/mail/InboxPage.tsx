@@ -17,7 +17,7 @@ import {
     useSyncMailbox,
     mapMessageToEmailItem
 } from '../../hooks/useMail'
-import { Inbox as InboxIcon, AlertCircle } from 'lucide-react'
+import { Inbox as InboxIcon, Mail, MailOpen, AlertCircle } from 'lucide-react'
 
 export default function InboxPage() {
     const isMobile = useIsMobile()
@@ -27,6 +27,7 @@ export default function InboxPage() {
     const [selectedEmail, setSelectedEmail] = React.useState<string | null>(null)
     const [selectedEmails, setSelectedEmails] = React.useState<Set<string>>(new Set())
     const [filter, setFilter] = React.useState<'all' | 'unread' | 'starred' | 'attachments'>('all')
+    const readTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const { data, isLoading, isFetching, refetch } = useMessages('inbox', 1, 50)
     const updateMessage = useUpdateMessage()
@@ -54,6 +55,16 @@ export default function InboxPage() {
         return emails.findIndex(email => email.id === selectedEmail)
     }, [emails, selectedEmail])
 
+    // Cleanup timer on unmount
+    React.useEffect(() => {
+        return () => {
+            if (readTimerRef.current) {
+                clearTimeout(readTimerRef.current)
+                readTimerRef.current = null
+            }
+        }
+    }, [])
+
     const handleRefresh = async () => {
         if (selectedMailbox) {
             syncMailbox.mutate()
@@ -64,6 +75,12 @@ export default function InboxPage() {
     }
 
     const handleSelectEmail = (id: string) => {
+        // Cancel any pending read timer for previous selection
+        if (readTimerRef.current) {
+            clearTimeout(readTimerRef.current)
+            readTimerRef.current = null
+        }
+
         if (isMobile) {
             navigate(`/mail/inbox/${id}`)
             return
@@ -73,9 +90,30 @@ export default function InboxPage() {
         if (selectedMailbox) {
             const email = emails.find(email => email.id === id)
             if (email && !email.read) {
-                updateMessage.mutate({ messageId: id, data: { read: true } })
+                // Delay mark-as-read by 2 seconds (market standard pattern)
+                readTimerRef.current = setTimeout(() => {
+                    updateMessage.mutate({ messageId: id, data: { read: true } })
+                    readTimerRef.current = null
+                }, 2000)
             }
         }
+    }
+
+    const handleToggleRead = (id: string) => {
+        const email = emails.find(e => e.id === id)
+        if (!email || !selectedMailbox) return
+
+        // If marking as unread, cancel any pending read timer
+        if (email.read && readTimerRef.current) {
+            clearTimeout(readTimerRef.current)
+            readTimerRef.current = null
+        }
+
+        updateMessage.mutate({ messageId: id, data: { read: !email.read } })
+        toast({
+            title: email.read ? 'Marked as unread' : 'Marked as read',
+            variant: 'success'
+        })
     }
 
     const handleNavigate = (direction: 'up' | 'down') => {
@@ -283,24 +321,18 @@ export default function InboxPage() {
         <MailLayout>
             <div className="flex h-full">
                 <div className={`w-full ${!isMobile ? 'lg:w-1/2 xl:w-2/5 border-r border-border' : ''} flex flex-col bg-background`}>
-                    <div className="px-4 py-3 border-b border-border bg-background">
-                        <div className="flex items-center justify-between mb-3">
+                    <div className="px-4 py-2 border-b border-border bg-background">
+                        <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <InboxIcon className="w-5 h-5 text-muted-foreground" />
-                                <div>
-                                    <h1 className="text-lg font-bold text-foreground">Inbox</h1>
-                                </div>
+                                <h1 className="text-lg font-bold text-foreground">Inbox</h1>
                             </div>
-                            <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
-                                <kbd className="px-1.5 py-0.5 bg-muted rounded border border-border">?</kbd>
-                                <span>shortcuts</span>
+                            <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                                <button onClick={() => setFilter('all')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === 'all' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>All</button>
+                                <button onClick={() => setFilter('unread')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === 'unread' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Unread {unreadCount > 0 && `(${unreadCount})`}</button>
+                                <button onClick={() => setFilter('starred')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === 'starred' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Starred</button>
+                                <button onClick={() => setFilter('attachments')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === 'attachments' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Attachments</button>
                             </div>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                            <button onClick={() => setFilter('all')} className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${filter === 'all' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'}`}>All</button>
-                            <button onClick={() => setFilter('unread')} className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${filter === 'unread' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'}`}>Unread {unreadCount > 0 && `(${unreadCount})`}</button>
-                            <button onClick={() => setFilter('starred')} className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${filter === 'starred' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'}`}>Starred</button>
-                            <button onClick={() => setFilter('attachments')} className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${filter === 'attachments' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'}`}>Attachments</button>
                         </div>
                     </div>
 
@@ -342,7 +374,10 @@ export default function InboxPage() {
                 {!isMobile && (
                     <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col bg-muted/30">
                         {selectedEmail ? (
-                            <EmailDetail email={emails.find(email => email.id === selectedEmail)!} />
+                            <EmailDetail
+                                email={emails.find(email => email.id === selectedEmail)!}
+                                onToggleRead={handleToggleRead}
+                            />
                         ) : (
                             <div className="flex-1 flex items-center justify-center text-muted-foreground">
                                 <div className="text-center">
@@ -361,39 +396,26 @@ export default function InboxPage() {
     )
 }
 
-function EmailDetail({ email }: { email: EmailItem }) {
+function EmailDetail({ email, onToggleRead }: { email: EmailItem; onToggleRead?: (id: string) => void }) {
     return (
         <div className="flex-1 overflow-y-auto">
-            <div className="p-6">
+            <div className="p-4">
                 <div className="max-w-3xl mx-auto">
-                    <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-6">
-                        {email.subject}
-                    </h2>
-                    <div className="flex items-start gap-4">
-                        <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium text-base flex-shrink-0">
-                            {email.from.name[0].toUpperCase()}
+                    <div className="flex items-center gap-3 py-2 border-b border-border mb-3">
+                        <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium text-xs flex-shrink-0">
+                            {email.from.name?.[0]?.toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="font-semibold text-foreground text-sm sm:text-base">
-                                        {email.from.name}
-                                    </p>
-                                    <p className="text-xs sm:text-sm text-muted-foreground">
-                                        {email.from.email}
-                                    </p>
-                                </div>
-                                <p className="text-xs sm:text-sm text-muted-foreground">
-                                    {email.date.toLocaleString()}
-                                </p>
+                            <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-semibold text-foreground truncate">{email.from.name}</p>
+                                <p className="text-xs text-muted-foreground flex-shrink-0">{email.date.toLocaleString()}</p>
                             </div>
-                            <div className="mt-1.5">
-                                <p className="text-xs text-muted-foreground">
-                                    To: {email.to.map(t => t.name || t.email).join(', ')}
-                                </p>
-                            </div>
+                            <p className="text-xs text-muted-foreground truncate">To: {email.to.map(t => t.name || t.email).join(', ')}</p>
                         </div>
                     </div>
+                    <h2 className="text-sm font-bold text-foreground mb-3">
+                        {email.subject}
+                    </h2>
 
                     {email.labels && email.labels.length > 0 && (
                         <div className="flex items-center gap-2 mt-4 mb-6">
@@ -434,6 +456,29 @@ function EmailDetail({ email }: { email: EmailItem }) {
                             >
                                 Forward
                             </Link>
+                            {onToggleRead && (
+                                <button
+                                    onClick={() => onToggleRead(email.id)}
+                                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                        email.read
+                                            ? 'bg-secondary hover:bg-secondary/80 text-secondary-foreground'
+                                            : 'bg-primary/10 hover:bg-primary/20 text-primary'
+                                    }`}
+                                    title={email.read ? 'Mark as unread' : 'Mark as read'}
+                                >
+                                    {email.read ? (
+                                        <>
+                                            <Mail className="w-4 h-4" />
+                                            Mark as unread
+                                        </>
+                                    ) : (
+                                        <>
+                                            <MailOpen className="w-4 h-4" />
+                                            Mark as read
+                                        </>
+                                    )}
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>

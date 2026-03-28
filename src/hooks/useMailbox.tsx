@@ -26,7 +26,7 @@ interface MailboxContextType {
 const MailboxContext = React.createContext<MailboxContextType | undefined>(undefined)
 
 export function MailboxProvider({ children }: { children: React.ReactNode }) {
-    const { user, isLoading: authLoading } = useAuth()
+    const { user, isAdmin, isLoading: authLoading } = useAuth()
     const [mailboxes, setMailboxes] = React.useState<Mailbox[]>([])
     const [selectedMailbox, setSelectedMailbox] = React.useState<Mailbox | null>(null)
     const [isLoading, setIsLoading] = React.useState(true)
@@ -36,30 +36,36 @@ export function MailboxProvider({ children }: { children: React.ReactNode }) {
         try {
             const data = await apiFetch<{ mailboxes: Mailbox[] }>('/api/mail/mailboxes')
             const fetchedMailboxes = data.mailboxes || []
-            setMailboxes(fetchedMailboxes)
 
             const savedId = localStorage.getItem('selectedMailboxId')
             const saved = savedId ? fetchedMailboxes.find((m: Mailbox) => m.id === savedId) : null
             const defaultMailbox = fetchedMailboxes.find((m: Mailbox) => m.isDefault)
+            const selected = saved || defaultMailbox || fetchedMailboxes[0] || null
 
-            setSelectedMailbox(saved || defaultMailbox || fetchedMailboxes[0] || null)
+            // Batch state updates together to avoid multiple re-renders
+            React.startTransition(() => {
+                setMailboxes(fetchedMailboxes)
+                setSelectedMailbox(selected)
+                setIsLoading(false)
+            })
         } catch (error) {
             console.error('Error fetching mailboxes:', error)
-        } finally {
             setIsLoading(false)
         }
     }, [])
 
     React.useEffect(() => {
         if (authLoading) return
-        if (!user) {
-            setMailboxes([])
-            setSelectedMailbox(null)
-            setIsLoading(false)
+        if (!user || isAdmin) {
+            React.startTransition(() => {
+                setMailboxes([])
+                setSelectedMailbox(null)
+                setIsLoading(false)
+            })
             return
         }
         refreshMailboxes()
-    }, [user, authLoading, refreshMailboxes])
+    }, [user, isAdmin, authLoading, refreshMailboxes])
 
     const handleSetSelectedMailbox = React.useCallback((mailbox: Mailbox | null) => {
         setSelectedMailbox(mailbox)
@@ -70,14 +76,16 @@ export function MailboxProvider({ children }: { children: React.ReactNode }) {
         }
     }, [])
 
+    const contextValue = React.useMemo(() => ({
+        mailboxes,
+        selectedMailbox,
+        setSelectedMailbox: handleSetSelectedMailbox,
+        isLoading,
+        refreshMailboxes
+    }), [mailboxes, selectedMailbox, handleSetSelectedMailbox, isLoading, refreshMailboxes])
+
     return (
-        <MailboxContext.Provider value={{
-            mailboxes,
-            selectedMailbox,
-            setSelectedMailbox: handleSetSelectedMailbox,
-            isLoading,
-            refreshMailboxes
-        }}>
+        <MailboxContext.Provider value={contextValue}>
             {children}
         </MailboxContext.Provider>
     )

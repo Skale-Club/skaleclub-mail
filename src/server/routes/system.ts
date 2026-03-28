@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm'
 import { systemBranding, users, organizations } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { readBranding as readBrandingFromDB, clearBrandingCache } from '../lib/serverBranding'
+import { getCachedBranding, clearBrandingCache } from '../lib/serverBranding'
 import { supabaseAdminClient } from '../lib/supabase'
 
 const router = Router()
@@ -32,7 +32,7 @@ function getRequestingUser(req: Request) {
 }
 
 async function readBranding() {
-    const b = await readBrandingFromDB()
+    const b = await getCachedBranding()
     return {
         id: brandingId,
         companyName: b.companyName,

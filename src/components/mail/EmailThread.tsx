@@ -6,6 +6,8 @@ import {
     ChevronDown,
     ChevronRight,
     Star,
+    Mail,
+    MailOpen,
     Reply,
     ReplyAll,
     Forward,
@@ -19,9 +21,10 @@ interface EmailThreadProps {
     onReplyAll?: (messageId: string) => void
     onForward?: (messageId: string) => void
     onStar?: (messageId: string) => void
+    onToggleRead?: (messageId: string, read: boolean) => void
 }
 
-export function EmailThreadView({ thread, onReply, onReplyAll, onForward, onStar }: EmailThreadProps) {
+export function EmailThreadView({ thread, onReply, onReplyAll, onForward, onStar, onToggleRead }: EmailThreadProps) {
     const [expandedMessages, setExpandedMessages] = React.useState<Set<string>>(() => {
         const expanded = new Set<string>()
         const lastMessage = thread.messages[thread.messages.length - 1]
@@ -114,6 +117,7 @@ export function EmailThreadView({ thread, onReply, onReplyAll, onForward, onStar
                                 onReplyAll={onReplyAll}
                                 onForward={onForward}
                                 onStar={onStar}
+                                onToggleRead={onToggleRead}
                             />
                         ))}
                     </div>
@@ -141,6 +145,7 @@ interface ThreadMessageCardProps {
     onReplyAll?: (messageId: string) => void
     onForward?: (messageId: string) => void
     onStar?: (messageId: string) => void
+    onToggleRead?: (messageId: string, read: boolean) => void
 }
 
 function ThreadMessageCard({
@@ -150,7 +155,8 @@ function ThreadMessageCard({
     onReply,
     onReplyAll,
     onForward,
-    onStar
+    onStar,
+    onToggleRead
 }: ThreadMessageCardProps) {
     const avatarColor = getAvatarColor(message.from.email)
     const initials = getInitials(message.from.name || message.from.email)
@@ -276,6 +282,19 @@ function ThreadMessageCard({
                         >
                             <Star className={`w-4 h-4 ${message.starred ? 'fill-current' : ''}`} />
                         </button>
+                        {onToggleRead && (
+                            <button
+                                onClick={() => onToggleRead(message.id, !message.read)}
+                                className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                                    message.read
+                                        ? 'text-muted-foreground hover:bg-muted'
+                                        : 'text-primary hover:bg-primary/10'
+                                }`}
+                                title={message.read ? 'Mark as unread' : 'Mark as read'}
+                            >
+                                {message.read ? <Mail className="w-4 h-4" /> : <MailOpen className="w-4 h-4" />}
+                            </button>
+                        )}
                     </div>
                 </div>
             )}

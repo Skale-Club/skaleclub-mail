@@ -3,6 +3,8 @@ import { Link } from 'wouter'
 import { EmailItem } from './EmailList'
 import {
     Star,
+    Mail,
+    MailOpen,
     Reply,
     ReplyAll,
     Forward,
@@ -17,9 +19,10 @@ interface EmailDetailViewProps {
     onStar?: (id: string) => void
     onDelete?: (id: string) => void
     onArchive?: (id: string) => void
+    onToggleRead?: (id: string) => void
 }
 
-export function EmailDetailView({ email, onStar, onDelete, onArchive }: EmailDetailViewProps) {
+export function EmailDetailView({ email, onStar, onDelete, onArchive, onToggleRead }: EmailDetailViewProps) {
     const avatarColor = getAvatarColor(email.from.email)
     const initials = getInitials(email.from.name || email.from.email)
 
@@ -41,37 +44,41 @@ export function EmailDetailView({ email, onStar, onDelete, onArchive }: EmailDet
         onArchive?.(email.id)
     }
 
+    const handleToggleRead = (e: React.MouseEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        onToggleRead?.(email.id)
+    }
+
     return (
         <div className="flex-1 overflow-y-auto">
-            <div className="p-6">
+            <div className="p-4">
                 <div className="max-w-3xl mx-auto">
-                    <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-6">
+                    <h2 className="text-base font-bold text-foreground mb-3">
                         {email.subject}
                     </h2>
 
-                    <div className="flex items-start gap-4">
-                        <div className={`w-10 h-10 rounded-full ${avatarColor} flex items-center justify-center text-white font-medium text-base flex-shrink-0`}>
+                    <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-full ${avatarColor} flex items-center justify-center text-white font-medium text-xs flex-shrink-0`}>
                             {initials}
                         </div>
                         <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="font-semibold text-foreground text-sm sm:text-base">
+                            <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <p className="font-semibold text-foreground text-sm truncate">
                                         {email.from.name}
                                     </p>
-                                    <p className="text-xs sm:text-sm text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground truncate hidden sm:block">
                                         {email.from.email}
                                     </p>
                                 </div>
-                                <p className="text-xs sm:text-sm text-muted-foreground">
+                                <p className="text-xs text-muted-foreground flex-shrink-0">
                                     {email.date.toLocaleString()}
                                 </p>
                             </div>
-                            <div className="mt-1.5">
-                                <p className="text-xs text-muted-foreground">
-                                    To: {email.to.map(t => t.name || t.email).join(', ')}
-                                </p>
-                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                                To: {email.to.map(t => t.name || t.email).join(', ')}
+                            </p>
                         </div>
                     </div>
 
@@ -87,6 +94,15 @@ export function EmailDetailView({ email, onStar, onDelete, onArchive }: EmailDet
                         >
                             <Star className={`w-4 h-4 ${email.starred ? 'fill-current' : ''}`} />
                         </button>
+                        {onToggleRead && (
+                            <button
+                                onClick={handleToggleRead}
+                                className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                                title={email.read ? 'Mark as unread' : 'Mark as read'}
+                            >
+                                {email.read ? <Mail className="w-4 h-4" /> : <MailOpen className="w-4 h-4" />}
+                            </button>
+                        )}
                         <button
                             onClick={handleArchive}
                             className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"

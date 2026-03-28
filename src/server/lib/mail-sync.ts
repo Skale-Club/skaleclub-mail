@@ -103,6 +103,10 @@ export async function syncMailbox(
         throw new Error('Mailbox not found')
     }
 
+    if (mailbox.isNative || !mailbox.imapPasswordEncrypted) {
+        return result
+    }
+
     const imapConfig = {
         user: mailbox.imapUsername,
         password: decryptSecret(mailbox.imapPasswordEncrypted),

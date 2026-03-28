@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import { apiFetch } from '../lib/api-client'
+import { apiFetch, clearTokenCache } from '../lib/api-client'
 import { supabase } from '../lib/supabase'
 
 interface User {
@@ -86,6 +86,7 @@ function useProvideAuth(): AuthState {
                 } else if (event === 'SIGNED_OUT') {
                     setUser(null)
                     setIsAdmin(false)
+                    clearTokenCache()
                 }
 
                 setIsLoading(false)

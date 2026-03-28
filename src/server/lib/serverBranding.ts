@@ -4,7 +4,15 @@ import { eq } from 'drizzle-orm'
 
 const BRAND_ID = 'default'
 
-export async function readBranding() {
+interface BrandingData {
+    companyName: string
+    applicationName: string
+    logoStorage: string | null
+    faviconStorage: string | null
+    mailHost: string
+}
+
+export async function readBranding(): Promise<BrandingData> {
     const row = await db.query.systemBranding.findFirst({
         where: eq(systemBranding.id, BRAND_ID),
     })
@@ -17,18 +25,26 @@ export async function readBranding() {
     }
 }
 
-// In-memory cache used by long-running server processes (e.g. IMAP greeting)
-let _cache: { companyName: string; applicationName: string } | null = null
+let _cache: BrandingData | null = null
+let _cacheTimer: ReturnType<typeof setTimeout> | null = null
 
-export async function getCachedBranding() {
+export async function getCachedBranding(): Promise<BrandingData> {
     if (!_cache) {
         const b = await readBranding()
-        _cache = { companyName: b.companyName, applicationName: b.applicationName }
-        setTimeout(() => { _cache = null }, 10 * 60 * 1000).unref()
+        _cache = b
+        _cacheTimer = setTimeout(() => {
+            _cache = null
+            _cacheTimer = null
+        }, 10 * 60 * 1000)
+        _cacheTimer.unref()
     }
     return _cache
 }
 
 export function clearBrandingCache() {
     _cache = null
+    if (_cacheTimer) {
+        clearTimeout(_cacheTimer)
+        _cacheTimer = null
+    }
 }

@@ -105,19 +105,21 @@ export function EmailList({
                 <div
                     key={email.id}
                     className={`
-                        group relative flex items-start gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-2.5 cursor-pointer transition-all duration-150
-                        hover:bg-accent/50
+                        group relative flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-2.5 cursor-pointer transition-all duration-150
+                        bg-card hover:bg-accent/50
                         ${selectedId === email.id ? 'bg-accent' : ''}
                         ${selectedEmails.has(email.id) && selectedId !== email.id ? 'bg-accent/30' : ''}
                         ${!email.read ? 'font-semibold text-foreground' : 'text-muted-foreground'}
                     `}
                     onClick={() => onSelect(email.id)}
                 >
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${!email.read ? 'bg-primary' : 'bg-transparent'}`} />
+
                     {onSelectMultiple && (
                         <button
                             onClick={(e) => handleCheckboxClick(e, email.id)}
                             className={`
-                                flex-shrink-0 p-1 rounded transition-colors mt-0.5
+                                flex-shrink-0 p-1 rounded transition-colors
                                 ${selectedEmails.has(email.id)
                                     ? 'text-primary'
                                     : 'text-muted-foreground/50 hover:text-muted-foreground'
@@ -138,7 +140,7 @@ export function EmailList({
                             onStar?.(email.id)
                         }}
                         className={`
-                            flex-shrink-0 p-1 rounded-full transition-colors mt-0.5
+                            flex-shrink-0 p-1 rounded-full transition-colors
                             ${email.starred
                                 ? 'text-yellow-500 hover:text-yellow-600'
                                 : 'text-muted-foreground/50 hover:text-muted-foreground opacity-0 group-hover:opacity-100'
@@ -149,17 +151,9 @@ export function EmailList({
                     </button>
 
                     <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2 sm:gap-4">
-                            <div className="flex items-center gap-2 min-w-0">
-                                {!email.read && (
-                                    <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
-                                )}
-                                <span className={`truncate text-sm ${!email.read ? 'text-foreground' : 'text-foreground/80'}`}>
-                                    {email.from.name || email.from.email}
-                                </span>
-                            </div>
-                            <span className={`flex-shrink-0 text-xs ${!email.read ? 'text-foreground/90' : 'text-muted-foreground'}`}>
-                                {formatEmailDate(email.date)}
+                        <div className="flex items-center gap-2 min-w-0">
+                            <span className={`truncate text-sm ${!email.read ? 'text-foreground' : 'text-foreground/80'}`}>
+                                {email.from.name || email.from.email}
                             </span>
                         </div>
 
@@ -195,6 +189,10 @@ export function EmailList({
                             </div>
                         )}
                     </div>
+
+                    <span className={`flex-shrink-0 text-xs ${!email.read ? 'text-foreground/90' : 'text-muted-foreground'}`}>
+                        {formatEmailDate(email.date)}
+                    </span>
 
                     <div className="relative opacity-0 group-hover:opacity-100 transition-opacity">
                         <button

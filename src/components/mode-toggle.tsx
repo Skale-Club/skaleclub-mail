@@ -10,7 +10,10 @@ export function ModeToggle() {
         <Button
             variant="ghost"
             size="icon"
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            onClick={() => {
+                const isDark = document.documentElement.classList.contains('dark')
+                setTheme(isDark ? 'light' : 'dark')
+            }}
             className="rounded-full shadow-sm-soft border border-border/40 hover:bg-accent"
         >
             <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
