@@ -312,7 +312,7 @@ export function ComposeDialog() {
         <>
             {/* Backdrop */}
             <div
-                className="fixed inset-0 bg-black/20 backdrop-blur-[2px] z-[59] animate-in fade-in duration-150 sm:bg-transparent sm:backdrop-blur-none"
+                className="fixed inset-0 bg-black/12 backdrop-blur-[1px] z-[59] animate-in fade-in duration-150 sm:bg-black/12 sm:backdrop-blur-[1px]"
                 onClick={() => {
                     if (window.innerWidth < 640) handleClose()
                 }}

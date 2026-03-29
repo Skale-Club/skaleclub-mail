@@ -14,9 +14,23 @@ interface EmailDetailViewProps {
     onSpam?: (id: string) => void
     isSpam?: boolean
     onToggleRead?: (id: string) => void
+    archiveTitle?: string
+    archiveAriaLabel?: string
+    archiveIcon?: 'archive' | 'inbox'
 }
 
-export function EmailDetailView({ email, onStar, onDelete, onArchive, onSpam, isSpam, onToggleRead }: EmailDetailViewProps) {
+export function EmailDetailView({
+    email,
+    onStar,
+    onDelete,
+    onArchive,
+    onSpam,
+    isSpam,
+    onToggleRead,
+    archiveTitle,
+    archiveAriaLabel,
+    archiveIcon,
+}: EmailDetailViewProps) {
     const { openCompose } = useCompose()
     const { data: messageData } = useMessage(email.id)
     const fullMessage = messageData?.message
@@ -41,6 +55,9 @@ export function EmailDetailView({ email, onStar, onDelete, onArchive, onSpam, is
                         onSpam={onSpam ? () => onSpam(email.id) : undefined}
                         onDelete={onDelete ? () => onDelete(email.id) : undefined}
                         onStar={onStar ? () => onStar(email.id) : undefined}
+                        archiveTitle={archiveTitle}
+                        archiveAriaLabel={archiveAriaLabel}
+                        archiveIcon={archiveIcon}
                     />
 
                     {email.labels && email.labels.length > 0 && (

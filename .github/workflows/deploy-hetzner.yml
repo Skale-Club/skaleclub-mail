@@ -92,7 +92,21 @@ jobs:
             if docker ps -a --filter "name=$IMAGE_NAME" --format "{{.ID}}" | grep -q .; then
               echo "Stopping old container..."
               docker stop $IMAGE_NAME || true
-              docker rm $IMAGE_NAME || true
+              docker rm -f $IMAGE_NAME || true
+
+              echo "Waiting for old container to be fully removed..."
+              for i in $(seq 1 15); do
+                if ! docker ps -a --filter "name=^/${IMAGE_NAME}$" --format "{{.ID}}" | grep -q .; then
+                  break
+                fi
+                sleep 2
+              done
+
+              if docker ps -a --filter "name=^/${IMAGE_NAME}$" --format "{{.ID}}" | grep -q .; then
+                echo "❌ Old container still exists after waiting"
+                docker ps -a --filter "name=^/${IMAGE_NAME}$"
+                exit 1
+              fi
             fi
             
             # Run new container
@@ -180,7 +194,15 @@ jobs:
               if docker images $IMAGE_NAME:previous --format "{{.ID}}" | grep -q .; then
                 echo "Rolling back to previous image..."
                 docker stop $IMAGE_NAME || true
-                docker rm $IMAGE_NAME || true
+                docker rm -f $IMAGE_NAME || true
+
+                for i in $(seq 1 15); do
+                  if ! docker ps -a --filter "name=^/${IMAGE_NAME}$" --format "{{.ID}}" | grep -q .; then
+                    break
+                  fi
+                  sleep 2
+                done
+
                 docker run -d \
                   --name $IMAGE_NAME \
                   --restart unless-stopped \

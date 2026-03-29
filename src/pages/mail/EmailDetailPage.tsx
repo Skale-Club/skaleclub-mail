@@ -4,7 +4,7 @@ import { MailLayout } from '../../components/mail/MailLayout'
 import { toast } from '../../components/ui/toaster'
 import { useMailbox } from '../../hooks/useMailbox'
 import { useCompose } from '../../hooks/useCompose'
-import { useMessage, useUpdateMessage, useDeleteMessage, useArchiveMessage, mapMessageToEmailItem } from '../../hooks/useMail'
+import { useMessage, useUpdateMessage, useDeleteMessage, useArchiveMessage, useSpamMessage, mapMessageToEmailItem } from '../../hooks/useMail'
 import { EmailHtmlViewer } from '../../components/mail/EmailHtmlViewer'
 import { EmailMessageHeader } from '../../components/mail/EmailMessageHeader'
 import { EmailThreadView } from '../../components/mail/EmailThread'
@@ -164,6 +164,7 @@ export default function EmailDetailPage() {
     const updateMessage = useUpdateMessage()
     const deleteMessage = useDeleteMessage()
     const archiveMessage = useArchiveMessage()
+    const spamMessage = useSpamMessage()
 
     const thread = React.useMemo(() => {
         const mockThread = mockThreads[params.id]
@@ -278,6 +279,8 @@ export default function EmailDetailPage() {
             : params.folder === 'sent' ? '/mail/sent'
             : params.folder === 'starred' ? '/mail/starred'
             : params.folder === 'drafts' ? '/mail/drafts'
+            : params.folder === 'archive' ? '/mail/archive'
+            : params.folder === 'spam' ? '/mail/spam'
             : params.folder === 'trash' ? '/mail/trash'
             : '/mail/inbox'
         setLocation(backPath)
@@ -292,7 +295,27 @@ export default function EmailDetailPage() {
             : params.folder === 'sent' ? '/mail/sent'
             : params.folder === 'starred' ? '/mail/starred'
             : params.folder === 'drafts' ? '/mail/drafts'
+            : params.folder === 'archive' ? '/mail/archive'
+            : params.folder === 'spam' ? '/mail/spam'
             : params.folder === 'trash' ? '/mail/trash'
+            : '/mail/inbox'
+        setLocation(backPath)
+    }
+
+    const handleSpam = () => {
+        if (!email || !selectedMailbox) return
+
+        const isSpamFolder = params.folder === 'spam'
+        spamMessage.mutate({ messageId: email.id, isSpam: !isSpamFolder })
+        toast({ title: isSpamFolder ? 'Message moved to Inbox' : 'Marked as spam', variant: 'success' })
+
+        const backPath = params.folder === 'inbox' ? '/mail/inbox'
+            : params.folder === 'sent' ? '/mail/sent'
+            : params.folder === 'starred' ? '/mail/starred'
+            : params.folder === 'drafts' ? '/mail/drafts'
+            : params.folder === 'archive' ? '/mail/archive'
+            : params.folder === 'trash' ? '/mail/trash'
+            : params.folder === 'spam' ? '/mail/spam'
             : '/mail/inbox'
         setLocation(backPath)
     }
@@ -380,6 +403,8 @@ export default function EmailDetailPage() {
                                     : params.folder === 'sent' ? '/mail/sent'
                                     : params.folder === 'starred' ? '/mail/starred'
                                     : params.folder === 'drafts' ? '/mail/drafts'
+                                    : params.folder === 'archive' ? '/mail/archive'
+                                    : params.folder === 'spam' ? '/mail/spam'
                                     : params.folder === 'trash' ? '/mail/trash'
                                     : '/mail/inbox'
                                 setLocation(backPath)
@@ -534,6 +559,8 @@ export default function EmailDetailPage() {
                         onForward={() => handleForward(thread.messages[thread.messages.length - 1].id)}
                         onToggleRead={() => handleToggleRead(thread.messages[thread.messages.length - 1].id)}
                         onArchive={handleArchive}
+                        onSpam={handleSpam}
+                        isSpam={params.folder === 'spam'}
                         onDelete={handleDelete}
                         onStar={handleStar}
                     />
@@ -550,6 +577,8 @@ function SingleEmailView({
     onForward,
     onToggleRead,
     onArchive,
+    onSpam,
+    isSpam,
     onDelete,
     onStar,
 }: {
@@ -559,6 +588,8 @@ function SingleEmailView({
     onForward: () => void
     onToggleRead: () => void
     onArchive: () => void
+    onSpam: () => void
+    isSpam?: boolean
     onDelete: () => void
     onStar: () => void
 }) {
@@ -579,6 +610,8 @@ function SingleEmailView({
                         starred={message.starred}
                         onToggleRead={onToggleRead}
                         onArchive={onArchive}
+                        onSpam={onSpam}
+                        isSpam={isSpam}
                         onDelete={onDelete}
                         onStar={onStar}
                     />

@@ -128,9 +128,18 @@ export default function TrashPage() {
                                     <button onClick={() => setFilter('attachments')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === 'attachments' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Attachments</button>
                                 </div>
                                 {emails.length > 0 && (
-                                    <button onClick={handleEmptyTrash} className="px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 rounded-lg font-medium transition-colors">
-                                        Empty trash
-                                    </button>
+                                    <div className="relative group">
+                                        <button
+                                            onClick={handleEmptyTrash}
+                                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-destructive transition-colors hover:bg-destructive/10"
+                                            aria-label="Delete all trash"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                        <div className="pointer-events-none absolute right-0 top-full z-20 mt-2 whitespace-nowrap rounded-md bg-popover px-2 py-1 text-xs text-popover-foreground opacity-0 shadow-md ring-1 ring-border transition-opacity group-hover:opacity-100">
+                                            Delete all
+                                        </div>
+                                    </div>
                                 )}
                             </div>
                         </div>

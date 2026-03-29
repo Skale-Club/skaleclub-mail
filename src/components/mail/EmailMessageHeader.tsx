@@ -1,4 +1,4 @@
-import { Archive, Mail, MailOpen, ShieldAlert, Star, Trash2 } from 'lucide-react'
+import { Archive, Inbox, Mail, MailOpen, ShieldAlert, Star, Trash2 } from 'lucide-react'
 import { cn, getAvatarColor, getInitials } from '../../lib/utils'
 
 interface EmailParticipant {
@@ -19,6 +19,9 @@ interface EmailMessageHeaderProps {
     onSpam?: () => void
     onDelete?: () => void
     onStar?: () => void
+    archiveTitle?: string
+    archiveAriaLabel?: string
+    archiveIcon?: 'archive' | 'inbox'
 }
 
 export function EmailMessageHeader({
@@ -34,11 +37,15 @@ export function EmailMessageHeader({
     onSpam,
     onDelete,
     onStar,
+    archiveTitle = 'Archive',
+    archiveAriaLabel = 'Archive',
+    archiveIcon = 'archive',
 }: EmailMessageHeaderProps) {
     const avatarColor = getAvatarColor(from.email)
     const initials = getInitials(from.name || from.email)
     const recipientLabel = to.map((recipient) => recipient.name || recipient.email).join(', ')
     const hasActions = Boolean(onToggleRead || onArchive || onSpam || onDelete || onStar)
+    const ArchiveActionIcon = archiveIcon === 'inbox' ? Inbox : Archive
 
     return (
         <div className={cn(`grid items-center gap-x-3 pt-1.5 pb-4 border-b border-border mb-3 ${
@@ -75,10 +82,10 @@ export function EmailMessageHeader({
                             type="button"
                             onClick={onArchive}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                            title="Archive"
-                            aria-label="Archive"
+                            title={archiveTitle}
+                            aria-label={archiveAriaLabel}
                         >
-                            <Archive className="h-4 w-4" />
+                            <ArchiveActionIcon className="h-4 w-4" />
                         </button>
                     )}
                     {onSpam && (

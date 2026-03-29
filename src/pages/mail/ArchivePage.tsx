@@ -3,10 +3,11 @@ import { Link, useLocation } from 'wouter'
 import { MailLayout } from '../../components/mail/MailLayout'
 import { EmailList, EmailToolbar } from '../../components/mail/EmailList'
 import { LoadingState } from '../../components/mail/EmailParts'
+import { EmailDetailEmpty, EmailDetailView } from '../../components/mail/EmailDetailView'
 import { toast } from '../../components/ui/toaster'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useMailbox } from '../../hooks/useMailbox'
-import { useMessages, useDeleteMessage, useBatchUpdate, useSyncMailbox, mapMessageToEmailItem } from '../../hooks/useMail'
+import { useMessages, useDeleteMessage, useBatchUpdate, useSyncMailbox, useUpdateMessage, useSpamMessage, mapMessageToEmailItem } from '../../hooks/useMail'
 import { Archive as ArchiveIcon } from 'lucide-react'
 
 export default function ArchivePage() {
@@ -22,6 +23,8 @@ export default function ArchivePage() {
     const deleteMessage = useDeleteMessage()
     const batchUpdate = useBatchUpdate()
     const syncMailbox = useSyncMailbox()
+    const updateMessage = useUpdateMessage()
+    const spamMessage = useSpamMessage()
 
     const { emails, unreadCount } = React.useMemo(() => {
         const base = data?.messages ? data.messages.map(mapMessageToEmailItem) : []
@@ -32,6 +35,11 @@ export default function ArchivePage() {
         if (filter === 'attachments') filtered = base.filter(e => e.hasAttachments)
         return { emails: filtered, unreadCount: unread }
     }, [data, filter])
+
+    const selectedEmailData = React.useMemo(
+        () => emails.find((email) => email.id === selectedEmail) || null,
+        [emails, selectedEmail]
+    )
 
     const handleRefresh = async () => {
         if (selectedMailbox) {
@@ -50,11 +58,16 @@ export default function ArchivePage() {
     }
 
     const handleDelete = (id: string) => {
+        if (selectedEmail === id) setSelectedEmail(null)
         if (selectedMailbox) {
             deleteMessage.mutate(id)
         }
-        if (selectedEmail === id) setSelectedEmail(null)
-        toast({ title: 'Message permanently deleted', variant: 'success' })
+        setSelectedEmails((prev) => {
+            const next = new Set(prev)
+            next.delete(id)
+            return next
+        })
+        toast({ title: 'Email moved to trash', variant: 'success' })
     }
 
     const handleMoveToInbox = (id: string) => {
@@ -62,15 +75,47 @@ export default function ArchivePage() {
             batchUpdate.mutate({ messageIds: [id], action: 'move' })
         }
         if (selectedEmail === id) setSelectedEmail(null)
+        setSelectedEmails((prev) => {
+            const next = new Set(prev)
+            next.delete(id)
+            return next
+        })
         toast({ title: 'Moved to Inbox', variant: 'success' })
     }
 
-    const handleEmptyArchive = () => {
-        if (selectedMailbox && emails.length > 0) {
-            batchUpdate.mutate({ messageIds: emails.map(e => e.id), action: 'delete' })
+    const handleToggleRead = (id: string) => {
+        const email = emails.find((item) => item.id === id)
+        if (!email || !selectedMailbox) return
+
+        updateMessage.mutate({ messageId: id, data: { read: !email.read } })
+        toast({
+            title: email.read ? 'Marked as unread' : 'Marked as read',
+            variant: 'success',
+        })
+    }
+
+    const handleStar = (id: string) => {
+        const email = emails.find((item) => item.id === id)
+        if (!email || !selectedMailbox) return
+
+        updateMessage.mutate({ messageId: id, data: { starred: !email.starred } })
+        toast({
+            title: email.starred ? 'Removed from favorites' : 'Added to favorites',
+            variant: 'success',
+        })
+    }
+
+    const handleSpam = (id: string) => {
+        if (selectedEmail === id) setSelectedEmail(null)
+        if (selectedMailbox) {
+            spamMessage.mutate({ messageId: id, isSpam: true })
         }
-        setSelectedEmail(null)
-        toast({ title: 'Archive cleared', variant: 'success' })
+        setSelectedEmails((prev) => {
+            const next = new Set(prev)
+            next.delete(id)
+            return next
+        })
+        toast({ title: 'Marked as spam', variant: 'success' })
     }
 
     const handleBulkMoveToInbox = () => {
@@ -88,7 +133,7 @@ export default function ArchivePage() {
             batchUpdate.mutate({ messageIds: Array.from(selectedEmails), action: 'delete' })
         }
         setSelectedEmails(new Set())
-        toast({ title: `${selectedEmails.size} messages permanently deleted`, variant: 'success' })
+        toast({ title: `${selectedEmails.size} messages moved to trash`, variant: 'success' })
     }
 
     if (mailboxesLoading || isLoading) {
@@ -136,14 +181,6 @@ export default function ArchivePage() {
                                     <button onClick={() => setFilter('starred')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === 'starred' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Starred</button>
                                     <button onClick={() => setFilter('attachments')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === 'attachments' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Attachments</button>
                                 </div>
-                                {emails.length > 0 && (
-                                    <button
-                                        onClick={handleEmptyArchive}
-                                        className="px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 rounded-lg font-medium transition-colors"
-                                    >
-                                        Empty archive
-                                    </button>
-                                )}
                             </div>
                         </div>
                     </div>
@@ -181,8 +218,11 @@ export default function ArchivePage() {
                             selectedEmails={selectedEmails}
                             onSelect={handleSelectEmail}
                             onSelectMultiple={(ids) => setSelectedEmails(new Set(ids))}
+                            onToggleRead={handleToggleRead}
+                            onStar={handleStar}
                             onDelete={handleDelete}
                             onArchive={handleMoveToInbox}
+                            onSpam={handleSpam}
                             emptyMessage={filter === 'unread' ? 'No unread archived messages' : 'No archived messages'}
                         />
                     </div>
@@ -190,52 +230,24 @@ export default function ArchivePage() {
 
                 {!isMobile && (
                     <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col bg-muted/30">
-                        {selectedEmail ? (() => {
-                            const email = emails.find(e => e.id === selectedEmail)
-                            return (
-                            <div className="flex-1 overflow-y-auto">
-                                <div className="p-4">
-                                    <div className="max-w-3xl mx-auto">
-                                        <div className="flex items-center gap-3 py-2 border-b border-border mb-3">
-                                            <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium text-xs flex-shrink-0">
-                                                {email?.from.name?.[0]?.toUpperCase() || email?.from.email?.[0]?.toUpperCase()}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center justify-between gap-2">
-                                                    <p className="text-sm font-semibold text-foreground truncate">{email?.from.name}</p>
-                                                    <p className="text-xs text-muted-foreground flex-shrink-0">{email?.date.toLocaleString()}</p>
-                                                </div>
-                                                <p className="text-xs text-muted-foreground truncate">To: {email?.to.map(t => t.name || t.email).join(', ')}</p>
-                                            </div>
-                                        </div>
-                                        <h2 className="text-sm font-bold text-foreground mb-3">{email?.subject}</h2>
-                                        <div className="flex items-center gap-2 mb-4">
-                                            <button
-                                                onClick={() => handleMoveToInbox(selectedEmail)}
-                                                className="px-3 py-1.5 text-sm text-primary hover:bg-primary/10 rounded-lg font-medium transition-colors"
-                                            >
-                                                Move to Inbox
-                                            </button>
-                                            <button
-                                                onClick={() => handleDelete(selectedEmail)}
-                                                className="px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10 rounded-lg font-medium transition-colors"
-                                            >
-                                                Delete forever
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            )
-                        })() : (
-                            <div className="flex-1 flex items-center justify-center text-muted-foreground">
-                                <div className="text-center">
-                                    <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
-                                        <ArchiveIcon className="w-10 h-10 text-muted-foreground" />
-                                    </div>
-                                    <p className="text-lg font-medium text-foreground">Select an archived message</p>
-                                </div>
-                            </div>
+                        {selectedEmailData ? (
+                            <EmailDetailView
+                                email={selectedEmailData}
+                                onToggleRead={handleToggleRead}
+                                onArchive={handleMoveToInbox}
+                                onSpam={handleSpam}
+                                onDelete={handleDelete}
+                                onStar={handleStar}
+                                archiveTitle="Move to Inbox"
+                                archiveAriaLabel="Move to Inbox"
+                                archiveIcon="inbox"
+                            />
+                        ) : (
+                            <EmailDetailEmpty
+                                icon={<ArchiveIcon className="w-8 h-8 text-muted-foreground" />}
+                                title="Select an archived message"
+                                description="Click on an email from the list to view its contents"
+                            />
                         )}
                     </div>
                 )}

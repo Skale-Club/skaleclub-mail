@@ -63,12 +63,12 @@ function SidebarContent({ isCollapsed, setIsCollapsed, isMobile, location, brand
 
     const folders: FolderItem[] = [
         { id: 'inbox',   label: 'Inbox',   icon: <Inbox className="w-5 h-5" />,   href: '/mail/inbox' },
-        { id: 'starred', label: 'Starred', icon: <Star className="w-5 h-5" />,    href: '/mail/starred' },
         { id: 'sent',    label: 'Sent',    icon: <Send className="w-5 h-5" />,    href: '/mail/sent' },
-        { id: 'drafts',  label: 'Drafts',  icon: <FileText className="w-5 h-5" />, href: '/mail/drafts' },
-        { id: 'trash',   label: 'Trash',   icon: <Trash2 className="w-5 h-5 text-gray-500 group-hover:text-red-500 transition-colors" />, href: '/mail/trash' },
+        { id: 'starred', label: 'Starred', icon: <Star className="w-5 h-5" />,    href: '/mail/starred' },
         { id: 'archive', label: 'Archive', icon: <Archive className="w-5 h-5" />, href: '/mail/archive', badge: archiveUnread || undefined },
+        { id: 'drafts',  label: 'Drafts',  icon: <FileText className="w-5 h-5" />, href: '/mail/drafts' },
         { id: 'spam',    label: 'Spam',    icon: <ShieldAlert className="w-5 h-5 text-amber-500" />, href: '/mail/spam', badge: spamUnread || undefined },
+        { id: 'trash',   label: 'Trash',   icon: <Trash2 className="w-5 h-5 text-gray-500 group-hover:text-red-500 transition-colors" />, href: '/mail/trash' },
         { id: 'contacts', label: 'Contacts', icon: <Users className="w-5 h-5" />, href: '/mail/contacts' },
     ]
 
@@ -186,13 +186,13 @@ function MobileBottomNav({ location, onOpenSidebar, openCompose }: MobileBottomN
                 <span className="text-xs">Inbox</span>
             </Link>
             <Link
-                href="/mail/starred"
+                href="/mail/sent"
                 className={`flex flex-col items-center gap-1 px-4 py-1 rounded-lg transition-colors ${
-                    isActiveRoute('/mail/starred') ? 'text-primary' : 'text-muted-foreground'
+                    isActiveRoute('/mail/sent') ? 'text-primary' : 'text-muted-foreground'
                 }`}
             >
-                <Star className="w-5 h-5" />
-                <span className="text-xs">Starred</span>
+                <Send className="w-5 h-5" />
+                <span className="text-xs">Sent</span>
             </Link>
             <button
                 onClick={openCompose}
@@ -201,13 +201,13 @@ function MobileBottomNav({ location, onOpenSidebar, openCompose }: MobileBottomN
                 <Plus className="w-6 h-6" />
             </button>
             <Link
-                href="/mail/sent"
+                href="/mail/starred"
                 className={`flex flex-col items-center gap-1 px-4 py-1 rounded-lg transition-colors ${
-                    isActiveRoute('/mail/sent') ? 'text-primary' : 'text-muted-foreground'
+                    isActiveRoute('/mail/starred') ? 'text-primary' : 'text-muted-foreground'
                 }`}
             >
-                <Send className="w-5 h-5" />
-                <span className="text-xs">Sent</span>
+                <Star className="w-5 h-5" />
+                <span className="text-xs">Starred</span>
             </Link>
             <button
                 onClick={onOpenSidebar}

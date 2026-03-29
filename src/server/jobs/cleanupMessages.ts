@@ -1,6 +1,6 @@
 import { db } from '../../db'
-import { messages, deliveries, outreachEmails, webhookRequests } from '../../db/schema'
-import { lt, eq } from 'drizzle-orm'
+import { messages, deliveries, outreachEmails, webhookRequests, mailMessages, mailFolders } from '../../db/schema'
+import { lt, eq, and, or, inArray, isNull } from 'drizzle-orm'
 
 let running = false
 
@@ -18,6 +18,9 @@ export async function cleanupOldMessages(): Promise<void> {
 
         const webhookCutoff = new Date()
         webhookCutoff.setDate(webhookCutoff.getDate() - WEBHOOK_LOG_RETENTION_DAYS)
+
+        const spamCutoff = new Date()
+        spamCutoff.setDate(spamCutoff.getDate() - 30)
 
         // Clean old messages
         let totalDeleted = 0
@@ -61,6 +64,34 @@ export async function cleanupOldMessages(): Promise<void> {
             outreachDeleted += oldOutreach.length
         }
 
+        // Soft-delete spam emails older than 30 days
+        let spamDeleted = 0
+        while (true) {
+            const oldSpamMessages = await db
+                .select({ id: mailMessages.id })
+                .from(mailMessages)
+                .innerJoin(mailFolders, eq(mailMessages.folderId, mailFolders.id))
+                .where(and(
+                    eq(mailFolders.type, 'spam'),
+                    eq(mailMessages.isDeleted, false),
+                    or(
+                        lt(mailMessages.receivedAt, spamCutoff),
+                        and(isNull(mailMessages.receivedAt), lt(mailMessages.createdAt, spamCutoff))
+                    )
+                ))
+                .limit(BATCH_SIZE)
+
+            if (oldSpamMessages.length === 0) break
+
+            const spamIds = oldSpamMessages.map((message) => message.id)
+
+            await db.update(mailMessages)
+                .set({ isDeleted: true, updatedAt: new Date() })
+                .where(inArray(mailMessages.id, spamIds))
+
+            spamDeleted += oldSpamMessages.length
+        }
+
         // Clean old webhook request logs
         let webhookLogsDeleted = 0
         while (true) {
@@ -79,8 +110,8 @@ export async function cleanupOldMessages(): Promise<void> {
             webhookLogsDeleted += oldLogs.length
         }
 
-        if (totalDeleted > 0 || outreachDeleted > 0 || webhookLogsDeleted > 0) {
-            console.log(`[cleanup] Deleted ${totalDeleted} messages, ${outreachDeleted} outreach emails, ${webhookLogsDeleted} webhook logs (retention: ${RETENTION_DAYS}d)`)
+        if (totalDeleted > 0 || outreachDeleted > 0 || spamDeleted > 0 || webhookLogsDeleted > 0) {
+            console.log(`[cleanup] Deleted ${totalDeleted} messages, ${outreachDeleted} outreach emails, ${spamDeleted} spam emails, ${webhookLogsDeleted} webhook logs (retention: ${RETENTION_DAYS}d, spam: 30d)`)
         }
     } catch (err) {
         console.error('[cleanup] Error:', err)
