@@ -4,6 +4,7 @@ import { MailLayout } from '../../components/mail/MailLayout'
 import { EmailList, EmailItem, EmailToolbar } from '../../components/mail/EmailList'
 import { LoadingState } from '../../components/mail/EmailParts'
 import { toast } from '../../components/ui/toaster'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useMailbox } from '../../hooks/useMailbox'
 import { useMessages, useMessage, useDeleteMessage, useBatchUpdate, useSpamMessage, useSyncMailbox, mapMessageToEmailItem } from '../../hooks/useMail'
@@ -19,6 +20,14 @@ export default function SpamPage() {
     const [selectedEmail, setSelectedEmail] = React.useState<string | null>(null)
     const [selectedEmails, setSelectedEmails] = React.useState<Set<string>>(new Set())
     const [filter, setFilter] = React.useState<'all' | 'unread' | 'starred' | 'attachments'>('all')
+    const [confirmDialog, setConfirmDialog] = React.useState<{
+        open: boolean
+        title: string
+        description: string
+        confirmLabel: string
+        variant: 'danger' | 'warning' | 'default'
+        onConfirm: () => void
+    }>({ open: false, title: '', description: '', confirmLabel: 'Confirm', variant: 'default', onConfirm: () => {} })
 
     const { data, isLoading, isFetching, refetch } = useMessages('spam', 1, 200)
     const deleteMessage = useDeleteMessage()
@@ -58,11 +67,21 @@ export default function SpamPage() {
     }
 
     const handleDelete = (id: string) => {
-        if (selectedMailbox) {
-            deleteMessage.mutate(id)
-        }
-        if (selectedEmail === id) setSelectedEmail(null)
-        toast({ title: 'Message permanently deleted', variant: 'success' })
+        setConfirmDialog({
+            open: true,
+            title: 'Delete permanently?',
+            description: 'This spam message will be permanently deleted. This action cannot be undone.',
+            confirmLabel: 'Delete forever',
+            variant: 'danger',
+            onConfirm: () => {
+                setConfirmDialog(prev => ({ ...prev, open: false }))
+                if (selectedMailbox) {
+                    deleteMessage.mutate(id)
+                }
+                if (selectedEmail === id) setSelectedEmail(null)
+                toast({ title: 'Message permanently deleted', variant: 'success' })
+            },
+        })
     }
 
     const handleNotSpam = (id: string) => {
@@ -74,11 +93,22 @@ export default function SpamPage() {
     }
 
     const handleEmptySpam = () => {
-        if (selectedMailbox && emails.length > 0) {
-            batchUpdate.mutate({ messageIds: emails.map(e => e.id), action: 'delete' })
-        }
-        setSelectedEmail(null)
-        toast({ title: 'Spam folder emptied', variant: 'success' })
+        if (emails.length === 0) return
+        setConfirmDialog({
+            open: true,
+            title: 'Delete all spam?',
+            description: `All ${emails.length} spam message${emails.length > 1 ? 's' : ''} will be permanently deleted. This action cannot be undone.`,
+            confirmLabel: 'Delete all',
+            variant: 'danger',
+            onConfirm: () => {
+                setConfirmDialog(prev => ({ ...prev, open: false }))
+                if (selectedMailbox && emails.length > 0) {
+                    batchUpdate.mutate({ messageIds: emails.map(e => e.id), action: 'delete' })
+                }
+                setSelectedEmail(null)
+                toast({ title: 'Spam folder emptied', variant: 'success' })
+            },
+        })
     }
 
     const handleBulkNotSpam = () => {
@@ -92,11 +122,21 @@ export default function SpamPage() {
 
     const handleBulkDelete = () => {
         if (selectedEmails.size === 0) return
-        if (selectedMailbox) {
-            batchUpdate.mutate({ messageIds: Array.from(selectedEmails), action: 'delete' })
-        }
-        setSelectedEmails(new Set())
-        toast({ title: `${selectedEmails.size} messages permanently deleted`, variant: 'success' })
+        setConfirmDialog({
+            open: true,
+            title: `Permanently delete ${selectedEmails.size} message${selectedEmails.size > 1 ? 's' : ''}?`,
+            description: 'These messages will be permanently deleted. This action cannot be undone.',
+            confirmLabel: 'Delete forever',
+            variant: 'danger',
+            onConfirm: () => {
+                setConfirmDialog(prev => ({ ...prev, open: false }))
+                if (selectedMailbox) {
+                    batchUpdate.mutate({ messageIds: Array.from(selectedEmails), action: 'delete' })
+                }
+                setSelectedEmails(new Set())
+                toast({ title: `${selectedEmails.size} messages permanently deleted`, variant: 'success' })
+            },
+        })
     }
 
     if (mailboxesLoading || isLoading) {
@@ -224,6 +264,15 @@ export default function SpamPage() {
                     </div>
                 )}
             </div>
+            <ConfirmDialog
+                open={confirmDialog.open}
+                onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
+                title={confirmDialog.title}
+                description={confirmDialog.description}
+                confirmLabel={confirmDialog.confirmLabel}
+                variant={confirmDialog.variant}
+                onConfirm={confirmDialog.onConfirm}
+            />
         </MailLayout>
     )
 }

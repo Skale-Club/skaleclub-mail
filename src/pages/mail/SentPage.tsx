@@ -4,6 +4,7 @@ import { MailLayout } from '../../components/mail/MailLayout'
 import { EmailList, EmailItem, EmailToolbar } from '../../components/mail/EmailList'
 import { LoadingState } from '../../components/mail/EmailParts'
 import { toast } from '../../components/ui/toaster'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useCompose } from '../../hooks/useCompose'
 import { useMailbox } from '../../hooks/useMailbox'
@@ -29,6 +30,14 @@ export default function SentPage() {
     const [selectedEmail, setSelectedEmail] = React.useState<string | null>(null)
     const [selectedEmails, setSelectedEmails] = React.useState<Set<string>>(new Set())
     const [filter, setFilter] = React.useState<'all' | 'unread' | 'starred' | 'attachments'>('all')
+    const [confirmDialog, setConfirmDialog] = React.useState<{
+        open: boolean
+        title: string
+        description: string
+        confirmLabel: string
+        variant: 'danger' | 'warning' | 'default'
+        onConfirm: () => void
+    }>({ open: false, title: '', description: '', confirmLabel: 'Confirm', variant: 'default', onConfirm: () => {} })
 
     const { data, isLoading, isFetching, refetch } = useMessages('sent', 1, 50)
     const deleteMessage = useDeleteMessage()
@@ -92,18 +101,28 @@ export default function SentPage() {
     }
 
     const handleDelete = (id: string) => {
-        if (selectedEmail === id) {
-            setSelectedEmail(null)
-        }
-        if (selectedMailbox) {
-            deleteMessage.mutate(id)
-        }
-        setSelectedEmails(prev => {
-            const newSet = new Set(prev)
-            newSet.delete(id)
-            return newSet
+        setConfirmDialog({
+            open: true,
+            title: 'Move to trash?',
+            description: 'This email will be moved to the Trash folder. You can restore it within 30 days.',
+            confirmLabel: 'Move to trash',
+            variant: 'danger',
+            onConfirm: () => {
+                setConfirmDialog(prev => ({ ...prev, open: false }))
+                if (selectedEmail === id) {
+                    setSelectedEmail(null)
+                }
+                if (selectedMailbox) {
+                    deleteMessage.mutate(id)
+                }
+                setSelectedEmails(prev => {
+                    const newSet = new Set(prev)
+                    newSet.delete(id)
+                    return newSet
+                })
+                toast({ title: 'Email moved to trash', variant: 'success' })
+            },
         })
-        toast({ title: 'Email deleted', variant: 'success' })
     }
 
     const handleArchive = (id: string) => {
@@ -185,11 +204,21 @@ export default function SentPage() {
                         }}
                         onDelete={() => {
                             if (selectedEmails.size === 0) return
-                            if (selectedMailbox) {
-                                batchUpdate.mutate({ messageIds: Array.from(selectedEmails), action: 'delete' })
-                            }
-                            setSelectedEmails(new Set())
-                            toast({ title: `${selectedEmails.size} emails deleted`, variant: 'success' })
+                            setConfirmDialog({
+                                open: true,
+                                title: `Move ${selectedEmails.size} email${selectedEmails.size > 1 ? 's' : ''} to trash?`,
+                                description: 'These emails will be moved to the Trash folder. You can restore them within 30 days.',
+                                confirmLabel: 'Move to trash',
+                                variant: 'danger',
+                                onConfirm: () => {
+                                    setConfirmDialog(prev => ({ ...prev, open: false }))
+                                    if (selectedMailbox) {
+                                        batchUpdate.mutate({ messageIds: Array.from(selectedEmails), action: 'delete' })
+                                    }
+                                    setSelectedEmails(new Set())
+                                    toast({ title: `${selectedEmails.size} emails moved to trash`, variant: 'success' })
+                                },
+                            })
                         }}
                         onArchive={() => {
                             if (selectedEmails.size === 0) return
@@ -249,6 +278,15 @@ export default function SentPage() {
                     </div>
                 )}
             </div>
+            <ConfirmDialog
+                open={confirmDialog.open}
+                onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
+                title={confirmDialog.title}
+                description={confirmDialog.description}
+                confirmLabel={confirmDialog.confirmLabel}
+                variant={confirmDialog.variant}
+                onConfirm={confirmDialog.onConfirm}
+            />
         </MailLayout>
     )
 }

@@ -305,6 +305,36 @@ export function useSpamMessage() {
     })
 }
 
+export function useRestoreMessage() {
+    const queryClient = useQueryClient()
+    const { selectedMailbox } = useMailbox()
+
+    return useMutation({
+        mutationFn: (messageId: string) => {
+            if (!selectedMailbox) throw new Error('No mailbox selected')
+            return mailApi.restoreMessage(selectedMailbox.id, messageId)
+        },
+        onMutate: async (messageId: string) => {
+            const snapshots = snapshotMailboxMessageQueries(queryClient, selectedMailbox?.id)
+
+            patchMailboxMessageQueries(queryClient, selectedMailbox?.id, (message) =>
+                message.id === messageId ? null : message
+            )
+
+            return { snapshots }
+        },
+        onError: (_error, _variables, context) => {
+            if (context?.snapshots) {
+                restoreMessageQuerySnapshots(queryClient, context.snapshots)
+            }
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['messages'] })
+            queryClient.invalidateQueries({ queryKey: ['folders'] })
+        },
+    })
+}
+
 export function useMoveMessage() {
     const queryClient = useQueryClient()
     const { selectedMailbox } = useMailbox()
@@ -352,7 +382,7 @@ export function useBatchUpdate() {
             folderId
         }: {
             messageIds: string[]
-            action: 'read' | 'unread' | 'star' | 'unstar' | 'delete' | 'archive' | 'move' | 'spam' | 'unspam'
+            action: 'read' | 'unread' | 'star' | 'unstar' | 'delete' | 'archive' | 'move' | 'spam' | 'unspam' | 'restore'
             folderId?: string
         }) => {
             if (!selectedMailbox) throw new Error('No mailbox selected')
@@ -379,6 +409,7 @@ export function useBatchUpdate() {
                     case 'move':
                     case 'spam':
                     case 'unspam':
+                    case 'restore':
                         return null
                     default:
                         return message

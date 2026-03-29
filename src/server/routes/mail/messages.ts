@@ -23,6 +23,12 @@ function isSpamFolderIdentifier(value: string | null | undefined) {
     return upper === 'SPAM' || upper === 'JUNK' || upper.endsWith('SPAM') || upper.endsWith('JUNK')
 }
 
+function isTrashFolderIdentifier(value: string | null | undefined) {
+    if (!value) return false
+    const upper = value.toUpperCase()
+    return upper === 'TRASH' || upper === 'DELETED' || upper === 'DELETED ITEMS' || upper.endsWith('TRASH') || upper === 'BIN' || upper === 'DELETED MESSAGES'
+}
+
 function isInboxFolderIdentifier(value: string | null | undefined) {
     if (!value) return false
     const upper = value.toUpperCase()
@@ -93,6 +99,15 @@ async function resolveInboxFolder(mailboxId: string) {
         mailboxId,
         'inbox',
         (folder) => isInboxFolderIdentifier(folder.remoteId) || isInboxFolderIdentifier(folder.name)
+    )
+}
+
+async function resolveTrashFolder(mailboxId: string, allowCreate: boolean) {
+    return resolveFolder(
+        mailboxId,
+        'trash',
+        (folder) => isTrashFolderIdentifier(folder.remoteId) || isTrashFolderIdentifier(folder.name),
+        allowCreate ? { remoteId: 'Trash', name: 'Trash' } : undefined
     )
 }
 
@@ -370,13 +385,94 @@ router.delete('/:mailboxId/messages/:messageId', async (req: Request, res: Respo
             return res.status(404).json({ error: 'Mailbox not found' })
         }
 
+        const message = await db.query.mailMessages.findFirst({
+            where: and(
+                eq(mailMessages.id, messageId),
+                eq(mailMessages.mailboxId, mailboxId)
+            ),
+        })
+
+        if (!message) {
+            return res.status(404).json({ error: 'Message not found' })
+        }
+
+        const currentFolder = await db.query.mailFolders.findFirst({
+            where: eq(mailFolders.id, message.folderId),
+        })
+
+        if (currentFolder?.type === 'trash') {
+            await db.delete(mailMessages)
+                .where(and(eq(mailMessages.id, messageId), eq(mailMessages.mailboxId, mailboxId)))
+
+            return res.json({ success: true, permanentlyDeleted: true })
+        }
+
+        const trashFolder = await resolveTrashFolder(mailboxId, mailbox.isNative)
+        if (!trashFolder) {
+            return res.status(400).json({ error: 'Trash folder is not available for this mailbox' })
+        }
+
+        if (!mailbox.isNative && message.remoteUid && currentFolder?.remoteId && trashFolder.remoteId) {
+            await moveRemoteMessage(mailbox, currentFolder.remoteId, trashFolder.remoteId, message.remoteUid)
+        }
+
         await db.update(mailMessages)
-            .set({ isDeleted: true, updatedAt: new Date() })
+            .set({ folderId: trashFolder.id, updatedAt: new Date() })
             .where(and(eq(mailMessages.id, messageId), eq(mailMessages.mailboxId, mailboxId)))
 
         res.json({ success: true })
     } catch (error) {
         console.error('Error deleting message:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+router.post('/:mailboxId/messages/:messageId/restore', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        const mailboxId = req.params.mailboxId
+        const messageId = req.params.messageId
+
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' })
+        }
+
+        const mailbox = await checkUserMailboxAccess(userId, mailboxId)
+        if (!mailbox) {
+            return res.status(404).json({ error: 'Mailbox not found' })
+        }
+
+        const message = await db.query.mailMessages.findFirst({
+            where: and(
+                eq(mailMessages.id, messageId),
+                eq(mailMessages.mailboxId, mailboxId)
+            ),
+        })
+
+        if (!message) {
+            return res.status(404).json({ error: 'Message not found' })
+        }
+
+        const currentFolder = await db.query.mailFolders.findFirst({
+            where: eq(mailFolders.id, message.folderId),
+        })
+
+        const inboxFolder = await resolveInboxFolder(mailboxId)
+        if (!inboxFolder) {
+            return res.status(400).json({ error: 'Inbox folder is not available for this mailbox' })
+        }
+
+        if (!mailbox.isNative && message.remoteUid && currentFolder?.remoteId && inboxFolder.remoteId) {
+            await moveRemoteMessage(mailbox, currentFolder.remoteId, inboxFolder.remoteId, message.remoteUid)
+        }
+
+        await db.update(mailMessages)
+            .set({ folderId: inboxFolder.id, updatedAt: new Date() })
+            .where(and(eq(mailMessages.id, messageId), eq(mailMessages.mailboxId, mailboxId)))
+
+        res.json({ success: true })
+    } catch (error) {
+        console.error('Error restoring message:', error)
         res.status(500).json({ error: 'Internal server error' })
     }
 })
@@ -545,7 +641,7 @@ router.post('/:mailboxId/messages/batch', async (req: Request, res: Response) =>
 
         const schema = z.object({
             messageIds: z.array(z.string().uuid()).min(1),
-            action: z.enum(['archive', 'spam', 'unspam', 'delete', 'read', 'unread', 'star', 'unstar']),
+            action: z.enum(['archive', 'spam', 'unspam', 'delete', 'restore', 'read', 'unread', 'star', 'unstar']),
             folderId: z.string().uuid().optional(),
         })
 
@@ -572,15 +668,64 @@ router.post('/:mailboxId/messages/batch', async (req: Request, res: Response) =>
                 }
                 break
             case 'unspam':
+                const unspamInboxFolder = await resolveInboxFolder(mailboxId)
+                if (unspamInboxFolder) {
+                    updateData.folderId = unspamInboxFolder.id
+                    remoteTargetFolder = unspamInboxFolder
+                }
+                break
+            case 'restore': {
                 const inboxFolder = await resolveInboxFolder(mailboxId)
                 if (inboxFolder) {
                     updateData.folderId = inboxFolder.id
                     remoteTargetFolder = inboxFolder
                 }
                 break
-            case 'delete':
-                updateData.isDeleted = true
+            }
+            case 'delete': {
+                const batchMessages = await db.query.mailMessages.findMany({
+                    where: and(
+                        inArray(mailMessages.id, data.messageIds),
+                        eq(mailMessages.mailboxId, mailboxId)
+                    ),
+                })
+
+                const batchFolderIds = [...new Set(batchMessages.map((m) => m.folderId))]
+                const batchFolders = await db.query.mailFolders.findMany({
+                    where: and(
+                        eq(mailFolders.mailboxId, mailboxId),
+                        inArray(mailFolders.id, batchFolderIds)
+                    ),
+                })
+                const batchFoldersById = new Map(batchFolders.map((f) => [f.id, f]))
+
+                const trashMsgs = batchMessages.filter((m) => batchFoldersById.get(m.folderId)?.type === 'trash')
+                const nonTrashMsgs = batchMessages.filter((m) => batchFoldersById.get(m.folderId)?.type !== 'trash')
+
+                if (trashMsgs.length > 0) {
+                    await db.delete(mailMessages)
+                        .where(inArray(mailMessages.id, trashMsgs.map((m) => m.id)))
+                }
+
+                if (nonTrashMsgs.length > 0) {
+                    const trashFolder = await resolveTrashFolder(mailboxId, mailbox.isNative)
+                    if (trashFolder) {
+                        if (!mailbox.isNative && trashFolder.remoteId) {
+                            for (const msg of nonTrashMsgs) {
+                                const srcFolder = batchFoldersById.get(msg.folderId)
+                                if (msg.remoteUid && srcFolder?.remoteId) {
+                                    await moveRemoteMessage(mailbox, srcFolder.remoteId, trashFolder.remoteId, msg.remoteUid).catch(() => {})
+                                }
+                            }
+                        }
+
+                        await db.update(mailMessages)
+                            .set({ folderId: trashFolder.id, updatedAt: new Date() })
+                            .where(inArray(mailMessages.id, nonTrashMsgs.map((m) => m.id)))
+                    }
+                }
                 break
+            }
             case 'read':
                 updateData.isRead = true
                 break
@@ -595,7 +740,7 @@ router.post('/:mailboxId/messages/batch', async (req: Request, res: Response) =>
                 break
         }
 
-        if (data.folderId && ['archive', 'spam', 'unspam'].includes(data.action)) {
+        if (data.folderId && ['archive', 'spam', 'unspam', 'restore'].includes(data.action)) {
             updateData.folderId = data.folderId
             const overrideFolder = await db.query.mailFolders.findFirst({
                 where: and(
@@ -608,7 +753,7 @@ router.post('/:mailboxId/messages/batch', async (req: Request, res: Response) =>
             }
         }
 
-        if (!mailbox.isNative && remoteTargetFolder?.remoteId && ['archive', 'spam', 'unspam'].includes(data.action)) {
+        if (!mailbox.isNative && remoteTargetFolder?.remoteId && ['archive', 'spam', 'unspam', 'restore'].includes(data.action)) {
             const messages = await db.query.mailMessages.findMany({
                 where: and(
                     inArray(mailMessages.id, data.messageIds),

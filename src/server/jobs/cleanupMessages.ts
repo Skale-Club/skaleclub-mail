@@ -92,6 +92,32 @@ export async function cleanupOldMessages(): Promise<void> {
             spamDeleted += oldSpamMessages.length
         }
 
+        // Hard-delete trash emails older than 30 days
+        let trashDeleted = 0
+        while (true) {
+            const oldTrashMessages = await db
+                .select({ id: mailMessages.id })
+                .from(mailMessages)
+                .innerJoin(mailFolders, eq(mailMessages.folderId, mailFolders.id))
+                .where(and(
+                    eq(mailFolders.type, 'trash'),
+                    or(
+                        lt(mailMessages.receivedAt, spamCutoff),
+                        and(isNull(mailMessages.receivedAt), lt(mailMessages.createdAt, spamCutoff))
+                    )
+                ))
+                .limit(BATCH_SIZE)
+
+            if (oldTrashMessages.length === 0) break
+
+            const trashIds = oldTrashMessages.map((message) => message.id)
+
+            await db.delete(mailMessages)
+                .where(inArray(mailMessages.id, trashIds))
+
+            trashDeleted += oldTrashMessages.length
+        }
+
         // Clean old webhook request logs
         let webhookLogsDeleted = 0
         while (true) {
@@ -110,8 +136,8 @@ export async function cleanupOldMessages(): Promise<void> {
             webhookLogsDeleted += oldLogs.length
         }
 
-        if (totalDeleted > 0 || outreachDeleted > 0 || spamDeleted > 0 || webhookLogsDeleted > 0) {
-            console.log(`[cleanup] Deleted ${totalDeleted} messages, ${outreachDeleted} outreach emails, ${spamDeleted} spam emails, ${webhookLogsDeleted} webhook logs (retention: ${RETENTION_DAYS}d, spam: 30d)`)
+        if (totalDeleted > 0 || outreachDeleted > 0 || spamDeleted > 0 || trashDeleted > 0 || webhookLogsDeleted > 0) {
+            console.log(`[cleanup] Deleted ${totalDeleted} messages, ${outreachDeleted} outreach emails, ${spamDeleted} spam emails, ${trashDeleted} trash emails, ${webhookLogsDeleted} webhook logs (retention: ${RETENTION_DAYS}d, spam/trash: 30d)`)
         }
     } catch (err) {
         console.error('[cleanup] Error:', err)

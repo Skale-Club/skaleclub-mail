@@ -4,9 +4,10 @@ import { MailLayout } from '../../components/mail/MailLayout'
 import { EmailList, EmailToolbar } from '../../components/mail/EmailList'
 import { LoadingState } from '../../components/mail/EmailParts'
 import { toast } from '../../components/ui/toaster'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useMailbox } from '../../hooks/useMailbox'
-import { useMessages, useDeleteMessage, useBatchUpdate, useSyncMailbox, mapMessageToEmailItem } from '../../hooks/useMail'
+import { useMessages, useDeleteMessage, useBatchUpdate, useSyncMailbox, useRestoreMessage, mapMessageToEmailItem } from '../../hooks/useMail'
 import { Trash2 } from 'lucide-react'
 
 export default function TrashPage() {
@@ -17,10 +18,19 @@ export default function TrashPage() {
     const [selectedEmail, setSelectedEmail] = React.useState<string | null>(null)
     const [selectedEmails, setSelectedEmails] = React.useState<Set<string>>(new Set())
     const [filter, setFilter] = React.useState<'all' | 'unread' | 'starred' | 'attachments'>('all')
+    const [confirmDialog, setConfirmDialog] = React.useState<{
+        open: boolean
+        title: string
+        description: string
+        confirmLabel: string
+        variant: 'danger' | 'warning' | 'default'
+        onConfirm: () => void
+    }>({ open: false, title: '', description: '', confirmLabel: 'Confirm', variant: 'default', onConfirm: () => {} })
 
     const { data, isLoading, isFetching, refetch } = useMessages('trash', 1, 200)
     const deleteMessage = useDeleteMessage()
     const batchUpdate = useBatchUpdate()
+    const restoreMessage = useRestoreMessage()
     const syncMailbox = useSyncMailbox()
 
     const { emails, unreadCount } = React.useMemo(() => {
@@ -50,36 +60,69 @@ export default function TrashPage() {
     }
 
     const handleDelete = (id: string) => {
-        if (selectedMailbox) {
-            deleteMessage.mutate(id)
-        }
-        toast({ title: 'Permanently deleted', variant: 'success' })
+        setConfirmDialog({
+            open: true,
+            title: 'Delete permanently?',
+            description: 'This email will be permanently deleted. This action cannot be undone.',
+            confirmLabel: 'Delete forever',
+            variant: 'danger',
+            onConfirm: () => {
+                setConfirmDialog(prev => ({ ...prev, open: false }))
+                if (selectedMailbox) {
+                    deleteMessage.mutate(id)
+                }
+                if (selectedEmail === id) setSelectedEmail(null)
+                toast({ title: 'Email permanently deleted', variant: 'success' })
+            },
+        })
     }
 
     const handleRestore = (id: string) => {
         if (selectedMailbox) {
-            batchUpdate.mutate({ messageIds: [id], action: 'move' })
+            restoreMessage.mutate(id)
         }
+        if (selectedEmail === id) setSelectedEmail(null)
         toast({ title: 'Email restored to inbox', variant: 'success' })
     }
 
     const handleEmptyTrash = () => {
-        if (selectedMailbox && emails.length > 0) {
-            batchUpdate.mutate({
-                messageIds: emails.map(e => e.id),
-                action: 'delete'
-            })
-        }
-        toast({ title: 'Trash emptied', variant: 'success' })
+        if (emails.length === 0) return
+        setConfirmDialog({
+            open: true,
+            title: 'Empty trash?',
+            description: `All ${emails.length} email${emails.length > 1 ? 's' : ''} in trash will be permanently deleted. This action cannot be undone.`,
+            confirmLabel: 'Empty trash',
+            variant: 'danger',
+            onConfirm: () => {
+                setConfirmDialog(prev => ({ ...prev, open: false }))
+                if (selectedMailbox && emails.length > 0) {
+                    batchUpdate.mutate({
+                        messageIds: emails.map(e => e.id),
+                        action: 'delete'
+                    })
+                }
+                toast({ title: 'Trash emptied', variant: 'success' })
+            },
+        })
     }
 
     const handleBulkDelete = () => {
         if (selectedEmails.size === 0) return
-        if (selectedMailbox) {
-            batchUpdate.mutate({ messageIds: Array.from(selectedEmails), action: 'delete' })
-        }
-        setSelectedEmails(new Set())
-        toast({ title: `${selectedEmails.size} emails permanently deleted`, variant: 'success' })
+        setConfirmDialog({
+            open: true,
+            title: `Permanently delete ${selectedEmails.size} email${selectedEmails.size > 1 ? 's' : ''}?`,
+            description: 'These emails will be permanently deleted. This action cannot be undone.',
+            confirmLabel: 'Delete forever',
+            variant: 'danger',
+            onConfirm: () => {
+                setConfirmDialog(prev => ({ ...prev, open: false }))
+                if (selectedMailbox) {
+                    batchUpdate.mutate({ messageIds: Array.from(selectedEmails), action: 'delete' })
+                }
+                setSelectedEmails(new Set())
+                toast({ title: `${selectedEmails.size} emails permanently deleted`, variant: 'success' })
+            },
+        })
     }
 
     if (mailboxesLoading || isLoading) {
@@ -219,6 +262,15 @@ export default function TrashPage() {
                     </div>
                 )}
             </div>
+            <ConfirmDialog
+                open={confirmDialog.open}
+                onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
+                title={confirmDialog.title}
+                description={confirmDialog.description}
+                confirmLabel={confirmDialog.confirmLabel}
+                variant={confirmDialog.variant}
+                onConfirm={confirmDialog.onConfirm}
+            />
         </MailLayout>
     )
 }

@@ -291,10 +291,16 @@ export const mailApi = {
         })
     },
 
+    restoreMessage(mailboxId: string, messageId: string): Promise<void> {
+        return apiFetch(`/api/mail/mailboxes/${mailboxId}/messages/${messageId}/restore`, {
+            method: 'POST',
+        })
+    },
+
     batchUpdate(
         mailboxId: string,
         messageIds: string[],
-        action: 'read' | 'unread' | 'star' | 'unstar' | 'delete' | 'archive' | 'move' | 'spam' | 'unspam',
+        action: 'read' | 'unread' | 'star' | 'unstar' | 'delete' | 'archive' | 'move' | 'spam' | 'unspam' | 'restore',
         folderId?: string
     ): Promise<void> {
         return apiFetch(`/api/mail/mailboxes/${mailboxId}/messages/batch`, {
