@@ -7,7 +7,7 @@ import { toast } from '../../components/ui/toaster'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useCompose } from '../../hooks/useCompose'
 import { useMailbox } from '../../hooks/useMailbox'
-import { useMessages, useMessage, useUpdateMessage, useDeleteMessage, useArchiveMessage, useBatchUpdate, useSyncMailbox, mapMessageToEmailItem } from '../../hooks/useMail'
+import { useMessages, useMessage, useUpdateMessage, useDeleteMessage, useArchiveMessage, useBatchUpdate, useSpamMessage, useSyncMailbox, mapMessageToEmailItem } from '../../hooks/useMail'
 import { EmailHtmlViewer } from '../../components/mail/EmailHtmlViewer'
 import { EmailMessageHeader } from '../../components/mail/EmailMessageHeader'
 import { Star } from 'lucide-react'
@@ -26,6 +26,7 @@ export default function StarredPage() {
     const deleteMessage = useDeleteMessage()
     const archiveMessage = useArchiveMessage()
     const batchUpdate = useBatchUpdate()
+    const spamMessage = useSpamMessage()
     const syncMailbox = useSyncMailbox()
 
     const { emails, unreadCount } = React.useMemo(() => {
@@ -112,6 +113,21 @@ export default function StarredPage() {
             return newSet
         })
         toast({ title: 'Email archived', variant: 'success' })
+    }
+
+    const handleSpam = (id: string) => {
+        if (selectedEmail === id) {
+            setSelectedEmail(null)
+        }
+        if (selectedMailbox) {
+            spamMessage.mutate({ messageId: id, isSpam: true })
+        }
+        setSelectedEmails(prev => {
+            const newSet = new Set(prev)
+            newSet.delete(id)
+            return newSet
+        })
+        toast({ title: 'Marked as spam', variant: 'success' })
     }
 
     const handleBulkDelete = () => {
@@ -208,6 +224,7 @@ export default function StarredPage() {
                             onStar={handleStar}
                             onDelete={handleDelete}
                             onArchive={handleArchive}
+                            onSpam={handleSpam}
                             emptyMessage="No starred emails"
                         />
                     </div>
@@ -220,6 +237,7 @@ export default function StarredPage() {
                                 email={selectedEmailData}
                                 onToggleRead={handleToggleRead}
                                 onArchive={handleArchive}
+                                onSpam={handleSpam}
                                 onDelete={handleDelete}
                                 onStar={handleStar}
                             />
@@ -245,12 +263,14 @@ function EmailDetail({
     email,
     onToggleRead,
     onArchive,
+    onSpam,
     onDelete,
     onStar,
 }: {
     email: EmailItem
     onToggleRead?: (id: string) => void
     onArchive?: (id: string) => void
+    onSpam?: (id: string) => void
     onDelete?: (id: string) => void
     onStar?: (id: string) => void
 }) {
@@ -270,6 +290,7 @@ function EmailDetail({
                         starred={email.starred}
                         onToggleRead={onToggleRead ? () => onToggleRead(email.id) : undefined}
                         onArchive={onArchive ? () => onArchive(email.id) : undefined}
+                        onSpam={onSpam ? () => onSpam(email.id) : undefined}
                         onDelete={onDelete ? () => onDelete(email.id) : undefined}
                         onStar={onStar ? () => onStar(email.id) : undefined}
                     />
