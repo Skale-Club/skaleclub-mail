@@ -6,7 +6,7 @@ import { toast } from '../../components/ui/toaster'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useCompose } from '../../hooks/useCompose'
 import { useMailbox } from '../../hooks/useMailbox'
-import { useSearchMessages, useMessage, useUpdateMessage, useDeleteMessage, useArchiveMessage, useBatchUpdate, mapMessageToEmailItem } from '../../hooks/useMail'
+import { useSearchMessages, useMessage, useUpdateMessage, useDeleteMessage, useArchiveMessage, useBatchUpdate, useSpamMessage, mapMessageToEmailItem } from '../../hooks/useMail'
 import { EmailHtmlViewer } from '../../components/mail/EmailHtmlViewer'
 import { EmailMessageHeader } from '../../components/mail/EmailMessageHeader'
 import {
@@ -62,6 +62,7 @@ export default function SearchPage() {
     const deleteMessage = useDeleteMessage()
     const archiveMessage = useArchiveMessage()
     const batchUpdate = useBatchUpdate()
+    const spamMessage = useSpamMessage()
 
     React.useEffect(() => {
         const params = new URLSearchParams(location.split('?')[1] || '')
@@ -193,6 +194,21 @@ export default function SearchPage() {
             archiveMessage.mutate(id)
         }
         toast({ title: 'Email archived', variant: 'success' })
+    }
+
+    const handleSpam = (id: string) => {
+        if (selectedEmail === id) {
+            setSelectedEmail(null)
+        }
+        if (selectedMailbox) {
+            spamMessage.mutate({ messageId: id, isSpam: true })
+        }
+        setSelectedEmails(prev => {
+            const newSet = new Set(prev)
+            newSet.delete(id)
+            return newSet
+        })
+        toast({ title: 'Marked as spam', variant: 'success' })
     }
 
     if (mailboxes.length === 0) {
@@ -395,6 +411,13 @@ export default function SearchPage() {
                             setSelectedEmails(new Set())
                             toast({ title: 'Emails archived', variant: 'success' })
                         }}
+                        onSpam={() => {
+                            if (selectedMailbox) {
+                                batchUpdate.mutate({ messageIds: Array.from(selectedEmails), action: 'spam' })
+                            }
+                            setSelectedEmails(new Set())
+                            toast({ title: 'Emails marked as spam', variant: 'success' })
+                        }}
                         onRefresh={() => {
                             refetch()
                             toast({ title: 'Search refreshed', variant: 'success' })
@@ -426,6 +449,7 @@ export default function SearchPage() {
                                 onStar={handleStar}
                                 onDelete={handleDelete}
                                 onArchive={handleArchive}
+                                onSpam={handleSpam}
                                 emptyMessage="No results found"
                             />
                         ) : (
@@ -453,6 +477,7 @@ export default function SearchPage() {
                                 email={selectedEmailData}
                                 onToggleRead={handleToggleRead}
                                 onArchive={handleArchive}
+                                onSpam={handleSpam}
                                 onDelete={handleDelete}
                                 onStar={handleStar}
                             />
@@ -478,12 +503,14 @@ function EmailDetail({
     email,
     onToggleRead,
     onArchive,
+    onSpam,
     onDelete,
     onStar,
 }: {
     email: EmailItem
     onToggleRead?: (id: string) => void
     onArchive?: (id: string) => void
+    onSpam?: (id: string) => void
     onDelete?: (id: string) => void
     onStar?: (id: string) => void
 }) {
@@ -503,6 +530,7 @@ function EmailDetail({
                         starred={email.starred}
                         onToggleRead={onToggleRead ? () => onToggleRead(email.id) : undefined}
                         onArchive={onArchive ? () => onArchive(email.id) : undefined}
+                        onSpam={onSpam ? () => onSpam(email.id) : undefined}
                         onDelete={onDelete ? () => onDelete(email.id) : undefined}
                         onStar={onStar ? () => onStar(email.id) : undefined}
                     />
