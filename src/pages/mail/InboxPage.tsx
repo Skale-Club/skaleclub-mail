@@ -6,6 +6,7 @@ import { LoadingState } from '../../components/mail/EmailParts'
 import { toast } from '../../components/ui/toaster'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useMailbox } from '../../hooks/useMailbox'
+import { useCompose } from '../../hooks/useCompose'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import {
     useMessages,
@@ -19,11 +20,13 @@ import {
     mapMessageToEmailItem
 } from '../../hooks/useMail'
 import { EmailHtmlViewer } from '../../components/mail/EmailHtmlViewer'
+import { EmailMessageHeader } from '../../components/mail/EmailMessageHeader'
 import { Inbox as InboxIcon, Mail, MailOpen, AlertCircle } from 'lucide-react'
 
 export default function InboxPage() {
     const isMobile = useIsMobile()
     const [, navigate] = useLocation()
+    const { openCompose } = useCompose()
     const { selectedMailbox, mailboxes, isLoading: mailboxesLoading } = useMailbox()
 
     const [selectedEmail, setSelectedEmail] = React.useState<string | null>(null)
@@ -55,6 +58,11 @@ export default function InboxPage() {
         if (!selectedEmail) return -1
         return emails.findIndex(email => email.id === selectedEmail)
     }, [emails, selectedEmail])
+
+    const selectedEmailData = React.useMemo(
+        () => emails.find((email) => email.id === selectedEmail) || null,
+        [emails, selectedEmail]
+    )
 
     const handleRefresh = async () => {
         if (selectedMailbox) {
@@ -119,6 +127,9 @@ export default function InboxPage() {
     }
 
     const handleDelete = (id: string) => {
+        if (selectedEmail === id) {
+            setSelectedEmail(null)
+        }
         if (selectedMailbox) {
             deleteMessage.mutate(id)
         }
@@ -143,6 +154,9 @@ export default function InboxPage() {
     }
 
     const handleArchive = (id: string) => {
+        if (selectedEmail === id) {
+            setSelectedEmail(null)
+        }
         if (selectedMailbox) {
             archiveMessage.mutate(id)
         }
@@ -185,6 +199,9 @@ export default function InboxPage() {
     }
 
     const handleSpam = (id: string) => {
+        if (selectedEmail === id) {
+            setSelectedEmail(null)
+        }
         if (selectedMailbox) {
             spamMessage.mutate({ messageId: id, isSpam: true })
         }
@@ -241,15 +258,15 @@ export default function InboxPage() {
     useKeyboardShortcuts({
         enabled: true,
         onNavigate: handleNavigate,
-        onReply: () => selectedEmail && navigate(`/mail/compose?reply=${selectedEmail}`),
-        onReplyAll: () => selectedEmail && navigate(`/mail/compose?reply=${selectedEmail}&replyAll=true`),
-        onForward: () => selectedEmail && navigate(`/mail/compose?forward=${selectedEmail}`),
+        onReply: () => selectedEmail && openCompose({ replyToId: selectedEmail }),
+        onReplyAll: () => selectedEmail && openCompose({ replyToId: selectedEmail, replyAll: true }),
+        onForward: () => selectedEmail && openCompose({ forwardId: selectedEmail }),
         onArchive: handleArchiveSelected,
         onDelete: handleDeleteSelected,
         onStar: handleStarSelected,
         onMarkRead: handleMarkReadSelected,
         onRefresh: handleRefresh,
-        onCompose: () => navigate('/mail/compose'),
+        onCompose: () => openCompose(),
         onSelect: handleToggleSelect,
         onSelectAll: () => setSelectedEmails(new Set(emails.map(email => email.id))),
         onDeselectAll: () => setSelectedEmails(new Set()),
@@ -348,10 +365,14 @@ export default function InboxPage() {
 
                 {!isMobile && (
                     <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col bg-muted/30">
-                        {selectedEmail ? (
+                        {selectedEmailData ? (
                             <EmailDetail
-                                email={emails.find(email => email.id === selectedEmail)!}
+                                email={selectedEmailData}
                                 onToggleRead={handleToggleRead}
+                                onArchive={handleArchive}
+                                onSpam={handleSpam}
+                                onDelete={handleDelete}
+                                onStar={handleStar}
                             />
                         ) : (
                             <div className="flex-1 flex items-center justify-center text-muted-foreground">
@@ -371,26 +392,41 @@ export default function InboxPage() {
     )
 }
 
-function EmailDetail({ email, onToggleRead }: { email: EmailItem; onToggleRead?: (id: string) => void }) {
+function EmailDetail({
+    email,
+    onToggleRead,
+    onArchive,
+    onSpam,
+    onDelete,
+    onStar,
+}: {
+    email: EmailItem
+    onToggleRead?: (id: string) => void
+    onArchive?: (id: string) => void
+    onSpam?: (id: string) => void
+    onDelete?: (id: string) => void
+    onStar?: (id: string) => void
+}) {
     const { data: messageData } = useMessage(email.id)
+    const { openCompose } = useCompose()
     const fullMessage = messageData?.message
 
     return (
         <div className="flex-1 overflow-y-auto">
             <div className="p-4">
                 <div className="max-w-3xl mx-auto">
-                    <div className="flex items-center gap-3 py-2 border-b border-border mb-3">
-                        <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium text-xs flex-shrink-0">
-                            {email.from.name?.[0]?.toUpperCase() || email.from.email?.[0]?.toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2">
-                                <p className="text-sm font-semibold text-foreground truncate">{email.from.name || email.from.email}</p>
-                                <p className="text-xs text-muted-foreground flex-shrink-0">{email.date.toLocaleString()}</p>
-                            </div>
-                            <p className="text-xs text-muted-foreground truncate">To: {email.to.map(t => t.name || t.email).join(', ')}</p>
-                        </div>
-                    </div>
+                    <EmailMessageHeader
+                        from={email.from}
+                        to={email.to}
+                        date={email.date}
+                        read={email.read}
+                        starred={email.starred}
+                        onToggleRead={onToggleRead ? () => onToggleRead(email.id) : undefined}
+                        onArchive={onArchive ? () => onArchive(email.id) : undefined}
+                        onSpam={onSpam ? () => onSpam(email.id) : undefined}
+                        onDelete={onDelete ? () => onDelete(email.id) : undefined}
+                        onStar={onStar ? () => onStar(email.id) : undefined}
+                    />
                     <h2 className="text-sm font-bold text-foreground mb-3">
                         {email.subject}
                     </h2>
@@ -417,24 +453,24 @@ function EmailDetail({ email, onToggleRead }: { email: EmailItem; onToggleRead?:
 
                     <div className="mt-8 pt-6 border-t border-border">
                         <div className="flex items-center gap-3">
-                            <Link
-                                href={`/mail/compose?reply=${email.id}`}
+                            <button
+                                onClick={() => openCompose({ replyToId: email.id })}
                                 className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-sm font-medium transition-colors"
                             >
                                 Reply
-                            </Link>
-                            <Link
-                                href={`/mail/compose?reply=${email.id}&replyAll=true`}
+                            </button>
+                            <button
+                                onClick={() => openCompose({ replyToId: email.id, replyAll: true })}
                                 className="inline-flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-lg text-sm font-medium transition-colors"
                             >
                                 Reply All
-                            </Link>
-                            <Link
-                                href={`/mail/compose?forward=${email.id}`}
+                            </button>
+                            <button
+                                onClick={() => openCompose({ forwardId: email.id })}
                                 className="inline-flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-lg text-sm font-medium transition-colors"
                             >
                                 Forward
-                            </Link>
+                            </button>
                             {onToggleRead && (
                                 <button
                                     onClick={() => onToggleRead(email.id)}

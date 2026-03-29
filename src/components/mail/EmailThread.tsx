@@ -1,5 +1,4 @@
 import React from 'react'
-import { Link } from 'wouter'
 import { ThreadMessage, EmailThread, getThreadParticipants } from '../../lib/email-threading'
 import { EmailHtmlViewer } from './EmailHtmlViewer'
 import { getAvatarColor, getInitials } from '../../lib/utils'
@@ -124,13 +123,13 @@ export function EmailThreadView({ thread, onReply, onReplyAll, onForward, onStar
                     </div>
 
                     <div className="mt-8 pt-6 border-t border-border">
-                        <Link
-                            href={`/mail/compose?reply=${thread.messages[thread.messages.length - 1].id}`}
+                        <button
+                            onClick={() => onReply?.(thread.messages[thread.messages.length - 1].id)}
                             className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors"
                         >
                             <Reply className="w-4 h-4" />
                             Reply to thread
-                        </Link>
+                        </button>
                     </div>
                 </div>
             </div>

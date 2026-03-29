@@ -5,14 +5,17 @@ import { EmailList, EmailItem, EmailToolbar } from '../../components/mail/EmailL
 import { LoadingState } from '../../components/mail/EmailParts'
 import { toast } from '../../components/ui/toaster'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { useCompose } from '../../hooks/useCompose'
 import { useMailbox } from '../../hooks/useMailbox'
-import { useMessages, useMessage, useDeleteMessage, useBatchUpdate, useSyncMailbox, mapMessageToEmailItem } from '../../hooks/useMail'
+import { useMessages, useMessage, useUpdateMessage, useDeleteMessage, useArchiveMessage, useBatchUpdate, useSyncMailbox, mapMessageToEmailItem } from '../../hooks/useMail'
 import { EmailHtmlViewer } from '../../components/mail/EmailHtmlViewer'
+import { EmailMessageHeader } from '../../components/mail/EmailMessageHeader'
 import { FileText } from 'lucide-react'
 
 export default function DraftsPage() {
     const isMobile = useIsMobile()
     const [, setLocation] = useLocation()
+    const { openCompose } = useCompose()
     const { selectedMailbox, mailboxes, isLoading: mailboxesLoading } = useMailbox()
 
     const [selectedEmail, setSelectedEmail] = React.useState<string | null>(null)
@@ -20,7 +23,9 @@ export default function DraftsPage() {
     const [filter, setFilter] = React.useState<'all' | 'unread' | 'starred' | 'attachments'>('all')
 
     const { data, isLoading, isFetching, refetch } = useMessages('drafts', 1, 200)
+    const updateMessage = useUpdateMessage()
     const deleteMessage = useDeleteMessage()
+    const archiveMessage = useArchiveMessage()
     const batchUpdate = useBatchUpdate()
     const syncMailbox = useSyncMailbox()
 
@@ -33,6 +38,11 @@ export default function DraftsPage() {
         if (filter === 'attachments') filtered = base.filter(e => e.hasAttachments)
         return { emails: filtered, unreadCount: unread }
     }, [data, filter])
+
+    const selectedEmailData = React.useMemo(
+        () => emails.find((email) => email.id === selectedEmail) || null,
+        [emails, selectedEmail]
+    )
 
     const handleRefresh = async () => {
         if (selectedMailbox) {
@@ -52,10 +62,45 @@ export default function DraftsPage() {
     }
 
     const handleDelete = (id: string) => {
+        if (selectedEmail === id) {
+            setSelectedEmail(null)
+        }
         if (selectedMailbox) {
             deleteMessage.mutate(id)
         }
         toast({ title: 'Draft deleted', variant: 'success' })
+    }
+
+    const handleStar = (id: string) => {
+        const email = emails.find(e => e.id === id)
+        if (selectedMailbox) {
+            updateMessage.mutate({ messageId: id, data: { starred: !email?.starred } })
+        }
+        toast({
+            title: email?.starred ? 'Removed from starred' : 'Added to starred',
+            variant: 'success',
+        })
+    }
+
+    const handleToggleRead = (id: string) => {
+        const email = emails.find(e => e.id === id)
+        if (!email || !selectedMailbox) return
+
+        updateMessage.mutate({ messageId: id, data: { read: !email.read } })
+        toast({
+            title: email.read ? 'Marked as unread' : 'Marked as read',
+            variant: 'success',
+        })
+    }
+
+    const handleArchive = (id: string) => {
+        if (selectedEmail === id) {
+            setSelectedEmail(null)
+        }
+        if (selectedMailbox) {
+            archiveMessage.mutate(id)
+        }
+        toast({ title: 'Draft archived', variant: 'success' })
     }
 
     const handleBulkDelete = () => {
@@ -130,7 +175,9 @@ export default function DraftsPage() {
                         <EmailList
                             emails={emails}
                             selectedId={selectedEmail || undefined}
+                            selectedEmails={selectedEmails}
                             onSelect={handleSelectEmail}
+                            onSelectMultiple={(ids) => setSelectedEmails(new Set(ids))}
                             onDelete={handleDelete}
                             emptyMessage="No drafts"
                         />
@@ -139,8 +186,14 @@ export default function DraftsPage() {
 
                 {!isMobile && (
                     <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col bg-muted/30">
-                        {selectedEmail ? (
-                            <EmailDetail email={emails.find(e => e.id === selectedEmail)!} />
+                        {selectedEmailData ? (
+                            <EmailDetail
+                                email={selectedEmailData}
+                                onToggleRead={handleToggleRead}
+                                onArchive={handleArchive}
+                                onDelete={handleDelete}
+                                onStar={handleStar}
+                            />
                         ) : (
                             <div className="flex-1 flex items-center justify-center text-muted-foreground">
                                 <div className="text-center">
@@ -149,12 +202,12 @@ export default function DraftsPage() {
                                     </div>
                                     <p className="text-lg font-medium text-foreground">Select a draft to edit</p>
                                     <p className="text-sm mt-1">Click on a draft to continue editing</p>
-                                    <Link
-                                        href="/mail/compose"
+                                    <button
+                                        onClick={() => openCompose()}
                                         className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors"
                                     >
                                         Compose new email
-                                    </Link>
+                                    </button>
                                 </div>
                             </div>
                         )}
@@ -165,26 +218,38 @@ export default function DraftsPage() {
     )
 }
 
-function EmailDetail({ email }: { email: EmailItem }) {
+function EmailDetail({
+    email,
+    onToggleRead,
+    onArchive,
+    onDelete,
+    onStar,
+}: {
+    email: EmailItem
+    onToggleRead?: (id: string) => void
+    onArchive?: (id: string) => void
+    onDelete?: (id: string) => void
+    onStar?: (id: string) => void
+}) {
     const { data: messageData } = useMessage(email.id)
+    const { openCompose } = useCompose()
     const fullMessage = messageData?.message
 
     return (
         <div className="flex-1 overflow-y-auto">
             <div className="p-4">
                 <div className="max-w-3xl mx-auto">
-                    <div className="flex items-center gap-3 py-2 border-b border-border mb-3">
-                        <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-medium text-xs flex-shrink-0">
-                            {email.from.name?.[0]?.toUpperCase() || email.from.email?.[0]?.toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2">
-                                <p className="text-sm font-semibold text-foreground truncate">{email.from.name}</p>
-                                <p className="text-xs text-muted-foreground flex-shrink-0">{email.date.toLocaleString()}</p>
-                            </div>
-                            <p className="text-xs text-muted-foreground truncate">To: {email.to.map(t => t.name || t.email).join(', ')}</p>
-                        </div>
-                    </div>
+                    <EmailMessageHeader
+                        from={email.from}
+                        to={email.to}
+                        date={email.date}
+                        read={email.read}
+                        starred={email.starred}
+                        onToggleRead={onToggleRead ? () => onToggleRead(email.id) : undefined}
+                        onArchive={onArchive ? () => onArchive(email.id) : undefined}
+                        onDelete={onDelete ? () => onDelete(email.id) : undefined}
+                        onStar={onStar ? () => onStar(email.id) : undefined}
+                    />
                     <h2 className="text-sm font-bold text-foreground mb-3">{email.subject || '(No subject)'}</h2>
 
                     <div className="mt-4">
@@ -195,12 +260,12 @@ function EmailDetail({ email }: { email: EmailItem }) {
                     </div>
 
                     <div className="mt-8 pt-6 border-t border-border flex items-center gap-3">
-                        <Link
-                            href={`/mail/compose?draft=${email.id}`}
+                        <button
+                            onClick={() => openCompose({ draftId: email.id })}
                             className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors"
                         >
                             Continue editing
-                        </Link>
+                        </button>
                     </div>
                 </div>
             </div>

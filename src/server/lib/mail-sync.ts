@@ -242,6 +242,7 @@ function getFolderType(remoteId: string): string {
     if (upper === 'DRAFTS' || upper.endsWith('DRAFTS')) return 'drafts'
     if (upper === 'TRASH' || upper === 'DELETED' || upper.endsWith('TRASH') || upper.endsWith('DELETED')) return 'trash'
     if (upper === 'SPAM' || upper === 'JUNK' || upper.endsWith('SPAM') || upper.endsWith('JUNK')) return 'spam'
+    if (upper === 'ARCHIVE' || upper === 'ARCHIVES' || upper === 'ALL MAIL' || upper.endsWith('ARCHIVE') || upper.endsWith('ARCHIVES') || upper.endsWith('ALL MAIL')) return 'archive'
     return 'custom'
 }
 

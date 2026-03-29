@@ -4,9 +4,11 @@ import { MailLayout } from '../../components/mail/MailLayout'
 import { EmailList, EmailItem, EmailToolbar } from '../../components/mail/EmailList'
 import { toast } from '../../components/ui/toaster'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { useCompose } from '../../hooks/useCompose'
 import { useMailbox } from '../../hooks/useMailbox'
-import { useSearchMessages, useMessage, useDeleteMessage, useArchiveMessage, useBatchUpdate, mapMessageToEmailItem } from '../../hooks/useMail'
+import { useSearchMessages, useMessage, useUpdateMessage, useDeleteMessage, useArchiveMessage, useBatchUpdate, mapMessageToEmailItem } from '../../hooks/useMail'
 import { EmailHtmlViewer } from '../../components/mail/EmailHtmlViewer'
+import { EmailMessageHeader } from '../../components/mail/EmailMessageHeader'
 import {
     Search as SearchIcon,
     Filter,
@@ -56,6 +58,7 @@ export default function SearchPage() {
     const effectiveQuery = [filters.query, filters.from && `from:${filters.from}`, filters.to && `to:${filters.to}`, filters.subject && `subject:${filters.subject}`].filter(Boolean).join(' ')
 
     const { data, isLoading, isFetching, refetch } = useSearchMessages(effectiveQuery, filters.folder || undefined)
+    const updateMessage = useUpdateMessage()
     const deleteMessage = useDeleteMessage()
     const archiveMessage = useArchiveMessage()
     const batchUpdate = useBatchUpdate()
@@ -100,6 +103,11 @@ export default function SearchPage() {
         return results
     }, [data, filters.hasAttachment, filters.dateRange])
 
+    const selectedEmailData = React.useMemo(
+        () => emails.find((email) => email.id === selectedEmail) || null,
+        [emails, selectedEmail]
+    )
+
     const activeFilterCount = [
         filters.from,
         filters.to,
@@ -141,13 +149,31 @@ export default function SearchPage() {
     }
 
     const handleStar = (id: string) => {
+        const email = emails.find(e => e.id === id)
+        if (selectedMailbox) {
+            updateMessage.mutate({ messageId: id, data: { starred: !email?.starred } })
+        }
         toast({
             title: emails.find(e => e.id === id)?.starred ? 'Removed from starred' : 'Added to starred',
             variant: 'success'
         })
     }
 
+    const handleToggleRead = (id: string) => {
+        const email = emails.find(e => e.id === id)
+        if (!email || !selectedMailbox) return
+
+        updateMessage.mutate({ messageId: id, data: { read: !email.read } })
+        toast({
+            title: email.read ? 'Marked as unread' : 'Marked as read',
+            variant: 'success',
+        })
+    }
+
     const handleDelete = (id: string) => {
+        if (selectedEmail === id) {
+            setSelectedEmail(null)
+        }
         if (selectedMailbox) {
             deleteMessage.mutate(id)
         }
@@ -160,6 +186,9 @@ export default function SearchPage() {
     }
 
     const handleArchive = (id: string) => {
+        if (selectedEmail === id) {
+            setSelectedEmail(null)
+        }
         if (selectedMailbox) {
             archiveMessage.mutate(id)
         }
@@ -419,8 +448,14 @@ export default function SearchPage() {
 
                 {!isMobile && (
                     <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col bg-muted/30">
-                        {selectedEmail ? (
-                            <EmailDetail email={emails.find(e => e.id === selectedEmail)!} />
+                        {selectedEmailData ? (
+                            <EmailDetail
+                                email={selectedEmailData}
+                                onToggleRead={handleToggleRead}
+                                onArchive={handleArchive}
+                                onDelete={handleDelete}
+                                onStar={handleStar}
+                            />
                         ) : (
                             <div className="flex-1 flex items-center justify-center text-muted-foreground">
                                 <div className="text-center">
@@ -439,26 +474,38 @@ export default function SearchPage() {
     )
 }
 
-function EmailDetail({ email }: { email: EmailItem }) {
+function EmailDetail({
+    email,
+    onToggleRead,
+    onArchive,
+    onDelete,
+    onStar,
+}: {
+    email: EmailItem
+    onToggleRead?: (id: string) => void
+    onArchive?: (id: string) => void
+    onDelete?: (id: string) => void
+    onStar?: (id: string) => void
+}) {
     const { data: messageData } = useMessage(email.id)
+    const { openCompose } = useCompose()
     const fullMessage = messageData?.message
 
     return (
         <div className="flex-1 overflow-y-auto">
             <div className="p-4">
                 <div className="max-w-3xl mx-auto">
-                    <div className="flex items-center gap-3 py-2 border-b border-border mb-3">
-                        <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium text-xs flex-shrink-0">
-                            {email.from.name?.[0]?.toUpperCase() || email.from.email?.[0]?.toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2">
-                                <p className="text-sm font-semibold text-foreground truncate">{email.from.name}</p>
-                                <p className="text-xs text-muted-foreground flex-shrink-0">{email.date.toLocaleString()}</p>
-                            </div>
-                            <p className="text-xs text-muted-foreground truncate">To: {email.to.map(t => t.name || t.email).join(', ')}</p>
-                        </div>
-                    </div>
+                    <EmailMessageHeader
+                        from={email.from}
+                        to={email.to}
+                        date={email.date}
+                        read={email.read}
+                        starred={email.starred}
+                        onToggleRead={onToggleRead ? () => onToggleRead(email.id) : undefined}
+                        onArchive={onArchive ? () => onArchive(email.id) : undefined}
+                        onDelete={onDelete ? () => onDelete(email.id) : undefined}
+                        onStar={onStar ? () => onStar(email.id) : undefined}
+                    />
                     <h2 className="text-sm font-bold text-foreground mb-3">{email.subject}</h2>
 
                     <div className="mt-4">
@@ -469,18 +516,18 @@ function EmailDetail({ email }: { email: EmailItem }) {
                     </div>
 
                     <div className="mt-8 pt-6 border-t border-border flex items-center gap-3">
-                        <Link
-                            href={`/mail/compose?reply=${email.id}`}
+                        <button
+                            onClick={() => openCompose({ replyToId: email.id })}
                             className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors"
                         >
                             Reply
-                        </Link>
-                        <Link
-                            href={`/mail/compose?forward=${email.id}`}
+                        </button>
+                        <button
+                            onClick={() => openCompose({ forwardId: email.id })}
                             className="inline-flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-lg font-medium transition-colors"
                         >
                             Forward
-                        </Link>
+                        </button>
                     </div>
                 </div>
             </div>

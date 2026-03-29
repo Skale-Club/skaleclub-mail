@@ -1,13 +1,119 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { eq, and, desc, inArray, sql, ilike, or } from 'drizzle-orm'
+import Imap from 'imap'
 import { db } from '../../../db'
 import { mailMessages, mailFolders, mailboxes } from '../../../db/schema'
 import { checkUserMailboxAccess } from './mailboxes'
 import { mailMessageToListItem } from '../../lib/mail'
 import { runFiltersOnMessage } from './filters'
+import { decryptSecret } from '../../lib/crypto'
 
 const router = Router()
+
+function isArchiveFolderIdentifier(value: string | null | undefined) {
+    if (!value) return false
+    const upper = value.toUpperCase()
+    return upper === 'ARCHIVE' || upper === 'ARCHIVES' || upper === 'ALL MAIL' || upper.endsWith('ARCHIVE') || upper.endsWith('ARCHIVES') || upper.endsWith('ALL MAIL')
+}
+
+async function resolveArchiveFolder(mailboxId: string, allowCreate: boolean) {
+    const folders = await db.query.mailFolders.findMany({
+        where: eq(mailFolders.mailboxId, mailboxId),
+    })
+
+    const archiveFolder =
+        folders.find((folder) => folder.type === 'archive') ||
+        folders.find((folder) => isArchiveFolderIdentifier(folder.remoteId) || isArchiveFolderIdentifier(folder.name))
+
+    if (archiveFolder) {
+        if (archiveFolder.type !== 'archive') {
+            const [updatedFolder] = await db.update(mailFolders)
+                .set({ type: 'archive', updatedAt: new Date() })
+                .where(eq(mailFolders.id, archiveFolder.id))
+                .returning()
+
+            return updatedFolder
+        }
+
+        return archiveFolder
+    }
+
+    if (!allowCreate) {
+        return null
+    }
+
+    const [createdFolder] = await db.insert(mailFolders).values({
+        mailboxId,
+        remoteId: 'Archive',
+        name: 'Archive',
+        type: 'archive',
+    }).returning()
+
+    return createdFolder
+}
+
+async function moveRemoteMessage(mailbox: Awaited<ReturnType<typeof checkUserMailboxAccess>>, sourceRemoteId: string, targetRemoteId: string, remoteUid: number) {
+    if (!mailbox || mailbox.isNative || !mailbox.imapPasswordEncrypted) {
+        return
+    }
+
+    if (sourceRemoteId === targetRemoteId) {
+        return
+    }
+
+    await new Promise<void>((resolve, reject) => {
+        const imap = new Imap({
+            user: mailbox.imapUsername,
+            password: decryptSecret(mailbox.imapPasswordEncrypted),
+            host: mailbox.imapHost,
+            port: mailbox.imapPort,
+            tls: mailbox.imapSecure,
+            tlsOptions: { rejectUnauthorized: process.env.NODE_ENV === 'production' },
+        } as Imap.Config)
+
+        let settled = false
+
+        const finish = (fn: () => void) => {
+            if (settled) return
+            settled = true
+            fn()
+        }
+
+        imap.once('ready', () => {
+            imap.openBox(sourceRemoteId, false, (openErr) => {
+                if (openErr) {
+                    finish(() => {
+                        imap.end()
+                        reject(openErr)
+                    })
+                    return
+                }
+
+                imap.move(String(remoteUid), targetRemoteId, (moveErr) => {
+                    if (moveErr) {
+                        finish(() => {
+                            imap.end()
+                            reject(moveErr)
+                        })
+                        return
+                    }
+
+                    finish(() => {
+                        imap.end()
+                        resolve()
+                    })
+                })
+            })
+        })
+
+        imap.once('error', (error) => {
+            finish(() => reject(error))
+        })
+
+        imap.connect()
+    })
+}
 
 router.get('/:mailboxId/folders', async (req: Request, res: Response) => {
     try {
@@ -247,18 +353,38 @@ router.post('/:mailboxId/messages/:messageId/archive', async (req: Request, res:
             return res.status(404).json({ error: 'Mailbox not found' })
         }
 
-        const archiveFolder = await db.query.mailFolders.findFirst({
+        const message = await db.query.mailMessages.findFirst({
             where: and(
-                eq(mailFolders.mailboxId, mailboxId),
-                eq(mailFolders.remoteId, 'Archive')
+                eq(mailMessages.id, messageId),
+                eq(mailMessages.mailboxId, mailboxId)
             ),
         })
 
-        if (archiveFolder) {
-            await db.update(mailMessages)
-                .set({ folderId: archiveFolder.id, updatedAt: new Date() })
-                .where(and(eq(mailMessages.id, messageId), eq(mailMessages.mailboxId, mailboxId)))
+        if (!message) {
+            return res.status(404).json({ error: 'Message not found' })
         }
+
+        const currentFolder = await db.query.mailFolders.findFirst({
+            where: eq(mailFolders.id, message.folderId),
+        })
+
+        if (!currentFolder) {
+            return res.status(400).json({ error: 'Current folder not found' })
+        }
+
+        const archiveFolder = await resolveArchiveFolder(mailboxId, mailbox.isNative)
+
+        if (!archiveFolder) {
+            return res.status(400).json({ error: 'Archive folder is not available for this mailbox' })
+        }
+
+        if (!mailbox.isNative && message.remoteUid && currentFolder.remoteId && archiveFolder.remoteId) {
+            await moveRemoteMessage(mailbox, currentFolder.remoteId, archiveFolder.remoteId, message.remoteUid)
+        }
+
+        await db.update(mailMessages)
+            .set({ folderId: archiveFolder.id, updatedAt: new Date() })
+            .where(and(eq(mailMessages.id, messageId), eq(mailMessages.mailboxId, mailboxId)))
 
         res.json({ success: true })
     } catch (error) {
@@ -376,14 +502,39 @@ router.post('/:mailboxId/messages/batch', async (req: Request, res: Response) =>
 
         switch (data.action) {
             case 'archive':
-                const archiveFolder = await db.query.mailFolders.findFirst({
-                    where: and(
-                        eq(mailFolders.mailboxId, mailboxId),
-                        eq(mailFolders.remoteId, 'Archive')
-                    ),
-                })
-                if (archiveFolder) {
-                    updateData.folderId = archiveFolder.id
+                const archiveFolder = await resolveArchiveFolder(mailboxId, mailbox.isNative)
+                if (!archiveFolder) {
+                    return res.status(400).json({ error: 'Archive folder is not available for this mailbox' })
+                }
+
+                updateData.folderId = archiveFolder.id
+
+                if (!mailbox.isNative) {
+                    const messages = await db.query.mailMessages.findMany({
+                        where: and(
+                            inArray(mailMessages.id, data.messageIds),
+                            eq(mailMessages.mailboxId, mailboxId)
+                        ),
+                    })
+
+                    const folderIds = [...new Set(messages.map((message) => message.folderId))]
+                    const folders = await db.query.mailFolders.findMany({
+                        where: and(
+                            eq(mailFolders.mailboxId, mailboxId),
+                            inArray(mailFolders.id, folderIds)
+                        ),
+                    })
+
+                    const foldersById = new Map(folders.map((folder) => [folder.id, folder]))
+
+                    for (const message of messages) {
+                        const sourceFolder = foldersById.get(message.folderId)
+                        if (!message.remoteUid || !sourceFolder?.remoteId || !archiveFolder.remoteId) {
+                            continue
+                        }
+
+                        await moveRemoteMessage(mailbox, sourceFolder.remoteId, archiveFolder.remoteId, message.remoteUid)
+                    }
                 }
                 break
             case 'spam':

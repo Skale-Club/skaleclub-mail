@@ -3,8 +3,10 @@ import { Link, useParams, useLocation } from 'wouter'
 import { MailLayout } from '../../components/mail/MailLayout'
 import { toast } from '../../components/ui/toaster'
 import { useMailbox } from '../../hooks/useMailbox'
+import { useCompose } from '../../hooks/useCompose'
 import { useMessage, useUpdateMessage, useDeleteMessage, useArchiveMessage, mapMessageToEmailItem } from '../../hooks/useMail'
 import { EmailHtmlViewer } from '../../components/mail/EmailHtmlViewer'
+import { EmailMessageHeader } from '../../components/mail/EmailMessageHeader'
 import { EmailThreadView } from '../../components/mail/EmailThread'
 import { EmailThread, ThreadMessage } from '../../lib/email-threading'
 import {
@@ -152,6 +154,7 @@ const mockThreads: Record<string, EmailThread> = {
 export default function EmailDetailPage() {
     const params = useParams<{ folder: string; id: string }>()
     const [, setLocation] = useLocation()
+    const { openCompose } = useCompose()
     const { selectedMailbox, mailboxes } = useMailbox()
 
     const [menuOpen, setMenuOpen] = React.useState(false)
@@ -295,15 +298,15 @@ export default function EmailDetailPage() {
     }
 
     const handleReply = (messageId: string) => {
-        setLocation(`/mail/compose?reply=${messageId}`)
+        openCompose({ replyToId: messageId })
     }
 
     const handleReplyAll = (messageId: string) => {
-        setLocation(`/mail/compose?reply=${messageId}&replyAll=true`)
+        openCompose({ replyToId: messageId, replyAll: true })
     }
 
     const handleForward = (messageId: string) => {
-        setLocation(`/mail/compose?forward=${messageId}`)
+        openCompose({ forwardId: messageId })
     }
 
     if (mailboxes.length === 0) {
@@ -529,6 +532,10 @@ export default function EmailDetailPage() {
                         onReply={() => handleReply(thread.messages[thread.messages.length - 1].id)}
                         onReplyAll={() => handleReplyAll(thread.messages[thread.messages.length - 1].id)}
                         onForward={() => handleForward(thread.messages[thread.messages.length - 1].id)}
+                        onToggleRead={() => handleToggleRead(thread.messages[thread.messages.length - 1].id)}
+                        onArchive={handleArchive}
+                        onDelete={handleDelete}
+                        onStar={handleStar}
                     />
                 )}
             </div>
@@ -540,12 +547,20 @@ function SingleEmailView({
     message,
     onReply,
     onReplyAll,
-    onForward
+    onForward,
+    onToggleRead,
+    onArchive,
+    onDelete,
+    onStar,
 }: {
     message: ThreadMessage
     onReply: () => void
     onReplyAll: () => void
     onForward: () => void
+    onToggleRead: () => void
+    onArchive: () => void
+    onDelete: () => void
+    onStar: () => void
 }) {
     return (
         <div className="flex-1 overflow-y-auto">
@@ -555,31 +570,18 @@ function SingleEmailView({
                         {message.subject}
                     </h1>
 
-                    <div className="flex items-start gap-3 sm:gap-4 mb-6">
-                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-semibold text-base sm:text-lg flex-shrink-0">
-                            {message.from.name?.[0]?.toUpperCase() || message.from.email[0].toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                                <div>
-                                    <p className="font-semibold text-foreground">
-                                        {message.from.name || message.from.email}
-                                    </p>
-                                    <p className="text-sm text-muted-foreground">
-                                        {message.from.email}
-                                    </p>
-                                </div>
-                                <p className="text-sm text-muted-foreground">
-                                    {message.date.toLocaleString()}
-                                </p>
-                            </div>
-                            <div className="mt-1">
-                                <p className="text-sm text-muted-foreground">
-                                    To: {message.to.map(t => t.name || t.email).join(', ')}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
+                    <EmailMessageHeader
+                        from={message.from}
+                        to={message.to}
+                        date={message.date}
+                        className="mb-6"
+                        read={message.read}
+                        starred={message.starred}
+                        onToggleRead={onToggleRead}
+                        onArchive={onArchive}
+                        onDelete={onDelete}
+                        onStar={onStar}
+                    />
 
                     <div className="mt-4">
                         <EmailHtmlViewer

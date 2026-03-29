@@ -15,17 +15,11 @@ interface RichTextEditorProps {
 const modules = {
     toolbar: [
         ['bold', 'italic', 'underline', 'strike'],
-        ['|'],
         [{ header: [1, 2, 3, false] }],
-        ['|'],
         [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }],
-        ['|'],
         [{ align: [] }],
-        ['|'],
         [{ color: [] }, { background: [] }],
-        ['|'],
         ['link', 'image'],
-        ['|'],
         ['clean']
     ]
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { RefreshCw, Save, Server, Type } from 'lucide-react'
+import { RefreshCw, Save, Type } from 'lucide-react'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
 import { Input } from '../../components/ui/input'
@@ -8,9 +8,16 @@ import { Label } from '../../components/ui/label'
 import { apiFetch, getAccessToken } from './helpers'
 import { defaultBranding, type BrandingSettings } from '../../lib/branding'
 
+type BrandingFormState = Pick<BrandingSettings, 'companyName' | 'applicationName' | 'logoUrl' | 'faviconUrl'>
+
 export default function BrandingPage() {
     const queryClient = useQueryClient()
-    const [form, setForm] = useState<BrandingSettings>(defaultBranding)
+    const [form, setForm] = useState<BrandingFormState>({
+        companyName: defaultBranding.companyName,
+        applicationName: defaultBranding.applicationName,
+        logoUrl: defaultBranding.logoUrl,
+        faviconUrl: defaultBranding.faviconUrl,
+    })
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
     const [isUploadingLogo, setIsUploadingLogo] = useState(false)
@@ -32,7 +39,6 @@ export default function BrandingPage() {
                 applicationName: data.applicationName || defaultBranding.applicationName,
                 logoUrl: data.logoUrl || defaultBranding.logoUrl,
                 faviconUrl: data.faviconUrl || defaultBranding.faviconUrl,
-                mailHost: data.mailHost || defaultBranding.mailHost,
             })
         } catch (error) {
             console.error('Error fetching branding settings:', error)
@@ -111,11 +117,15 @@ export default function BrandingPage() {
                 body: JSON.stringify({
                     companyName: form.companyName,
                     applicationName: form.applicationName,
-                    mailHost: form.mailHost,
                 }),
             })
 
-            setForm(data)
+            setForm({
+                companyName: data.companyName || defaultBranding.companyName,
+                applicationName: data.applicationName || defaultBranding.applicationName,
+                logoUrl: data.logoUrl || defaultBranding.logoUrl,
+                faviconUrl: data.faviconUrl || defaultBranding.faviconUrl,
+            })
             await queryClient.invalidateQueries({ queryKey: ['system-branding'] })
             window.alert('Branding updated successfully.')
         } catch (error) {
@@ -125,7 +135,7 @@ export default function BrandingPage() {
         }
     }
 
-    function updateField(key: 'companyName' | 'applicationName' | 'mailHost', value: string) {
+    function updateField(key: 'companyName' | 'applicationName', value: string) {
         setForm((current) => ({
             ...current,
             [key]: value,
@@ -133,7 +143,12 @@ export default function BrandingPage() {
     }
 
     function resetToDefaults() {
-        setForm(defaultBranding)
+        setForm({
+            companyName: defaultBranding.companyName,
+            applicationName: defaultBranding.applicationName,
+            logoUrl: defaultBranding.logoUrl,
+            faviconUrl: defaultBranding.faviconUrl,
+        })
     }
 
     return (
@@ -214,34 +229,6 @@ export default function BrandingPage() {
                     </CardContent>
                 </Card>
             </div>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>Mail server</CardTitle>
-                    <CardDescription>
-                        Hostname users should point their MX and Return-Path records to. Used during domain verification.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-2">
-                        <Label htmlFor="mailHost">MX / Return-Path hostname</Label>
-                        <div className="relative">
-                            <Server className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                                id="mailHost"
-                                value={form.mailHost}
-                                onChange={(event) => updateField('mailHost', event.target.value)}
-                                className="pl-10"
-                                placeholder="mx.yourplatform.com"
-                                disabled={isLoading || isSaving}
-                            />
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                            This value is used in MX record validation (<code>mx.yourplatform.com</code>), Return-Path CNAME target, and SPF include.
-                        </p>
-                    </div>
-                </CardContent>
-            </Card>
 
             <div className="grid gap-6 lg:grid-cols-2">
                 <Card>

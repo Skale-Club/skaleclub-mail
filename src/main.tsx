@@ -1,7 +1,7 @@
 import React, { Suspense } from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { Route, Switch, useLocation } from 'wouter'
+import { Route, Switch, useLocation, useSearch } from 'wouter'
 import { Toaster } from './components/ui/toaster'
 import { ThemeProvider } from './components/theme-provider'
 import { AuthProvider, useAuth } from './hooks/useAuth'
@@ -43,7 +43,6 @@ const StarredPage = React.lazy(() => import('./pages/mail/StarredPage'))
 const SpamPage = React.lazy(() => import('./pages/mail/SpamPage'))
 const ArchivePage = React.lazy(() => import('./pages/mail/ArchivePage'))
 const ContactsPage = React.lazy(() => import('./pages/mail/ContactsPage'))
-const ComposePage = React.lazy(() => import('./pages/mail/ComposePage'))
 const MailSettingsPage = React.lazy(() => import('./pages/mail/SettingsPage'))
 const SearchPage = React.lazy(() => import('./pages/mail/SearchPage'))
 const EmailDetailPage = React.lazy(() => import('./pages/mail/EmailDetailPage'))
@@ -232,6 +231,27 @@ function PageSuspense({ children }: { children: React.ReactNode }) {
     return <Suspense fallback={<Spinner />}>{children}</Suspense>
 }
 
+function ComposeRouteBridge() {
+    const search = useSearch()
+    const [, setLocation] = useLocation()
+    const { openCompose } = useCompose()
+
+    React.useEffect(() => {
+        const params = new URLSearchParams(search)
+
+        openCompose({
+            replyToId: params.get('reply') || undefined,
+            forwardId: params.get('forward') || undefined,
+            draftId: params.get('draft') || undefined,
+            replyAll: params.get('replyAll') === 'true',
+        })
+
+        setLocation('/mail/inbox')
+    }, [openCompose, search, setLocation])
+
+    return null
+}
+
 function MailRoutes() {
     return (
         <MailLayout>
@@ -264,7 +284,7 @@ function MailRoutes() {
                     <PageSuspense><EmailDetailPage /></PageSuspense>
                 </Route>
                 <Route path="/mail/compose">
-                    <PageSuspense><ComposePage /></PageSuspense>
+                    <ComposeRouteBridge />
                 </Route>
                 <Route path="/mail/settings">
                     <PageSuspense><MailSettingsPage /></PageSuspense>

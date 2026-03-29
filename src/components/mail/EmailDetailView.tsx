@@ -1,58 +1,25 @@
 import React from 'react'
-import { Link } from 'wouter'
 import { EmailItem } from './EmailList'
 import { EmailHtmlViewer } from './EmailHtmlViewer'
 import { useMessage } from '../../hooks/useMail'
-import {
-    Star,
-    Mail,
-    MailOpen,
-    Reply,
-    ReplyAll,
-    Forward,
-    Paperclip,
-    Archive,
-    Trash2
-} from 'lucide-react'
-import { getAvatarColor, getInitials } from '../../lib/utils'
+import { useCompose } from '../../hooks/useCompose'
+import { Reply, ReplyAll, Forward, Paperclip } from 'lucide-react'
+import { EmailMessageHeader } from './EmailMessageHeader'
 
 interface EmailDetailViewProps {
     email: EmailItem
     onStar?: (id: string) => void
     onDelete?: (id: string) => void
     onArchive?: (id: string) => void
+    onSpam?: (id: string) => void
+    isSpam?: boolean
     onToggleRead?: (id: string) => void
 }
 
-export function EmailDetailView({ email, onStar, onDelete, onArchive, onToggleRead }: EmailDetailViewProps) {
+export function EmailDetailView({ email, onStar, onDelete, onArchive, onSpam, isSpam, onToggleRead }: EmailDetailViewProps) {
+    const { openCompose } = useCompose()
     const { data: messageData } = useMessage(email.id)
     const fullMessage = messageData?.message
-    const avatarColor = getAvatarColor(email.from.email)
-    const initials = getInitials(email.from.name || email.from.email)
-
-    const handleStar = (e: React.MouseEvent) => {
-        e.preventDefault()
-        e.stopPropagation()
-        onStar?.(email.id)
-    }
-
-    const handleDelete = (e: React.MouseEvent) => {
-        e.preventDefault()
-        e.stopPropagation()
-        onDelete?.(email.id)
-    }
-
-    const handleArchive = (e: React.MouseEvent) => {
-        e.preventDefault()
-        e.stopPropagation()
-        onArchive?.(email.id)
-    }
-
-    const handleToggleRead = (e: React.MouseEvent) => {
-        e.preventDefault()
-        e.stopPropagation()
-        onToggleRead?.(email.id)
-    }
 
     return (
         <div className="flex-1 overflow-y-auto">
@@ -62,66 +29,19 @@ export function EmailDetailView({ email, onStar, onDelete, onArchive, onToggleRe
                         {email.subject}
                     </h2>
 
-                    <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full ${avatarColor} flex items-center justify-center text-white font-medium text-xs flex-shrink-0`}>
-                            {initials}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2 min-w-0">
-                                    <p className="font-semibold text-foreground text-sm truncate">
-                                        {email.from.name}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground truncate hidden sm:block">
-                                        {email.from.email}
-                                    </p>
-                                </div>
-                                <p className="text-xs text-muted-foreground flex-shrink-0">
-                                    {email.date.toLocaleString()}
-                                </p>
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                                To: {email.to.map(t => t.name || t.email).join(', ')}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 mt-3">
-                        <button
-                            onClick={handleStar}
-                            className={`p-2 rounded-full transition-colors ${
-                                email.starred
-                                    ? 'text-yellow-500 hover:text-yellow-600'
-                                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                            }`}
-                            title={email.starred ? 'Remove from starred' : 'Add to starred'}
-                        >
-                            <Star className={`w-4 h-4 ${email.starred ? 'fill-current' : ''}`} />
-                        </button>
-                        {onToggleRead && (
-                            <button
-                                onClick={handleToggleRead}
-                                className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                                title={email.read ? 'Mark as unread' : 'Mark as read'}
-                            >
-                                {email.read ? <Mail className="w-4 h-4" /> : <MailOpen className="w-4 h-4" />}
-                            </button>
-                        )}
-                        <button
-                            onClick={handleArchive}
-                            className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                            title="Archive"
-                        >
-                            <Archive className="w-4 h-4" />
-                        </button>
-                        <button
-                            onClick={handleDelete}
-                            className="p-2 rounded-full text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors"
-                            title="Delete"
-                        >
-                            <Trash2 className="w-4 h-4" />
-                        </button>
-                    </div>
+                    <EmailMessageHeader
+                        from={email.from}
+                        to={email.to}
+                        date={email.date}
+                        read={email.read}
+                        starred={email.starred}
+                        isSpam={isSpam}
+                        onToggleRead={onToggleRead ? () => onToggleRead(email.id) : undefined}
+                        onArchive={onArchive ? () => onArchive(email.id) : undefined}
+                        onSpam={onSpam ? () => onSpam(email.id) : undefined}
+                        onDelete={onDelete ? () => onDelete(email.id) : undefined}
+                        onStar={onStar ? () => onStar(email.id) : undefined}
+                    />
 
                     {email.labels && email.labels.length > 0 && (
                         <div className="flex items-center gap-2 mt-4 mb-6">
@@ -160,27 +80,27 @@ export function EmailDetailView({ email, onStar, onDelete, onArchive, onToggleRe
 
                     <div className="mt-8 pt-6 border-t border-border">
                         <div className="flex items-center gap-3">
-                            <Link
-                                href={`/mail/compose?reply=${email.id}`}
+                            <button
+                                onClick={() => openCompose({ replyToId: email.id })}
                                 className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-sm font-medium transition-colors"
                             >
                                 <Reply className="w-4 h-4" />
                                 Reply
-                            </Link>
-                            <Link
-                                href={`/mail/compose?reply=${email.id}&replyAll=true`}
+                            </button>
+                            <button
+                                onClick={() => openCompose({ replyToId: email.id, replyAll: true })}
                                 className="inline-flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-lg text-sm font-medium transition-colors"
                             >
                                 <ReplyAll className="w-4 h-4" />
                                 Reply All
-                            </Link>
-                            <Link
-                                href={`/mail/compose?forward=${email.id}`}
+                            </button>
+                            <button
+                                onClick={() => openCompose({ forwardId: email.id })}
                                 className="inline-flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-lg text-sm font-medium transition-colors"
                             >
                                 <Forward className="w-4 h-4" />
                                 Forward
-                            </Link>
+                            </button>
                         </div>
                     </div>
                 </div>

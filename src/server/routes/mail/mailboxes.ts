@@ -160,6 +160,7 @@ router.post('/', async (req: Request, res: Response) => {
             { mailboxId: mailboxId, remoteId: 'INBOX', name: 'INBOX', type: 'inbox' },
             { mailboxId: mailboxId, remoteId: 'Sent', name: 'Sent', type: 'sent' },
             { mailboxId: mailboxId, remoteId: 'Drafts', name: 'Drafts', type: 'drafts' },
+            { mailboxId: mailboxId, remoteId: 'Archive', name: 'Archive', type: 'archive' },
             { mailboxId: mailboxId, remoteId: 'Trash', name: 'Trash', type: 'trash' },
         ])
 

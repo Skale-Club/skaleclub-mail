@@ -64,6 +64,11 @@ export default function ComposePage() {
     const [signatures, setSignatures] = React.useState<Signature[]>([])
     const [showSignatureMenu, setShowSignatureMenu] = React.useState(false)
     const [prefilled, setPrefilled] = React.useState(false)
+    const [activeDraftId, setActiveDraftId] = React.useState<string | undefined>(draftId || undefined)
+
+    React.useEffect(() => {
+        setActiveDraftId(draftId || undefined)
+    }, [draftId])
 
     React.useEffect(() => {
         if (selectedMailbox) {
@@ -180,20 +185,26 @@ export default function ComposePage() {
         }
 
         try {
-            await saveDraft.mutateAsync({
+            const result = await saveDraft.mutateAsync({
                 to: email.to ? parseEmailList(email.to) : undefined,
                 cc: email.cc ? parseEmailList(email.cc) : undefined,
                 bcc: email.bcc ? parseEmailList(email.bcc) : undefined,
                 subject: email.subject,
                 bodyText: htmlToPlainText(email.body),
                 bodyHtml: email.body,
-                draftId: draftId || undefined,
+                draftId: activeDraftId,
+                attachments,
             })
+            setActiveDraftId(result.draftId)
             setIsSaved(true)
             toast({ title: 'Draft saved', variant: 'success' })
             setTimeout(() => setIsSaved(false), 2000)
-        } catch {
-            toast({ title: 'Failed to save draft', variant: 'destructive' })
+        } catch (error) {
+            toast({
+                title: 'Failed to save draft',
+                description: error instanceof Error ? error.message : 'Unknown error',
+                variant: 'destructive'
+            })
         }
     }
 

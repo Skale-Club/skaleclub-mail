@@ -459,22 +459,19 @@ router.post('/:mailboxId/save-draft', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Mailbox not found' })
         }
 
+        const draftRecipientSchema = z.object({
+            address: z.string().trim().min(1),
+            name: z.string().trim().optional(),
+        })
+
         const schema = z.object({
-            to: z.array(z.object({
-                address: z.string().email(),
-                name: z.string().optional(),
-            })).optional(),
-            cc: z.array(z.object({
-                address: z.string().email(),
-                name: z.string().optional(),
-            })).optional(),
-            bcc: z.array(z.object({
-                address: z.string().email(),
-                name: z.string().optional(),
-            })).optional(),
+            to: z.array(draftRecipientSchema).optional(),
+            cc: z.array(draftRecipientSchema).optional(),
+            bcc: z.array(draftRecipientSchema).optional(),
             subject: z.string().optional(),
             plainBody: z.string().optional(),
             htmlBody: z.string().optional(),
+            draftId: z.string().uuid().optional(),
             attachments: z.array(z.object({
                 filename: z.string(),
                 content: z.string(),
@@ -484,7 +481,7 @@ router.post('/:mailboxId/save-draft', async (req: Request, res: Response) => {
 
         const data = schema.parse(req.body)
 
-        const draftsFolder = await db.query.mailFolders.findFirst({
+        let draftsFolder = await db.query.mailFolders.findFirst({
             where: and(
                 eq(mailFolders.mailboxId, mailboxId),
                 eq(mailFolders.remoteId, 'Drafts')
@@ -492,34 +489,81 @@ router.post('/:mailboxId/save-draft', async (req: Request, res: Response) => {
         })
 
         if (!draftsFolder) {
-            return res.status(400).json({ error: 'Drafts folder not found' })
+            const [createdDraftsFolder] = await db.insert(mailFolders).values({
+                mailboxId,
+                remoteId: 'Drafts',
+                name: 'Drafts',
+                type: 'drafts',
+                unreadCount: 0,
+                totalCount: 0,
+            }).returning()
+
+            draftsFolder = createdDraftsFolder
         }
 
-        const messageId = `<${uuidv4()}@${mailbox.email.split('@')[1] || 'mail.local'}>`
+        const normalizedTo = data.to?.map(t => ({ name: t.name || null, address: t.address.trim() })) || []
+        const normalizedCc = data.cc?.map(c => ({ name: c.name || null, address: c.address.trim() })) || []
+        const normalizedBcc = data.bcc?.map(b => ({ name: b.name || null, address: b.address.trim() })) || []
+        const normalizedAttachments = data.attachments?.map(att => ({
+            filename: att.filename,
+            contentType: att.contentType || 'application/octet-stream',
+            size: Math.ceil(att.content.length * 0.75),
+        })) || []
 
-        const [savedMessage] = await db.insert(mailMessages).values({
-            mailboxId,
-            folderId: draftsFolder.id,
-            messageId,
-            subject: data.subject || null,
-            fromAddress: mailbox.email,
-            fromName: mailbox.displayName,
-            toAddresses: data.to?.map(t => ({ name: t.name || null, address: t.address })) || [],
-            ccAddresses: data.cc?.map(c => ({ name: c.name || null, address: c.address })) || [],
-            bccAddresses: data.bcc?.map(b => ({ name: b.name || null, address: b.address })) || [],
-            plainBody: data.plainBody,
-            htmlBody: data.htmlBody,
-            headers: {},
-            hasAttachments: (data.attachments?.length || 0) > 0,
-            attachments: data.attachments?.map(att => ({
-                filename: att.filename,
-                contentType: att.contentType || 'application/octet-stream',
-                size: Math.ceil(att.content.length * 0.75),
-            })) || [],
-            isDraft: true,
-            remoteDate: new Date(),
-            receivedAt: new Date(),
-        }).returning()
+        const existingDraft = data.draftId
+            ? await db.query.mailMessages.findFirst({
+                where: and(
+                    eq(mailMessages.id, data.draftId),
+                    eq(mailMessages.mailboxId, mailboxId),
+                    eq(mailMessages.isDraft, true)
+                ),
+            })
+            : null
+
+        const messageId = existingDraft?.messageId || `<${uuidv4()}@${mailbox.email.split('@')[1] || 'mail.local'}>`
+        let savedMessage
+
+        if (existingDraft) {
+            ;[savedMessage] = await db.update(mailMessages).set({
+                folderId: draftsFolder.id,
+                messageId,
+                subject: data.subject || null,
+                fromAddress: mailbox.email,
+                fromName: mailbox.displayName,
+                toAddresses: normalizedTo,
+                ccAddresses: normalizedCc,
+                bccAddresses: normalizedBcc,
+                plainBody: data.plainBody,
+                htmlBody: data.htmlBody,
+                headers: {},
+                hasAttachments: normalizedAttachments.length > 0,
+                attachments: normalizedAttachments,
+                isDraft: true,
+                remoteDate: new Date(),
+                receivedAt: existingDraft.receivedAt || new Date(),
+                updatedAt: new Date(),
+            }).where(eq(mailMessages.id, existingDraft.id)).returning()
+        } else {
+            ;[savedMessage] = await db.insert(mailMessages).values({
+                mailboxId,
+                folderId: draftsFolder.id,
+                messageId,
+                subject: data.subject || null,
+                fromAddress: mailbox.email,
+                fromName: mailbox.displayName,
+                toAddresses: normalizedTo,
+                ccAddresses: normalizedCc,
+                bccAddresses: normalizedBcc,
+                plainBody: data.plainBody,
+                htmlBody: data.htmlBody,
+                headers: {},
+                hasAttachments: normalizedAttachments.length > 0,
+                attachments: normalizedAttachments,
+                isDraft: true,
+                remoteDate: new Date(),
+                receivedAt: new Date(),
+            }).returning()
+        }
 
         res.json({
             success: true,

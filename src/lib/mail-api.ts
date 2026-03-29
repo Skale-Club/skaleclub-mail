@@ -176,6 +176,7 @@ export interface SaveDraftPayload {
     bodyText?: string
     bodyHtml?: string
     draftId?: string
+    attachments?: File[]
 }
 
 export interface SendEmailResponse {
@@ -320,7 +321,7 @@ export const mailApi = {
         })
     },
 
-    saveDraft(mailboxId: string, payload: SaveDraftPayload): Promise<SaveDraftResponse> {
+    async saveDraft(mailboxId: string, payload: SaveDraftPayload): Promise<SaveDraftResponse> {
         return apiFetch(`/api/mail/mailboxes/${mailboxId}/save-draft`, {
             method: 'POST',
             body: JSON.stringify({
@@ -330,6 +331,8 @@ export const mailApi = {
                 subject: payload.subject,
                 plainBody: payload.bodyText,
                 htmlBody: payload.bodyHtml,
+                draftId: payload.draftId,
+                attachments: await mapAttachments(payload.attachments),
             }),
         })
     },

@@ -1,11 +1,12 @@
 import React from 'react'
-import { useLocation } from 'wouter'
+import { useCompose } from '../../hooks/useCompose'
 import {
     Star,
     Paperclip,
     MoreVertical,
     Trash2,
     Mail,
+    MailOpen,
     Reply,
     ReplyAll,
     Forward,
@@ -76,12 +77,13 @@ export function EmailList({
 }: EmailListProps) {
     const [menuOpenId, setMenuOpenId] = React.useState<string | null>(null)
     const isMobile = useIsMobile()
-    const [, navigate] = useLocation()
+    const { openCompose } = useCompose()
 
     const handleCheckboxClick = (e: React.MouseEvent, id: string) => {
+        e.preventDefault()
         e.stopPropagation()
         if (!onSelectMultiple) return
-        
+
         const newSet = new Set(selectedEmails)
         if (newSet.has(id)) {
             newSet.delete(id)
@@ -108,11 +110,15 @@ export function EmailList({
                     key={email.id}
                     className={`
                         group relative flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-2.5 cursor-pointer transition-all duration-150
-                        bg-card hover:bg-accent/50
-                        ${selectedId === email.id ? 'bg-accent' : ''}
+                        ${selectedId === email.id ? 'bg-muted' : 'bg-card hover:bg-accent/50'}
                         ${selectedEmails.has(email.id) && selectedId !== email.id ? 'bg-accent/30' : ''}
                         ${!email.read ? 'font-semibold text-foreground' : 'text-muted-foreground'}
                     `}
+                    style={{
+                        borderLeft: selectedId === email.id
+                            ? '3px solid hsl(var(--primary))'
+                            : '3px solid transparent'
+                    }}
                     onClick={() => onSelect(email.id)}
                 >
                     <span className={`w-2 h-2 rounded-full flex-shrink-0 ${!email.read ? 'bg-primary' : 'bg-transparent'}`} />
@@ -221,7 +227,7 @@ export function EmailList({
                                         onClick={(e) => {
                                             e.stopPropagation()
                                             setMenuOpenId(null)
-                                            navigate(`/mail/compose?reply=${email.id}`)
+                                            openCompose({ replyToId: email.id })
                                         }}
                                         className="flex items-center gap-3 w-full px-4 py-2 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground"
                                     >
@@ -232,7 +238,7 @@ export function EmailList({
                                         onClick={(e) => {
                                             e.stopPropagation()
                                             setMenuOpenId(null)
-                                            navigate(`/mail/compose?reply=${email.id}&replyAll=true`)
+                                            openCompose({ replyToId: email.id, replyAll: true })
                                         }}
                                         className="flex items-center gap-3 w-full px-4 py-2 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground"
                                     >
@@ -243,7 +249,7 @@ export function EmailList({
                                         onClick={(e) => {
                                             e.stopPropagation()
                                             setMenuOpenId(null)
-                                            navigate(`/mail/compose?forward=${email.id}`)
+                                            openCompose({ forwardId: email.id })
                                         }}
                                         className="flex items-center gap-3 w-full px-4 py-2 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground"
                                     >

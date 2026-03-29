@@ -77,6 +77,7 @@ export async function createUserMailbox(userId: string, email: string): Promise<
         { mailboxId: companion.id, remoteId: 'INBOX',  name: 'Inbox',  type: 'inbox' },
         { mailboxId: companion.id, remoteId: 'Sent',   name: 'Sent',   type: 'sent' },
         { mailboxId: companion.id, remoteId: 'Drafts', name: 'Drafts', type: 'drafts' },
+        { mailboxId: companion.id, remoteId: 'Archive', name: 'Archive', type: 'archive' },
         { mailboxId: companion.id, remoteId: 'Trash',  name: 'Trash',  type: 'trash' },
         { mailboxId: companion.id, remoteId: 'Spam',   name: 'Spam',   type: 'spam' },
     ])
