@@ -13,16 +13,17 @@ export const defaultBranding: BrandingSettings = {
     companyName: '',
     applicationName: 'Skale Club Mail',
     logoUrl: '/brand-mark.svg',
-    faviconUrl: '/favicon.svg',
+    faviconUrl: '/brand-mark.svg',
     mailHost: 'mx.skaleclub.com',
 }
 
 function normalizeBranding(payload: Partial<BrandingSettings> | null | undefined): BrandingSettings {
+    const logoUrl = payload?.logoUrl || defaultBranding.logoUrl
     return {
         companyName: payload?.companyName || defaultBranding.companyName,
         applicationName: payload?.applicationName || defaultBranding.applicationName,
-        logoUrl: payload?.logoUrl || defaultBranding.logoUrl,
-        faviconUrl: payload?.faviconUrl || defaultBranding.faviconUrl,
+        logoUrl,
+        faviconUrl: payload?.faviconUrl || logoUrl,
         mailHost: payload?.mailHost || defaultBranding.mailHost,
     }
 }

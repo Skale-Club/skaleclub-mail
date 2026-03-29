@@ -54,13 +54,8 @@ function getPublicUrl(storage: string | null): string {
     return `${process.env.SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`
 }
 
-function getFaviconPublicUrl(storage: string | null): string {
-    if (!storage) {
-        return '/favicon.svg'
-    }
-
-    const [bucket, path] = storage.split('/')
-    return `${process.env.SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`
+function getFaviconPublicUrl(faviconStorage: string | null, logoStorage: string | null): string {
+    return getPublicUrl(faviconStorage || logoStorage)
 }
 
 async function readServerDiskUsage() {
@@ -91,7 +86,7 @@ router.get('/branding', async (_req: Request, res: Response) => {
             companyName: branding.companyName,
             applicationName: branding.applicationName,
             logoUrl: getPublicUrl(branding.logoStorage),
-            faviconUrl: getFaviconPublicUrl(branding.faviconStorage),
+            faviconUrl: getFaviconPublicUrl(branding.faviconStorage, branding.logoStorage),
             mailHost: branding.mailHost,
         })
     } catch (error) {
@@ -247,7 +242,7 @@ router.post('/branding/upload', async (req: Request, res: Response) => {
             companyName: branding.companyName,
             applicationName: branding.applicationName,
             logoUrl: getPublicUrl(branding.logoStorage),
-            faviconUrl: getPublicUrl(branding.faviconStorage),
+            faviconUrl: getFaviconPublicUrl(branding.faviconStorage, branding.logoStorage),
         })
     } catch (error) {
         console.error('Error uploading branding file:', error)
@@ -296,7 +291,7 @@ router.patch('/branding', async (req: Request, res: Response) => {
             companyName: branding.companyName,
             applicationName: branding.applicationName,
             logoUrl: getPublicUrl(branding.logoStorage),
-            faviconUrl: getPublicUrl(branding.faviconStorage),
+            faviconUrl: getFaviconPublicUrl(branding.faviconStorage, branding.logoStorage),
             mailHost: branding.mailHost,
         })
     } catch (error) {
