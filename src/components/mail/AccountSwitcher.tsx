@@ -160,24 +160,26 @@ export function AccountSwitcher({ compact = false, showSignOut = false, onSignOu
                                 </>
                             )}
 
-                            <div className="px-3 pt-2 pb-1">
-                                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                    {hasMultipleSessions ? 'Mailboxes' : 'Accounts'}
-                                </span>
-                            </div>
-                            <div className="max-h-48 overflow-y-auto">
-                                {mailboxes.map((mailbox) => (
-                                    <AccountItem
-                                        key={mailbox.id}
-                                        mailbox={mailbox}
-                                        isSelected={selectedMailbox?.id === mailbox.id}
-                                        onSelect={() => {
-                                            setSelectedMailbox(mailbox)
-                                            setIsOpen(false)
-                                        }}
-                                    />
-                                ))}
-                            </div>
+                            {!hasMultipleSessions && (
+                                <>
+                                    <div className="px-3 pt-2 pb-1">
+                                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Accounts</span>
+                                    </div>
+                                    <div className="max-h-48 overflow-y-auto">
+                                        {mailboxes.map((mailbox) => (
+                                            <AccountItem
+                                                key={mailbox.id}
+                                                mailbox={mailbox}
+                                                isSelected={selectedMailbox?.id === mailbox.id}
+                                                onSelect={() => {
+                                                    setSelectedMailbox(mailbox)
+                                                    setIsOpen(false)
+                                                }}
+                                            />
+                                        ))}
+                                    </div>
+                                </>
+                            )}
 
                             <div className="border-t border-border pt-2 px-2 space-y-1">
                                 <button
