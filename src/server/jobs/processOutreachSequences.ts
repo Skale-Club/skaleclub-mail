@@ -1,6 +1,6 @@
 /**
  * Process Outreach Email Sequences
- * 
+ *
  * This job runs on a cron schedule to process pending outreach emails:
  * - Finds campaign leads with nextScheduledAt <= now
  * - Sends emails through assigned email accounts
@@ -9,40 +9,23 @@
  * - Updates campaign stats
  */
 
-import nodemailer from 'nodemailer'
+import { createHash } from 'crypto'
 import { db } from '../../db'
 import { campaigns, sequenceSteps, campaignLeads, leads, emailAccounts, outreachEmails, suppressions } from '../../db/schema'
-import { eq, and, lte, gt, sql, inArray, notInArray } from 'drizzle-orm'
-import { decryptSecret } from '../lib/crypto'
-import { interpolateTemplate } from '../lib/template-variables'
-import { injectTracking } from '../lib/tracking'
+import { eq, and, lte, gt, inArray, notInArray } from 'drizzle-orm'
+import {
+    sendOutreachEmail,
+    recordOutreachEmail,
+    isWithinSendWindow,
+    canSendFromAccount,
+    incrementAccountStats,
+    incrementCampaignStats,
+} from '../lib/outreach-sender'
 
 type Campaign = typeof campaigns.$inferSelect
 type Lead = typeof leads.$inferSelect
 type SequenceStep = typeof sequenceSteps.$inferSelect
 type EmailAccount = typeof emailAccounts.$inferSelect
-
-function isWithinSendWindow(campaign: Campaign, now: Date): boolean {
-    if (!campaign.sendOnWeekends) {
-        const day = now.getDay()
-        if (day === 0 || day === 6) {
-            return false
-        }
-    }
-
-    const [startHour, startMin] = (campaign.sendStartTime || '09:00').split(':').map(Number)
-    const [endHour, endMin] = (campaign.sendEndTime || '17:00').split(':').map(Number)
-    
-    const currentMinutes = now.getHours() * 60 + now.getMinutes()
-    const startMinutes = startHour * 60 + (startMin || 0)
-    const endMinutes = endHour * 60 + (endMin || 0)
-    
-    return currentMinutes >= startMinutes && currentMinutes <= endMinutes
-}
-
-function canSendFromAccount(account: EmailAccount): boolean {
-    return account.currentDailySent < account.dailySendLimit
-}
 
 function getNextStep(steps: SequenceStep[], currentStepOrder: number): SequenceStep | null {
     return steps.find(s => s.stepOrder > currentStepOrder) || null
@@ -57,10 +40,10 @@ function calculateNextScheduledAt(
 ): Date {
     const next = new Date()
     next.setHours(next.getHours() + delayHours)
-    
+
     const [startHour] = (sendStartTime || '09:00').split(':').map(Number)
     const [endHour] = (sendEndTime || '17:00').split(':').map(Number)
-    
+
     const hour = next.getHours()
     if (hour < startHour) {
         next.setHours(startHour, 0, 0, 0)
@@ -68,7 +51,7 @@ function calculateNextScheduledAt(
         next.setDate(next.getDate() + 1)
         next.setHours(startHour, 0, 0, 0)
     }
-    
+
     if (!sendOnWeekends) {
         const day = next.getDay()
         if (day === 0) {
@@ -77,57 +60,17 @@ function calculateNextScheduledAt(
             next.setDate(next.getDate() + 2)
         }
     }
-    
+
     return next
 }
 
-async function sendEmail(
-    account: EmailAccount,
-    to: string,
-    fromName: string | null,
-    subject: string,
-    htmlBody: string | null,
-    plainBody: string | null,
-    replyTo?: string | null,
-    tracking?: { token: string; baseUrl: string; trackOpens: boolean; trackClicks: boolean }
-): Promise<{ messageId: string; finalHtml: string | null }> {
-    if (!account.smtpHost || !account.smtpPassword) {
-        throw new Error('SMTP credentials not configured for this account')
-    }
-    
-    const transporter = nodemailer.createTransport({
-        host: account.smtpHost,
-        port: account.smtpPort || 587,
-        secure: account.smtpSecure ?? true,
-        auth: {
-            user: account.smtpUsername || account.email,
-            pass: decryptSecret(account.smtpPassword)
-        }
-    } as nodemailer.TransportOptions)
-
-    let finalHtml = htmlBody
-    if (finalHtml && tracking && (tracking.trackOpens || tracking.trackClicks)) {
-        finalHtml = injectTracking(
-            finalHtml,
-            tracking.token,
-            tracking.baseUrl,
-            tracking.trackOpens,
-            tracking.trackClicks
-        )
-    }
-
-    const from = fromName ? `${fromName} <${account.email}>` : account.email
-
-    const info = await transporter.sendMail({
-        from,
-        to,
-        subject,
-        html: finalHtml || undefined,
-        text: plainBody || undefined,
-        replyTo: replyTo || undefined
-    })
-
-    return { messageId: info.messageId, finalHtml }
+function selectAbVariant(step: SequenceStep, leadId: string): 'a' | 'b' {
+    if (!step.abTestEnabled) return 'a'
+    // Deterministic hash — same lead+step always produces same variant on retry (SEND-04)
+    const hash = createHash('md5').update(leadId + step.id).digest('hex')
+    const hashInt = parseInt(hash.slice(0, 8), 16)
+    const threshold = step.abTestPercentage ?? 50
+    return (hashInt % 100) < threshold ? 'a' : 'b'
 }
 
 export async function processOutreachSequences(): Promise<{ processed: number; sent: number; errors: number }> {
@@ -259,40 +202,38 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
                 continue
             }
 
-            const subject = interpolateTemplate(currentStep.subject || '', lead as any)
-            const htmlBody = currentStep.htmlBody ? interpolateTemplate(currentStep.htmlBody, lead as any) : null
-            const plainBody = currentStep.plainBody ? interpolateTemplate(currentStep.plainBody, lead as any) : null
+            const abVariant = selectAbVariant(currentStep, lead.id)
 
             const trackingBaseUrl = process.env.FRONTEND_URL || 'http://localhost:9000'
-            const { messageId, finalHtml } = await sendEmail(
-                emailAccount,
-                lead.email,
-                campaign.fromName,
-                subject,
-                htmlBody,
-                plainBody,
-                campaign.replyToEmail,
-                {
-                    token: campaignLead.id,
-                    baseUrl: trackingBaseUrl,
-                    trackOpens: campaign.trackOpens,
-                    trackClicks: campaign.trackClicks,
-                }
-            )
+            const sendResult = await sendOutreachEmail({
+                account: emailAccount,
+                lead,
+                campaign,
+                step: currentStep,
+                campaignLeadId: campaignLead.id,
+                trackOpens: campaign.trackOpens,
+                trackClicks: campaign.trackClicks,
+                trackingBaseUrl,
+                abVariant,
+            })
 
-            await db.insert(outreachEmails).values({
+            if (!sendResult.success) {
+                console.error(`[processOutreachSequences] Send failed for campaignLead ${campaignLead.id}: ${sendResult.error}`)
+                result.errors++
+                continue
+            }
+
+            await recordOutreachEmail({
                 organizationId: campaign.organizationId,
                 campaignId: campaign.id,
                 campaignLeadId: campaignLead.id,
                 sequenceStepId: currentStep.id,
                 emailAccountId: emailAccount.id,
-                messageId,
-                subject,
-                plainBody,
-                htmlBody: finalHtml,
-                abVariant: null,
-                status: 'sent',
-                sentAt: new Date()
+                subject: currentStep.subject || '',
+                plainBody: currentStep.plainBody ?? null,
+                htmlBody: sendResult.finalHtml ?? null,
+                abVariant,
+                messageId: sendResult.messageId,
             })
 
             const isFirstContact = !campaignLead.firstContactedAt
@@ -312,19 +253,11 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
                     .where(eq(leads.id, lead.id))
             }
 
-            await db.update(emailAccounts)
-                .set({
-                    currentDailySent: sql`${emailAccounts.currentDailySent} + 1`,
-                    totalSent: sql`${emailAccounts.totalSent} + 1`
-                })
-                .where(eq(emailAccounts.id, emailAccount.id))
+            await incrementAccountStats(emailAccount.id, 'totalSent')
+            // NOTE: incrementAccountStats('totalSent') increments BOTH totalSent AND currentDailySent in a single UPDATE
 
             if (isFirstContact) {
-                await db.update(campaigns)
-                    .set({
-                        leadsContacted: sql`${campaigns.leadsContacted} + 1`
-                    })
-                    .where(eq(campaigns.id, campaign.id))
+                await incrementCampaignStats(campaign.id, 'leadsContacted')
             }
 
             const steps = stepsBySequence.get(currentStep.sequenceId) || []
