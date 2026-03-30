@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 ## Current Position
 
 Phase: 1 of 4 (Sending Correctness)
-Plan: 0 of ? in current phase
-Status: Ready to plan
-Last activity: 2026-03-30 — Roadmap created; requirements defined; research completed
+Plan: 1 of ? in current phase
+Status: In progress
+Last activity: 2026-03-30 — Completed plan 01-01 (daily reset + idempotency guard)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 10%
 
 ## Performance Metrics
 
@@ -45,6 +45,8 @@ Recent decisions affecting current work:
 - **A/B variant must use deterministic hash** — `hash(leadId + stepId)`, not `Math.random()`. Retries must produce the same variant without stored state.
 - **`sendOutreachEmail` + `recordOutreachEmail` must be called as a pair** — `sendOutreachEmail` does not insert the `outreachEmails` record; omitting `recordOutreachEmail` silently breaks tracking and reply/bounce matching.
 - **`processBounces.ts` is the reference implementation** — use its `connect → getMailboxLock → search → fetch → lock.release → logout` pattern for the imapflow migration in Phase 2.
+- **Idempotency guard fires at code level before SMTP** — code-level `findFirst` check on `(campaignLeadId, sequenceStepId)` gives clean log output; DB-level `uniqueIndex` is the backstop. Both must remain in place.
+- **`resetDailyLimits` needs no lastSentAt reset** — only `currentDailySent` resets at midnight; `lastSentAt` tracks history and must not be cleared.
 
 ### Pending Todos
 
@@ -58,5 +60,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-30
-Stopped at: Roadmap written; STATE.md initialized; ready to begin planning Phase 1
+Stopped at: Completed 01-01-PLAN.md (resetDailyLimits + idempotency guard)
 Resume file: None
