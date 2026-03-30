@@ -842,7 +842,9 @@ export const outreachEmails = pgTable('outreach_emails', {
     status: messageStatusEnum('status').default('pending').notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+}, (table) => ({
+    campaignLeadStepUnique: uniqueIndex('outreach_emails_campaign_lead_step_unique').on(table.campaignLeadId, table.sequenceStepId),
+}))
 
 // Outreach Analytics (daily aggregated stats)
 export const outreachAnalytics = pgTable('outreach_analytics', {

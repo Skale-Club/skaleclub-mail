@@ -247,6 +247,18 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
                 continue
             }
 
+            // SEND-05: Idempotency guard — skip if this step was already sent to this lead
+            const existingEmail = await db.query.outreachEmails.findFirst({
+                where: and(
+                    eq(outreachEmails.campaignLeadId, campaignLead.id),
+                    eq(outreachEmails.sequenceStepId, currentStep.id)
+                )
+            })
+            if (existingEmail) {
+                console.log(`[processOutreachSequences] Skipping duplicate send for campaignLead ${campaignLead.id} step ${currentStep.id} (already sent: ${existingEmail.id})`)
+                continue
+            }
+
             const subject = interpolateTemplate(currentStep.subject || '', lead as any)
             const htmlBody = currentStep.htmlBody ? interpolateTemplate(currentStep.htmlBody, lead as any) : null
             const plainBody = currentStep.plainBody ? interpolateTemplate(currentStep.plainBody, lead as any) : null
