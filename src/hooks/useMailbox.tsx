@@ -1,6 +1,7 @@
 import React from 'react'
 import { apiFetch } from '../lib/api-client'
 import { useAuth } from './useAuth'
+import { useMultiSession } from './useMultiSession'
 
 export interface Mailbox {
     id: string
@@ -27,6 +28,7 @@ const MailboxContext = React.createContext<MailboxContextType | undefined>(undef
 
 export function MailboxProvider({ children }: { children: React.ReactNode }) {
     const { user, isAdmin, isLoading: authLoading } = useAuth()
+    const { activeSessionId } = useMultiSession()
     const [mailboxes, setMailboxes] = React.useState<Mailbox[]>([])
     const [selectedMailbox, setSelectedMailbox] = React.useState<Mailbox | null>(null)
     const [isLoading, setIsLoading] = React.useState(true)
@@ -65,7 +67,7 @@ export function MailboxProvider({ children }: { children: React.ReactNode }) {
             return
         }
         refreshMailboxes()
-    }, [user, isAdmin, authLoading, refreshMailboxes])
+    }, [user, isAdmin, authLoading, activeSessionId, refreshMailboxes])
 
     const handleSetSelectedMailbox = React.useCallback((mailbox: Mailbox | null) => {
         setSelectedMailbox(mailbox)
