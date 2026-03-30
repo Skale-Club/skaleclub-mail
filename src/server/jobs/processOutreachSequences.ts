@@ -354,9 +354,11 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
 }
 
 export async function resetDailyLimits(): Promise<void> {
-    await db.update(emailAccounts)
+    const result = await db.update(emailAccounts)
         .set({ currentDailySent: 0 })
         .where(gt(emailAccounts.currentDailySent, 0))
+        .returning({ id: emailAccounts.id })
+    console.log(`[resetDailyLimits] Reset daily send counter for ${result.length} accounts`)
 }
 
 export async function markCompletedCampaigns(): Promise<void> {
