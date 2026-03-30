@@ -48,7 +48,7 @@ export function EmailMessageHeader({
     const avatarColor = getAvatarColor(from.email)
     const initials = getInitials(from.name || from.email)
     const recipientLabel = to.map((recipient) => recipient.name || recipient.email).join(', ')
-    const hasActions = Boolean(onToggleRead || onArchive || onSpam || onDelete || onStar)
+    const hasActions = Boolean(onToggleRead || onArchive || onSpam || onDelete || onStar || onToggleEmailDarkMode)
     const ArchiveActionIcon = archiveIcon === 'inbox' ? Inbox : Archive
 
     return (
@@ -79,6 +79,17 @@ export function EmailMessageHeader({
                             aria-label={read ? 'Mark as unread' : 'Mark as read'}
                         >
                             {read ? <Mail className="h-4 w-4" /> : <MailOpen className="h-4 w-4" />}
+                        </button>
+                    )}
+                    {onToggleEmailDarkMode && (
+                        <button
+                            type="button"
+                            onClick={onToggleEmailDarkMode}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                            title={emailDarkMode ? 'Light mode' : 'Dark mode'}
+                            aria-label={emailDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+                        >
+                            {emailDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                         </button>
                     )}
                     {onArchive && (
@@ -131,17 +142,6 @@ export function EmailMessageHeader({
                             aria-label={starred ? 'Remove from favorites' : 'Add to favorites'}
                         >
                             <Star className={`h-4 w-4 ${starred ? 'fill-current' : ''}`} />
-                        </button>
-                    )}
-                    {onToggleEmailDarkMode && (
-                        <button
-                            type="button"
-                            onClick={onToggleEmailDarkMode}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                            title={emailDarkMode ? 'Light mode' : 'Dark mode'}
-                            aria-label={emailDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-                        >
-                            {emailDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                         </button>
                     )}
                 </div>
