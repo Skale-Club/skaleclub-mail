@@ -37,7 +37,10 @@ Plans:
   1. A reply to an outreach email is detected and marked as replied in the next cron tick without hanging connections
   2. A processed message is flagged `\Seen` so it is not reprocessed on the next run
   3. `package.json` contains no `imap` or `@types/imap` entries
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 02-01-PLAN.md — Migrate processReplies.ts to imapflow, remove imap package (REPLY-01, REPLY-02, REPLY-03)
 
 ### Phase 3: Sequence Builder UI
 **Goal**: Users can create a sequence with steps through the NewSequencePage UI and have it saved to the database and executed by the job
@@ -72,6 +75,6 @@ Recommended order: [1 + 2 + 4 in parallel] → [3]
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Sending Correctness | 0/2 | Not started | - |
-| 2. Reply Detection | 0/? | Not started | - |
+| 2. Reply Detection | 0/1 | Not started | - |
 | 3. Sequence Builder UI | 0/? | Not started | - |
 | 4. Code Quality | 0/? | Not started | - |
