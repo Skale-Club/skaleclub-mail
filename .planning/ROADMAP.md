@@ -26,8 +26,8 @@ A targeted fix pass on a partially-built outreach module. The backend infrastruc
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Verify/fix daily reset cron + add idempotency guard (SEND-01, SEND-05)
-- [ ] 01-02-PLAN.md — Consolidate to outreach-sender.ts: remove duplicate functions, wire Outlook routing, deterministic A/B (SEND-02, SEND-03, SEND-04, SEND-06)
+- [x] 01-01-PLAN.md — Verify/fix daily reset cron + add idempotency guard (SEND-01, SEND-05)
+- [x] 01-02-PLAN.md — Consolidate to outreach-sender.ts: remove duplicate functions, wire Outlook routing, deterministic A/B (SEND-02, SEND-03, SEND-04, SEND-06)
 
 ### Phase 2: Reply Detection
 **Goal**: processReplies.ts detects replies using imapflow with the same connection pattern as processBounces.ts, and the legacy `imap` package is removed

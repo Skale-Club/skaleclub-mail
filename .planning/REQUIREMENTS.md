@@ -8,11 +8,11 @@
 ### Sending Correctness
 
 - [ ] **SEND-01**: Daily send counter (`currentDailySent`) resets to 0 at midnight via cron — currently never resets, silently blocking all sends after day 1
-- [ ] **SEND-02**: Sequence processor uses `sendOutreachEmail()` from `outreach-sender.ts` — eliminates SMTP-only path and routes Outlook accounts correctly
-- [ ] **SEND-03**: Sequence processor calls `recordOutreachEmail()` after every successful send — no outbound email goes unrecorded
-- [ ] **SEND-04**: A/B variant is selected deterministically per lead (hash of `leadId + stepId`) when `step.abTestEnabled` is true — `Math.random()` breaks on retry
+- [x] **SEND-02**: Sequence processor uses `sendOutreachEmail()` from `outreach-sender.ts` — eliminates SMTP-only path and routes Outlook accounts correctly
+- [x] **SEND-03**: Sequence processor calls `recordOutreachEmail()` after every successful send — no outbound email goes unrecorded
+- [x] **SEND-04**: A/B variant is selected deterministically per lead (hash of `leadId + stepId`) when `step.abTestEnabled` is true — `Math.random()` breaks on retry
 - [ ] **SEND-05**: Sequence processor has idempotency guard — duplicate send to same `(campaignLeadId, sequenceStepId)` pair is prevented before SMTP is called
-- [ ] **SEND-06**: Duplicate `isWithinSendWindow` and `canSendFromAccount` functions removed from `processOutreachSequences.ts` — shared module is the single source of truth
+- [x] **SEND-06**: Duplicate `isWithinSendWindow` and `canSendFromAccount` functions removed from `processOutreachSequences.ts` — shared module is the single source of truth
 
 ### Reply Detection
 
@@ -68,11 +68,11 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | SEND-01 | Phase 1 | Pending |
-| SEND-02 | Phase 1 | Pending |
-| SEND-03 | Phase 1 | Pending |
-| SEND-04 | Phase 1 | Pending |
+| SEND-02 | Phase 1 | Complete |
+| SEND-03 | Phase 1 | Complete |
+| SEND-04 | Phase 1 | Complete |
 | SEND-05 | Phase 1 | Pending |
-| SEND-06 | Phase 1 | Pending |
+| SEND-06 | Phase 1 | Complete |
 | REPLY-01 | Phase 2 | Pending |
 | REPLY-02 | Phase 2 | Pending |
 | REPLY-03 | Phase 2 | Pending |

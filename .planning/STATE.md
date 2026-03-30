@@ -1,3 +1,19 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: executing
+stopped_at: Completed 01-02-PLAN.md (consolidate processOutreachSequences to outreach-sender)
+last_updated: "2026-03-30T23:40:29.280Z"
+last_activity: 2026-03-30 — Completed plan 01-01 (daily reset + idempotency guard)
+progress:
+  total_phases: 4
+  completed_phases: 1
+  total_plans: 2
+  completed_plans: 2
+  percent: 100
+---
+
 # Project State
 
 ## Project Reference
@@ -14,11 +30,12 @@ Plan: 1 of ? in current phase
 Status: In progress
 Last activity: 2026-03-30 — Completed plan 01-01 (daily reset + idempotency guard)
 
-Progress: [█░░░░░░░░░] 10%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 0
 - Average duration: -
 - Total execution time: 0 hours
@@ -30,9 +47,11 @@ Progress: [█░░░░░░░░░] 10%
 | - | - | - | - |
 
 **Recent Trend:**
+
 - No plans completed yet
 
 *Updated after each plan completion*
+| Phase 01-sending-correctness P02 | 12 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -47,6 +66,7 @@ Recent decisions affecting current work:
 - **`processBounces.ts` is the reference implementation** — use its `connect → getMailboxLock → search → fetch → lock.release → logout` pattern for the imapflow migration in Phase 2.
 - **Idempotency guard fires at code level before SMTP** — code-level `findFirst` check on `(campaignLeadId, sequenceStepId)` gives clean log output; DB-level `uniqueIndex` is the backstop. Both must remain in place.
 - **`resetDailyLimits` needs no lastSentAt reset** — only `currentDailySent` resets at midnight; `lastSentAt` tracks history and must not be cleared.
+- [Phase 01-sending-correctness]: Local calculateNextScheduledAt (5-param) kept — shared module version ignores send windows
 
 ### Pending Todos
 
@@ -59,6 +79,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-30
-Stopped at: Completed 01-01-PLAN.md (resetDailyLimits + idempotency guard)
+Last session: 2026-03-30T23:40:29.272Z
+Stopped at: Completed 01-02-PLAN.md (consolidate processOutreachSequences to outreach-sender)
 Resume file: None
