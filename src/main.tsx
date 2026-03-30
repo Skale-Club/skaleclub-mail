@@ -5,6 +5,7 @@ import { Route, Switch, useLocation, useSearch } from 'wouter'
 import { Toaster } from './components/ui/toaster'
 import { ThemeProvider } from './components/theme-provider'
 import { AuthProvider, useAuth } from './hooks/useAuth'
+import { MultiSessionProvider } from './hooks/useMultiSession'
 import { MailboxProvider } from './hooks/useMailbox'
 import { useCompose } from './hooks/useCompose'
 import { useBranding } from './lib/branding'
@@ -307,6 +308,7 @@ function App() {
         <ThemeProvider defaultTheme="system">
             <QueryClientProvider client={queryClient}>
                 <AuthProvider>
+                    <MultiSessionProvider>
                     <MailboxProvider>
                         <ComposeProvider>
                             <BrandingHead />
@@ -459,6 +461,7 @@ function App() {
                         </div>
                         </ComposeProvider>
                     </MailboxProvider>
+                    </MultiSessionProvider>
                 </AuthProvider>
             </QueryClientProvider>
         </ThemeProvider>
