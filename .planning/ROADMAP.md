@@ -23,7 +23,11 @@ A targeted fix pass on a partially-built outreach module. The backend infrastruc
   3. A step with `abTestEnabled: true` assigns the same variant to the same lead on every run — retries do not flip variants
   4. No lead receives the same sequence step email twice even if the job is interrupted between SMTP send and DB write
   5. `processOutreachSequences.ts` contains no local copies of `isWithinSendWindow`, `canSendFromAccount`, or `sendEmail`
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Verify/fix daily reset cron + add idempotency guard (SEND-01, SEND-05)
+- [ ] 01-02-PLAN.md — Consolidate to outreach-sender.ts: remove duplicate functions, wire Outlook routing, deterministic A/B (SEND-02, SEND-03, SEND-04, SEND-06)
 
 ### Phase 2: Reply Detection
 **Goal**: processReplies.ts detects replies using imapflow with the same connection pattern as processBounces.ts, and the legacy `imap` package is removed
@@ -67,7 +71,7 @@ Recommended order: [1 + 2 + 4 in parallel] → [3]
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Sending Correctness | 0/? | Not started | - |
+| 1. Sending Correctness | 0/2 | Not started | - |
 | 2. Reply Detection | 0/? | Not started | - |
 | 3. Sequence Builder UI | 0/? | Not started | - |
 | 4. Code Quality | 0/? | Not started | - |
