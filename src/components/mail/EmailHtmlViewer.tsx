@@ -3,6 +3,7 @@ import React, { useRef, useEffect, useState } from 'react'
 interface EmailHtmlViewerProps {
     html?: string | null
     plainText?: string | null
+    emailDarkMode?: boolean
 }
 
 /**
@@ -10,7 +11,7 @@ interface EmailHtmlViewerProps {
  * Falls back to plain text if no HTML is available.
  * The iframe auto-resizes to fit its content.
  */
-export function EmailHtmlViewer({ html, plainText }: EmailHtmlViewerProps) {
+export function EmailHtmlViewer({ html, plainText, emailDarkMode }: EmailHtmlViewerProps) {
     const iframeRef = useRef<HTMLIFrameElement>(null)
     const [height, setHeight] = useState(200)
 
@@ -127,6 +128,8 @@ export function EmailHtmlViewer({ html, plainText }: EmailHtmlViewerProps) {
                 border: 'none',
                 overflow: 'hidden',
                 display: 'block',
+                filter: emailDarkMode ? 'invert(1) hue-rotate(180deg)' : undefined,
+                transition: 'filter 0.2s ease',
             }}
         />
     )

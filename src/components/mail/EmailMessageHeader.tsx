@@ -1,4 +1,4 @@
-import { Archive, Inbox, Mail, MailOpen, ShieldAlert, Star, Trash2 } from 'lucide-react'
+import { Archive, Inbox, Mail, MailOpen, ShieldAlert, Star, Trash2, Sun, Moon } from 'lucide-react'
 import { cn, getAvatarColor, getInitials } from '../../lib/utils'
 
 interface EmailParticipant {
@@ -22,6 +22,8 @@ interface EmailMessageHeaderProps {
     archiveTitle?: string
     archiveAriaLabel?: string
     archiveIcon?: 'archive' | 'inbox'
+    emailDarkMode?: boolean
+    onToggleEmailDarkMode?: () => void
 }
 
 export function EmailMessageHeader({
@@ -40,6 +42,8 @@ export function EmailMessageHeader({
     archiveTitle = 'Archive',
     archiveAriaLabel = 'Archive',
     archiveIcon = 'archive',
+    emailDarkMode,
+    onToggleEmailDarkMode,
 }: EmailMessageHeaderProps) {
     const avatarColor = getAvatarColor(from.email)
     const initials = getInitials(from.name || from.email)
@@ -127,6 +131,17 @@ export function EmailMessageHeader({
                             aria-label={starred ? 'Remove from favorites' : 'Add to favorites'}
                         >
                             <Star className={`h-4 w-4 ${starred ? 'fill-current' : ''}`} />
+                        </button>
+                    )}
+                    {onToggleEmailDarkMode && (
+                        <button
+                            type="button"
+                            onClick={onToggleEmailDarkMode}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                            title={emailDarkMode ? 'Light mode' : 'Dark mode'}
+                            aria-label={emailDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+                        >
+                            {emailDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                         </button>
                     )}
                 </div>

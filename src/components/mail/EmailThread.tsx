@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { ThreadMessage, EmailThread, getThreadParticipants } from '../../lib/email-threading'
 import { EmailHtmlViewer } from './EmailHtmlViewer'
 import { getAvatarColor, getInitials } from '../../lib/utils'
@@ -12,7 +12,9 @@ import {
     ReplyAll,
     Forward,
     Paperclip,
-    Download
+    Download,
+    Sun,
+    Moon
 } from 'lucide-react'
 
 interface EmailThreadProps {
@@ -160,6 +162,11 @@ function ThreadMessageCard({
 }: ThreadMessageCardProps) {
     const avatarColor = getAvatarColor(message.from.email)
     const initials = getInitials(message.from.name || message.from.email)
+    const [emailDarkMode, setEmailDarkMode] = useState(false)
+
+    useEffect(() => {
+        setEmailDarkMode(false)
+    }, [message.id])
 
     return (
         <div
@@ -226,10 +233,21 @@ function ThreadMessageCard({
 
             {isExpanded && (
                 <div className="px-4 pb-4">
-                    <div className="mt-4 pl-13">
+                    <div className="flex items-center justify-end mb-2 pl-13">
+                        <button
+                            onClick={() => setEmailDarkMode(!emailDarkMode)}
+                            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                            title={emailDarkMode ? 'Light mode' : 'Dark mode'}
+                        >
+                            {emailDarkMode ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+                            {emailDarkMode ? 'Light' : 'Dark'}
+                        </button>
+                    </div>
+                    <div className="pl-13">
                         <EmailHtmlViewer
                             html={message.htmlBody}
                             plainText={message.body || message.snippet}
+                            emailDarkMode={emailDarkMode}
                         />
                     </div>
 

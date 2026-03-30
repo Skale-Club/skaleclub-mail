@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { EmailItem } from './EmailList'
 import { EmailHtmlViewer } from './EmailHtmlViewer'
 import { useMessage } from '../../hooks/useMail'
@@ -34,6 +34,11 @@ export function EmailDetailView({
     const { openCompose } = useCompose()
     const { data: messageData } = useMessage(email.id)
     const fullMessage = messageData?.message
+    const [emailDarkMode, setEmailDarkMode] = useState(false)
+
+    useEffect(() => {
+        setEmailDarkMode(false)
+    }, [email.id])
 
     return (
         <div className="flex-1 overflow-y-auto">
@@ -58,6 +63,8 @@ export function EmailDetailView({
                         archiveTitle={archiveTitle}
                         archiveAriaLabel={archiveAriaLabel}
                         archiveIcon={archiveIcon}
+                        emailDarkMode={emailDarkMode}
+                        onToggleEmailDarkMode={() => setEmailDarkMode(!emailDarkMode)}
                     />
 
                     {email.labels && email.labels.length > 0 && (
@@ -77,6 +84,7 @@ export function EmailDetailView({
                         <EmailHtmlViewer
                             html={fullMessage?.bodyHtml || fullMessage?.htmlBody}
                             plainText={fullMessage?.bodyText || fullMessage?.plainBody || email.snippet}
+                            emailDarkMode={emailDarkMode}
                         />
                     </div>
 

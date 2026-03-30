@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link, useParams, useLocation } from 'wouter'
 import { MailLayout } from '../../components/mail/MailLayout'
 import { toast } from '../../components/ui/toaster'
@@ -593,6 +593,12 @@ function SingleEmailView({
     onDelete: () => void
     onStar: () => void
 }) {
+    const [emailDarkMode, setEmailDarkMode] = useState(false)
+
+    useEffect(() => {
+        setEmailDarkMode(false)
+    }, [message.id])
+
     return (
         <div className="flex-1 overflow-y-auto">
             <div className="p-4 sm:p-6">
@@ -614,12 +620,15 @@ function SingleEmailView({
                         isSpam={isSpam}
                         onDelete={onDelete}
                         onStar={onStar}
+                        emailDarkMode={emailDarkMode}
+                        onToggleEmailDarkMode={() => setEmailDarkMode(!emailDarkMode)}
                     />
 
                     <div className="mt-4">
                         <EmailHtmlViewer
                             html={message.htmlBody}
                             plainText={message.body || message.snippet}
+                            emailDarkMode={emailDarkMode}
                         />
                     </div>
 
