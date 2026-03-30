@@ -84,18 +84,18 @@ export function useFolders() {
 
 export function useMessages(folderType: string, page = 1, limit = 50, search?: string) {
     const { selectedMailbox } = useMailbox()
-    const { data: foldersData } = useFolders()
+    const foldersQuery = useFolders()
 
     const folderId = React.useMemo(() => {
-        if (!foldersData?.folders) return undefined
-        const folder = foldersData.folders.find(
+        if (!foldersQuery.data?.folders) return undefined
+        const folder = foldersQuery.data.folders.find(
             (f: { remoteId?: string; type?: string; id: string }) =>
                 f.type === folderType || f.remoteId?.toLowerCase() === folderType.toLowerCase()
         )
         return folder?.id
-    }, [foldersData, folderType])
+    }, [foldersQuery.data, folderType])
 
-    return useQuery({
+    const messagesQuery = useQuery({
         queryKey: ['messages', selectedMailbox?.id, folderType, folderId, page, limit, search],
         queryFn: () => {
             if (!selectedMailbox) throw new Error('No mailbox selected')
@@ -105,22 +105,27 @@ export function useMessages(folderType: string, page = 1, limit = 50, search?: s
         enabled: !!selectedMailbox && !!folderId,
         staleTime: 30000,
     })
+
+    return {
+        ...messagesQuery,
+        isLoading: messagesQuery.isLoading || foldersQuery.isLoading,
+    }
 }
 
 export function useInfiniteMessages(folderType: string, limit = 30) {
     const { selectedMailbox } = useMailbox()
-    const { data: foldersData } = useFolders()
+    const foldersQuery = useFolders()
 
     const folderId = React.useMemo(() => {
-        if (!foldersData?.folders) return undefined
-        const folder = foldersData.folders.find(
+        if (!foldersQuery.data?.folders) return undefined
+        const folder = foldersQuery.data.folders.find(
             (f: { remoteId?: string; type?: string; id: string }) =>
                 f.type === folderType || f.remoteId?.toLowerCase() === folderType.toLowerCase()
         )
         return folder?.id
-    }, [foldersData, folderType])
+    }, [foldersQuery.data, folderType])
 
-    return useInfiniteQuery({
+    const messagesQuery = useInfiniteQuery({
         queryKey: ['messages', 'infinite', selectedMailbox?.id, folderType, folderId],
         queryFn: async ({ pageParam = 1 }) => {
             if (!selectedMailbox) throw new Error('No mailbox selected')
@@ -135,6 +140,11 @@ export function useInfiniteMessages(folderType: string, limit = 30) {
         enabled: !!selectedMailbox && !!folderId,
         staleTime: 30000,
     })
+
+    return {
+        ...messagesQuery,
+        isLoading: messagesQuery.isLoading || foldersQuery.isLoading,
+    }
 }
 
 export function useMessage(messageId: string | null) {
