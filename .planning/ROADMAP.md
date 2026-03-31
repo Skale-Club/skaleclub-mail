@@ -29,11 +29,11 @@
   2. A user in one organization cannot read or modify another organization's data — verified by testing with two org accounts
   3. `npm run db:indexes` script executes `sql/indexes.sql` containing `CREATE INDEX CONCURRENTLY` statements
   4. Invalid indexes (where `indisvalid = false`) are automatically detected, dropped, and retried by the verification script
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 05-01-PLAN.md — Fix RLS policies (migration 016 + verification script) — DBS-01
-- [ ] 05-02-PLAN.md — Safe index migration workflow (sql/indexes.sql + verify script) — DBS-02, DBS-03
+- [x] 05-02-PLAN.md — Safe index migration workflow (sql/indexes.sql + verify script) — DBS-02, DBS-03
 
 ### Phase 06: Index Foundation
 **Goal:** All foreign key and composite query columns are indexed so that no query performs a full sequential scan
@@ -87,7 +87,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 05. RLS & Migration Safety | 0/2 | Planned | — |
+| 05. RLS & Migration Safety | 1/2 | In Progress|  |
 | 06. Index Foundation | 0/0 | Not started | — |
 | 07. Pagination | 0/0 | Not started | — |
 | 08. Query Optimization | 0/0 | Not started | — |
