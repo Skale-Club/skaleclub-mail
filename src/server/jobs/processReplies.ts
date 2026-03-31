@@ -11,7 +11,7 @@
  * - Increments campaign and account reply stats
  */
 
-import Imap from 'imap'
+import { ImapFlow } from 'imapflow'
 import { db } from '../../db'
 import { emailAccounts, outreachEmails, campaignLeads, leads, campaigns } from '../../db/schema'
 import { eq, and, isNotNull, sql } from 'drizzle-orm'
@@ -70,7 +70,7 @@ export async function processReplies(): Promise<ProcessRepliesResult> {
 
     for (const account of accounts) {
         try {
-            const replyCount = await processAccountInbox(account)
+            const replyCount = await processAccountReplies(account)
             result.processed++
             result.replies += replyCount
         } catch (error) {
@@ -82,150 +82,91 @@ export async function processReplies(): Promise<ProcessRepliesResult> {
     return result
 }
 
-async function processAccountInbox(account: EmailAccountWithImap): Promise<number> {
-    return new Promise((resolve, reject) => {
-        let replyCount = 0
-        let imap: Imap | null = null
+async function processAccountReplies(account: EmailAccountWithImap): Promise<number> {
+    let replyCount = 0
+    let client: ImapFlow | null = null
 
-        const password = decryptSecret(account.imapPassword!)
+    const password = decryptSecret(account.imapPassword!)
 
-        imap = new Imap({
-            user: account.imapUsername!,
-            password: password,
+    try {
+        client = new ImapFlow({
             host: account.imapHost!,
             port: account.imapPort || 993,
-            tls: account.imapSecure !== false,
-            tlsOptions: { rejectUnauthorized: false },
+            secure: account.imapSecure !== false,
+            auth: {
+                user: account.imapUsername!,
+                pass: password,
+            },
+            logger: false,
         })
 
-        imap.once('error', (err: Error) => {
-            reject(err)
-        })
+        await client.connect()
 
-        imap.once('end', () => {
-            resolve(replyCount)
-        })
+        const lock = await client.getMailboxLock('INBOX')
+        try {
+            const uids = await client.search({ seen: false }, { uid: true })
+            if (!uids || uids.length === 0) {
+                return replyCount
+            }
 
-        imap.once('ready', () => {
-            imap!.openBox('INBOX', false, (openErr, box) => {
-                if (openErr) {
-                    imap!.end()
-                    reject(openErr)
-                    return
+            for (const uid of uids) {
+                try {
+                    const msg = await client.fetchOne(uid.toString(), {
+                        headers: ['in-reply-to', 'references'],
+                    }, { uid: true })
+
+                    if (!msg || !msg.headers) continue
+
+                    const headerText = msg.headers.toString('utf8')
+                    const inReplyToMatch = headerText.match(/^In-Reply-To:\s*(.+)$/im)
+                    const referencesMatch = headerText.match(/^References:\s*(.+)$/im)
+                    const inReplyTo = inReplyToMatch ? inReplyToMatch[1].trim() : null
+                    const references = referencesMatch ? referencesMatch[1].trim() : null
+
+                    const messageId = inReplyTo || extractFirstReference(references)
+                    if (!messageId) continue
+
+                    const outreachEmail = await findOutreachEmailByMessageId(messageId)
+                    if (!outreachEmail) continue
+
+                    await markAsReplied(
+                        outreachEmail.id,
+                        outreachEmail.campaignLeadId,
+                        outreachEmail.leadId,
+                        outreachEmail.campaignId,
+                        outreachEmail.emailAccountId
+                    )
+                    replyCount++
+
+                    try {
+                        await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true })
+                    } catch {
+                        // Ignore flag errors
+                    }
+                } catch (error) {
+                    console.error(`[processReplies] Error processing message ${uid}:`, error)
                 }
+            }
+        } finally {
+            lock.release()
+        }
+    } finally {
+        if (client) {
+            try {
+                await client.logout()
+            } catch {
+                // Ignore logout errors
+            }
+        }
+    }
 
-                imap!.search(['UNSEEN'], (searchErr, results) => {
-                    if (searchErr) {
-                        imap!.end()
-                        reject(searchErr)
-                        return
-                    }
-
-                    if (!results || results.length === 0) {
-                        imap!.end()
-                        return
-                    }
-
-                    const fetch = imap!.fetch(results, {
-                        bodies: 'HEADER.FIELDS (IN-REPLY-TO REFERENCES)',
-                        struct: false,
-                    })
-
-                    const messages: { uid: number; inReplyTo: string | null; references: string | null }[] = []
-
-                    fetch.on('message', (msg, seqno) => {
-                        let inReplyTo: string | null = null
-                        let references: string | null = null
-                        let uid: number = 0
-
-                        msg.on('body', (stream) => {
-                            let buffer = ''
-                            stream.on('data', (chunk: Buffer) => {
-                                buffer += chunk.toString('utf8')
-                            })
-                            stream.once('end', () => {
-                                const inReplyToMatch = buffer.match(/^In-Reply-To:\s*(.+)$/im)
-                                const referencesMatch = buffer.match(/^References:\s*(.+)$/im)
-                                inReplyTo = inReplyToMatch ? inReplyToMatch[1].trim() : null
-                                references = referencesMatch ? referencesMatch[1].trim() : null
-                            })
-                        })
-
-                        msg.once('attributes', (attrs) => {
-                            uid = (attrs as { uid: number }).uid
-                        })
-
-                        msg.once('end', () => {
-                            messages.push({ uid, inReplyTo, references })
-                        })
-                    })
-
-                    fetch.once('error', (fetchErr: Error) => {
-                        imap!.end()
-                        reject(fetchErr)
-                    })
-
-                    fetch.once('end', async () => {
-                        for (const msg of messages) {
-                            const messageId = msg.inReplyTo || extractFirstReference(msg.references)
-                            if (!messageId) continue
-
-                            const outreachEmail = await findOutreachEmailByMessageId(messageId)
-                            if (!outreachEmail) continue
-
-                            try {
-                                await markAsReplied(
-                                    outreachEmail.id,
-                                    outreachEmail.campaignLeadId,
-                                    outreachEmail.leadId,
-                                    outreachEmail.campaignId,
-                                    outreachEmail.emailAccountId
-                                )
-                                replyCount++
-                            } catch (markErr) {
-                                console.error(`[processReplies] Error marking email as replied:`, markErr)
-                            }
-                        }
-
-                        imap!.end()
-                    })
-                })
-            })
-        })
-
-        imap.connect()
-    })
+    return replyCount
 }
 
 function extractFirstReference(references: string | null): string | null {
     if (!references) return null
     const refs = references.split(/\s+/).filter(Boolean)
     return refs.length > 0 ? refs[0] : null
-}
-
-export async function connectImap(account: EmailAccountWithImap): Promise<Imap> {
-    return new Promise((resolve, reject) => {
-        const password = decryptSecret(account.imapPassword!)
-
-        const imap = new Imap({
-            user: account.imapUsername!,
-            password: password,
-            host: account.imapHost!,
-            port: account.imapPort || 993,
-            tls: account.imapSecure !== false,
-            tlsOptions: { rejectUnauthorized: false },
-        })
-
-        imap.once('error', (err: Error) => {
-            reject(err)
-        })
-
-        imap.once('ready', () => {
-            resolve(imap)
-        })
-
-        imap.connect()
-    })
 }
 
 export async function findOutreachEmailByMessageId(messageId: string): Promise<OutreachEmailWithRelations | null> {
