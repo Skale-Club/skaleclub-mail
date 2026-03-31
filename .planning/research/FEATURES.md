@@ -1,318 +1,173 @@
-# Feature Landscape: Cold Email Outreach System
+# Feature Research — Database Health Improvements
 
-**Domain:** Cold email outreach (sequences, reply/bounce detection, send limit enforcement)
-**Researched:** 2026-03-30
-**Scope:** Milestone completion pass — filling implementation gaps in existing module
-**Overall confidence:** HIGH (primary source is the actual codebase; industry patterns from training knowledge, confidence noted per section)
+**Domain:** Database performance & reliability for email/campaign platform
+**Researched:** 2026-03-31
+**Confidence:** HIGH (grounded in direct codebase analysis)
 
----
+## Current State Summary
 
-## 1. Sequence Builder UI — Campaign/Sequence Relationship
-
-### How leading tools structure this (MEDIUM confidence — training knowledge)
-
-**Instantly, Apollo, Lemlist** converge on the same model: a campaign is the container (settings, leads, sending schedule, analytics), and a sequence is a named ordered list of steps inside that campaign. The key UX insight is that users *create a campaign first* and then *build the sequence inside it* — the sequence is never an independent, free-floating object.
-
-| Tool | Campaign / Sequence Relationship | UI Entry Point |
-|------|----------------------------------|----------------|
-| Instantly | 1 campaign : 1 sequence (merged UI; no explicit "sequence" object shown to user) | Create Campaign wizard → step editor inline |
-| Apollo | 1 campaign : 1 active sequence + optional variants | Create Sequence → assign to campaign later |
-| Lemlist | 1 campaign : 1 sequence (explicit sequence tab inside campaign) | Create Campaign → navigate to Sequence tab |
-| Woodpecker | 1 campaign : multiple steps (no "sequence" layer exposed) | Steps are direct children of campaign in UI |
-
-**What this means for SkaleClub Mail:** The data model already has a correct 1-campaign-to-many-sequences structure with sequences being children of campaigns (via `sequences.campaignId`). The `POST /api/outreach/campaigns` route even auto-creates a "Main Sequence" on campaign creation. The UI gap is that `NewSequencePage` treats sequences as standalone objects — it has no `campaignId` and calls `console.log` instead of the API.
-
-### The two valid UI patterns for adding sequences
-
-**Pattern A — "Sequence inside Campaign" (recommended for this fix pass):**
-The user navigates into an existing campaign and clicks "Add Sequence". The `campaignId` comes from the route (`/outreach/campaigns/:id/sequences/new`), never from a picker. This is how Apollo and Lemlist work. It avoids the campaign-selection picker problem entirely.
-
-**Pattern B — "Sequence first, then assign":**
-Create sequence standalone, then assign to a campaign via a picker component. Adds complexity (picker state, validation that a campaign is selected) and breaks the mental model for most users. Not recommended unless sequences need to be reusable across campaigns (this codebase does not support that — the FK is non-nullable).
-
-### Current broken state vs what it needs to be
-
-| Current State (`NewSequencePage.tsx`) | Required State |
-|---------------------------------------|----------------|
-| Uses `delayDays` field name (local state) | Must map to `delayHours` (schema and API) |
-| Uses `bodyHtml` field name (local state) | Must map to `htmlBody` (API schema) |
-| `handleSave` calls `console.log` only | Must call `POST /api/outreach/campaigns/:id/sequences` then loop `POST /api/outreach/campaigns/:id/sequences/:seqId/steps` for each step |
-| No `campaignId` captured anywhere | Must receive `campaignId` from route param (`/outreach/campaigns/:id/sequences/new`) or a picker |
-| Imports unused `ArrowLeft`, `Save`, `Plus`, `Clock`, `Mail`, `Trash2` (some may be used; TS errors) | Remove or use all imported symbols |
-
-### API contract for sequence creation (confirmed from `campaigns.ts`)
-
-Step 1 — Create sequence:
-```
-POST /api/outreach/campaigns?organizationId=...
-Body: { name: string, description?: string }
--- actually: POST /api/outreach/campaigns/:id/sequences
-Body (createSequenceSchema): { name: string, description?: string }
-```
-
-Step 2 — Create each step:
-```
-POST /api/outreach/campaigns/:id/sequences/:sequenceId/steps
-Body (createSequenceStepSchema):
-  stepOrder: number (int, min 0)
-  type: 'email' | 'delay' | 'condition'
-  delayHours: number (NOT delayDays)
-  subject?: string
-  plainBody?: string
-  htmlBody?: string (NOT bodyHtml)
-  subjectB?: string
-  plainBodyB?: string
-  htmlBodyB?: string
-  abTestEnabled: boolean
-  abTestPercentage: number (0-100)
-```
-
-**Key field name corrections required in `NewSequencePage.tsx`:**
-- `step.delayDays` → `step.delayHours` (the UI shows "days" but the schema is hours; decide: either keep displaying "days" and multiply by 24 before sending, or rename to hours throughout)
-- `step.bodyHtml` → `step.htmlBody`
-
-### Table stakes for sequence builder UI
-
-| Feature | Why Expected | Current State | Complexity |
-|---------|--------------|---------------|------------|
-| Visual step timeline with connectors | Users need to see email cadence at a glance | Partially built (connector line via absolute positioning) | Low |
-| Add email step | Core action | Built | Done |
-| Add delay step | Core action | Built | Done |
-| Remove step | Core action | Built | Done |
-| Reorder steps (drag-and-drop) | Expected by users of Instantly/Lemlist | Not built | High — defer |
-| Subject field per email step | Core | Built | Done |
-| HTML body textarea | Functional minimum | Built (plain textarea, no rich text) | Done |
-| Template variable hints (`{{firstName}}` etc.) | Strongly expected | Placeholder text hints exist; no autocomplete | Low to add hint list |
-| Save to API | Core — currently broken | BROKEN (console.log only) | Low (the fix this milestone targets) |
-| Campaign association | Required by data model | BROKEN (no campaignId captured) | Low |
-
-### Differentiators (out of scope for fix pass)
-
-| Feature | Value | Complexity |
-|---------|-------|------------|
-| Rich text editor (WYSIWYG) for email body | Significant UX improvement | Medium — add Tiptap or Quill |
-| Step-level preview ("Preview as lead") | Reduces errors | Medium |
-| A/B variant editor in UI | Schema supports it; UI does not expose it | Medium |
-| Drag-and-drop step reordering | Common in Instantly/Apollo | High |
+The codebase has **zero non-unique indexes** beyond primary keys and uniqueness constraints. 15 unique indexes exist (for duplicate prevention), but no query-performance indexes on `organizationId`, `status`, `created_at`, or any foreign key columns used in WHERE/JOIN clauses. Pagination exists on only 4 of ~15 list endpoints. Connection pooling is already properly configured via `postgres.js` (pool size 20, transaction mode through Supavisor).
 
 ---
 
-## 2. Reply Detection via IMAP
+## Feature Landscape
 
-### Standard industry patterns (HIGH confidence — confirmed against codebase)
+### Table Stakes (Users Expect These)
 
-Reply detection in cold email tools follows a consistent algorithm:
+Features users assume exist. Missing these = product feels incomplete (pages are slow, data can be corrupted).
 
-1. Connect to each sending account's IMAP inbox
-2. Fetch messages (typically UNSEEN only, to avoid reprocessing)
-3. For each message, extract `In-Reply-To` and `References` headers
-4. Look up the stored `Message-ID` from the original outreach email
-5. If a match is found, mark the lead as replied and stop the sequence
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| **Foreign key indexes on all org-scoped tables** | Every query filters by `organizationId`. Without indexes, Postgres does sequential scans. | LOW | Add B-tree indexes on `(organizationId)` for: `messages`, `deliveries`, `domains`, `credentials`, `routes`, `webhooks`, `webhook_requests`, `email_accounts`, `lead_lists`, `leads`, `campaigns`, `campaign_leads`, `outreach_emails`, `track_domains`, `suppressions`, `statistics`, `outlook_mailboxes`. Drizzle schema pattern: `index('name').on(table.orgId)` |
+| **Pagination on all list endpoints** | Lists that load all rows (campaigns, email accounts, lead lists, sequences, analytics) freeze the UI at scale. 5 endpoints already paginated, 6+ are not. | MEDIUM | Campaigns list (`/api/outreach/campaigns`) loads ALL campaigns + nested sequences + steps (triple JOIN). Email accounts list loads ALL. Lead lists load ALL. Sequences loads ALL across ALL campaigns. Each needs `page`/`limit` params matching the existing pattern in `messages.ts` and `leads.ts`. |
+| **Composite indexes for filter queries** | The `messages` stats endpoint does `count(*) filter where status = X` and `count(*) where openedAt IS NOT NULL` on full table. | LOW | Add `(organizationId, status)` and `(organizationId, openedAt)` composite indexes on `messages`. Same pattern needed for `campaignLeads(campaignId, status)` for campaign stats. |
+| **Index on `campaignLeads.nextScheduledAt`** | The `processOutreachSequences` job queries `WHERE nextScheduledAt <= now()` across ALL unprocessed leads. This is the send pipeline hot path. | LOW | Add index on `(nextScheduledAt)` with a partial filter for non-terminal statuses: `WHERE status NOT IN ('replied', 'bounced', 'unsubscribed')`. This makes the cron job O(log n) instead of O(n). |
+| **Count query optimization** | Every paginated endpoint runs `count(*)` twice (once for total, once for data). At scale, the count query scans the same index as the data query. | LOW | Acceptable pattern at this scale. The count query will use the new indexes. No code change needed — just the indexes. |
+| **`created_at` indexes for sort** | Most endpoints sort by `createdAt DESC`. Without an index, Postgres sorts in memory on every request. | LOW | Add `(organizationId, createdAt DESC)` indexes on tables with list endpoints. Drizzle `index('name').on(table.orgId, table.createdAt)` |
 
-**Threading header precedence:**
-- `In-Reply-To` is the primary match field — a reply MUST have this set to the original's `Message-ID`
-- `References` is a fallback — it is a space-separated chain of all `Message-ID`s in the thread; the last entry is typically the immediate parent
-- Matching against `References` first ID (as `extractFirstReference` does) can produce false positives in long threads — matching the *last* reference or any reference is more correct
+### Differentiators (Competitive Advantage)
 
-### Current implementation (`processReplies.ts`) — what it does right
+Features that set the product apart. Not required, but valuable.
 
-- Fetches UNSEEN messages only (avoids reprocessing already-seen mail)
-- Parses both `In-Reply-To` and `References` headers
-- Strips angle brackets from Message-ID before comparison (`cleanMessageId`)
-- Updates `outreachEmails.repliedAt`, `campaignLeads.status = 'replied'`, `leads.lastRepliedAt`, and increments counters on both `campaigns` and `emailAccounts`
-- Replied status stops sequence progression (the job skips leads with status `replied`)
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| **Cursor-based pagination for leads** | Offset pagination is O(offset) on large lead lists — page 100 of 10K leads scans 5000 rows. Cursor pagination is O(1). Essential if lead imports reach 10K+. | HIGH | Requires API change (opaque cursor instead of page number). Use `id` or `createdAt` as cursor. Drizzle `.where(gt(table.createdAt, cursor)).limit(50)`. Only needed for `leads` endpoint — other lists stay small. |
+| **Query-level SELECT column filtering** | Campaigns endpoint loads ALL columns including description, tracking settings, timestamps. List views only need `id, name, status, createdAt, totalLeads`. Reduces payload size 60%+. | LOW | Drizzle supports `.columns({ id: true, name: true, status: true })` on `findMany`. Already used in campaigns stats endpoint (`columns: { id: true, status: true }`). Apply to list endpoints. |
+| **Pre-computed denormalized counts** | Campaign stats query does 7 aggregate functions on `campaignLeads` table. The `campaigns` table already has `totalLeads`, `totalOpens`, etc. columns — but they're not always in sync. | MEDIUM | Audit and fix the increment paths (`incrementCampaignStats` in `outreach-sender.ts`). The columns exist but aren't consistently updated. If fixed, stats endpoint can read columns directly instead of aggregating. |
+| **Batched lead import** | Current bulk import inserts 1000 leads in one `db.insert(leads).values([...1000 items])`. Works but can timeout on slow connections. | LOW | Already has a 1000-item cap. Add chunked inserts (100 per batch) with transaction wrapping for reliability. Drizzle supports transactions: `db.transaction(async (tx) => { ... })` |
 
-### Current implementation gaps
+### Anti-Features (Commonly Requested, Often Problematic)
 
-| Gap | Impact | Fix |
-|-----|--------|-----|
-| Uses `imap` library (callback/event model) | Inconsistency — all other IMAP code uses `imapflow` (promise-based). Two libraries to maintain, different error models | Migrate to `imapflow` (existing dependency) |
-| `extractFirstReference` returns refs[0] (oldest in chain) | In a long thread, refs[0] is the original message which may predate the outreach email being looked for | Should match against *any* reference in the chain, or prefer the last |
-| No IMAP IDLE / push notification | Job runs on cron schedule (polling). Reply detection lags by the cron interval | Acceptable for v1; IDLE would reduce lag but adds complexity |
-| Does not mark messages as `\Seen` after processing | Same UNSEEN messages will be reprocessed on next run, generating duplicate match attempts | Add `imap.addFlags(uid, '\\Seen')` after successful processing |
-| Accounts with `provider: 'outlook'` are never processed | `processReplies.ts` only has IMAP logic; Outlook accounts use Graph API for mail access | Medium complexity fix; out of scope for this milestone but worth noting |
+Features that seem good but create problems.
 
-### imapflow migration pattern (what the fix looks like)
-
-`processBounces.ts` is the reference implementation. Pattern:
-```typescript
-const client = new ImapFlow({ host, port, secure, auth: { user, pass }, logger: false })
-await client.connect()
-const lock = await client.getMailboxLock('INBOX')
-try {
-    const uids = await client.search({ seen: false }, { uid: true })
-    for (const uid of uids) {
-        const msg = await client.fetchOne(uid, { headers: ['in-reply-to', 'references'] })
-        // ... process headers
-        await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true })
-    }
-} finally {
-    lock.release()
-    await client.logout()
-}
-```
-
-The key difference from `processBounces.ts`: fetch headers only (not full `source`) to minimize bandwidth.
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| **Redis caching layer** | "Cache the stats so they load instantly" | Adds infrastructure dependency (Redis). Cache invalidation is hard — stale stats show wrong numbers. Current scale doesn't need it. | Fix the indexes first. The stats queries are fast with proper indexes. Pre-computed columns on `campaigns` table already serve as a cache. |
+| **Materialized views for analytics** | "Pre-aggregate the daily stats" | Materialized views need manual refresh. Stale data. Extra complexity. Current `statistics` table already does daily aggregation. | Add the missing indexes. The `outreachAnalytics` table already aggregates daily stats. Fix the increment paths to keep it in sync. |
+| **ORM-level query caching (Drizzle cache)** | "Cache query results in Drizzle" | Drizzle doesn't have built-in query caching. Forcing it adds wrapper complexity. postgres.js already has prepared statement caching. | Connection pooling (already configured) + indexes solve the actual problem. |
+| **Full-text search on leads** | "Search leads by company name, title, etc." | PostgreSQL full-text search requires GIN indexes, tsvector columns, query rewrites. Overkill for a platform with small datasets. | `ILIKE '%term%'` with the new indexes handles the current need. Can revisit at 100K+ leads. |
+| **Read replicas** | "Split read/write traffic for performance" | Supabase doesn't expose read replicas on standard plans. Adds connection management complexity. | Connection pool (already 20 connections) handles current load. Indexes fix the actual slowness. |
 
 ---
-
-## 3. Bounce Detection
-
-### Standard industry classification (HIGH confidence — confirmed against codebase + well-established SMTP standards)
-
-**Hard bounce** — permanent delivery failure. The recipient address does not exist or is permanently rejected. Action: suppress the address immediately, stop all future sending.
-- SMTP codes: 5xx (550, 551, 553 most common)
-- DSN status codes: 5.x.x
-
-**Soft bounce** — temporary delivery failure. Mailbox full, server temporarily unavailable, greylisted. Action: retry later (typically 3-5 attempts), then convert to hard bounce if persistent.
-- SMTP codes: 4xx (450, 451, 452)
-- DSN status codes: 4.x.x
-
-### Current implementation (`processBounces.ts`) — what it does right
-
-- Uses `imapflow` (correct, consistent with all other IMAP code)
-- Uses `mailparser` (simpleParser) to parse full message source
-- Sender-based heuristic: `BOUNCE_SENDERS` list + `BOUNCE_SUBJECTS` list
-- Keyword-based classification into hard vs soft via `hardBounceIndicators` / `softBounceIndicators`
-- Extracts diagnostic SMTP code from message content
-- Two-pass lookup: tries `originalMessageId` first, falls back to `recipientEmail + accountId`
-- Updates `outreachEmails.status = 'bounced'`, `campaignLeads.status = 'bounced'`, `leads.status = 'bounced'`, increments bounce counters
-- Also supports webhook-based bounce ingestion (`processBounceFromWebhook`) for ESPs like SendGrid/Mailgun
-
-### Current implementation gaps
-
-| Gap | Impact | Fix |
-|-----|--------|-----|
-| Hard/soft distinction not persisted | `bounceType` is computed but never stored; only `bounceReason` text is saved. Soft bounces are treated identically to hard bounces (lead permanently stopped) | Add `bounceType` column to `outreach_emails`; only hard bounces should permanently suppress |
-| No DSN MIME part parsing | RFC 3464 DSN messages contain a `message/delivery-status` MIME part with structured fields (`Final-Recipient`, `Action`, `Status`, `Diagnostic-Code`). Current code does text search on full content — less reliable | Use `mailparser`'s attachment parsing to find the `message/delivery-status` part directly |
-| Duplicate processing risk | Processed bounce emails are marked `\Seen` but the IMAP search only looks for `from: mailer-daemon` etc., not `unseen`. Messages could be reprocessed | Add `{ seen: false }` to the search query alongside the sender filters |
-| `currentDailySent` not reset daily | The `canSendFromAccount` check uses `currentDailySent` but nothing in the codebase resets it at midnight | Need a daily cron job: `UPDATE email_accounts SET current_daily_sent = 0 WHERE ...` |
-| Bounce from IMAP search only finds 4 sender patterns | `bounce@` and `bounces@` won't match `bounce+hash@domain.com` (common in Mailchimp-style bounce addresses) | Use `LIKE 'bounce%'` style search or broader heuristic |
-
-### DSN parsing — what proper RFC 3464 parsing looks like (MEDIUM confidence)
-
-A proper DSN bounce email has three MIME parts:
-1. `text/plain` — human-readable explanation
-2. `message/delivery-status` — machine-readable status per recipient
-3. `message/rfc822` — original message (optional)
-
-The `message/delivery-status` part contains:
-```
-Final-Recipient: rfc822; user@example.com
-Action: failed
-Status: 5.1.1
-Diagnostic-Code: smtp; 550 5.1.1 The email account that you tried to reach does not exist
-```
-
-`mailparser` exposes attachments with `contentType === 'message/delivery-status'`. Parsing this directly is more reliable than text scanning.
-
----
-
-## 4. Daily Send Limit Enforcement
-
-### Industry patterns (HIGH confidence — confirmed against codebase schema)
-
-Cold email tools enforce send limits at the email-account level (not campaign level) because a single account has a fixed reputation budget regardless of how many campaigns use it.
-
-**Standard pattern:**
-1. `emailAccounts.dailySendLimit` — maximum per day (configurable per account)
-2. `emailAccounts.currentDailySent` — counter incremented on each send
-3. Before sending: check `currentDailySent < dailySendLimit`
-4. After midnight: reset `currentDailySent = 0` for all accounts
-5. Optional: random jitter between sends (humanization) via `minMinutesBetweenEmails` / `maxMinutesBetweenEmails`
-
-The schema already has all these fields. `outreach-sender.ts` has the correct `canSendFromAccount` check. `processOutreachSequences.ts` has a duplicate version.
-
-### Current implementation gaps
-
-| Gap | Impact | Fix |
-|-----|--------|-----|
-| `currentDailySent` is never reset to 0 | After hitting the daily limit, an account will never send again (counter never resets) | Add a midnight cron: `UPDATE email_accounts SET current_daily_sent = 0` |
-| `processOutreachSequences.ts` has its own `canSendFromAccount` | Duplicates the logic in `outreach-sender.ts`; if the limit check logic changes, only one version gets updated | Remove from job, import from `outreach-sender.ts` |
-| Warm-up fields exist but logic is not implemented | `warmupEnabled`, `warmupDays`, `warmupCurrentDay` are in schema but nothing ramps up `dailySendLimit` over time | Out of scope per PROJECT.md |
-| No random send interval (jitter) | `minMinutesBetweenEmails` / `maxMinutesBetweenEmails` exist on the schema but the job does not respect them | Moderate fix: before scheduling `nextScheduledAt`, add random jitter within the configured range |
-| Per-account send counting not incremented in all paths | `outreach-sender.ts` should increment `currentDailySent` after a successful send. Need to verify this actually happens in the job | Check `processOutreachSequences.ts` post-send update logic |
-
-### Daily reset cron — required pattern
-
-```typescript
-// In jobs/index.ts — schedule at midnight UTC
-cron.schedule('0 0 * * *', async () => {
-    await db.update(emailAccounts).set({ currentDailySent: 0 })
-    console.log('[jobs] Reset daily send counters for all email accounts')
-})
-```
-
-This is a critical missing piece. Without it, accounts hit their limit on day 1 and never send again.
-
----
-
-## Table Stakes (What Must Work for End-to-End Function)
-
-Features users expect to work before the system is considered functional:
-
-| Feature | Why Expected | Current State | Fix Required |
-|---------|--------------|---------------|--------------|
-| Create sequence with steps linked to a campaign | Core flow | BROKEN — UI disconnected from API | Yes (this milestone) |
-| Correct field names (delayHours, htmlBody) | API contract | BROKEN — UI uses delayDays, bodyHtml | Yes (this milestone) |
-| Reply detection via IMAP | Sequence must stop on reply | Partially working but uses wrong IMAP library | Yes (this milestone) |
-| Bounce detection via IMAP | Lead must be suppressed on hard bounce | Working but soft/hard distinction not persisted | Partial |
-| Daily send counter reset at midnight | Accounts must recover each day | MISSING — counter never resets | Yes (critical) |
-| Per-account send limit respected | Inbox reputation protection | Logic exists but duplicated | Consolidate |
-| Outlook sending via sequence processor | Outlook accounts must work | MISSING — job only uses SMTP path | Yes (this milestone) |
-| A/B variant selection | Schema and sender support it; job always picks variant A | BROKEN — job hardcodes variant 'a' | Yes (this milestone) |
-
-## Anti-Features (Do Not Build)
-
-| Anti-Feature | Why Avoid | What to Do Instead |
-|--------------|-----------|-------------------|
-| Warm-up automation logic | Schema fields exist but explicitly deferred in PROJECT.md; adds complexity | Leave `warmupEnabled` fields dormant; mark as future work |
-| Rich text / WYSIWYG editor in NewSequencePage | High complexity; not needed for functional fix | Keep the textarea; add a comment for future enhancement |
-| Multi-channel steps (LinkedIn, SMS) | Net-new feature; out of scope per PROJECT.md | Not applicable |
-| Drag-and-drop step reordering | High complexity; the sequence builder works without it | Use "Add above/below" buttons if needed, or defer entirely |
-| Webhook-based bounce ingestion expansion | Current `processBounceFromWebhook` is sufficient for the fix pass | Do not add new webhook providers |
 
 ## Feature Dependencies
 
 ```
-Campaign exists
-    → Sequence can be created (sequences.campaignId is NOT NULL)
-        → Steps can be created (steps.sequenceId)
-            → Leads can be assigned to campaign (campaignLeads)
-                → processOutreachSequences job can run
-                    → outreachEmails records created with messageId
-                        → processReplies can match replies (via messageId)
-                        → processBounces can match bounces (via messageId or email)
+[FK Indexes]
+    └──enables──> [Pagination] (indexes make count queries fast)
+    └──enables──> [Stats Performance] (composite indexes for aggregate queries)
 
-Daily counter reset
-    → canSendFromAccount returns true after midnight
-        → sequence processing resumes after hitting daily limit
+[Composite Indexes]
+    └──enables──> [Pre-computed Counts] (fast enough to keep denormalized data consistent)
+
+[Pagination — Campaigns]
+    └──requires──> [SELECT Column Filtering] (reduce payload size)
+
+[Cursor Pagination — Leads]
+    └──requires──> [FK Indexes on leads] (cursor needs indexed sort column)
+    └──enhances──> [Bulk Import Reliability] (consistent performance at scale)
 ```
 
-## MVP for This Fix Pass
+### Dependency Notes
 
-The minimum to make the system work end-to-end:
+- **FK Indexes are the foundation**: Everything else depends on indexes being in place. Pagination without indexes still scans full tables.
+- **Pagination is independent per endpoint**: Can roll out incrementally (campaigns first, then email accounts, etc.)
+- **Pre-computed counts conflict with fresh aggregation**: If we fix denormalized column updates, we can skip aggregate queries entirely for stats.
 
-1. **Fix `NewSequencePage` field names** — `delayDays` → `delayHours`, `bodyHtml` → `htmlBody`
-2. **Connect `NewSequencePage` save to API** — replace `console.log` with API calls to create sequence + steps
-3. **Capture `campaignId` in `NewSequencePage`** — from route param or picker
-4. **Migrate `processReplies.ts` to imapflow** — consistent with all other IMAP code
-5. **Consolidate `processOutreachSequences.ts`** — remove duplicated functions, import from `outreach-sender.ts`
-6. **Add daily counter reset cron** — `UPDATE email_accounts SET current_daily_sent = 0` at midnight
-7. **Fix A/B variant selection in job** — read `abTestEnabled` and `abTestPercentage`, select variant probabilistically
+---
 
-Defer: bounce type persistence, DSN MIME parsing, random jitter, Outlook reply detection.
+## MVP Definition
+
+### Launch With (v1.1)
+
+Minimum to fix "every page loads slow" and "no indexes set up":
+
+- [ ] **FK indexes on all org-scoped tables** — 17 `CREATE INDEX` statements via Drizzle migration. The single biggest performance win.
+- [ ] **Composite indexes for stats queries** — `(organizationId, status)` on messages and campaignLeads. Makes dashboard stats sub-second.
+- [ ] **Index on `campaignLeads.nextScheduledAt`** — Unblocks the send pipeline from scanning all leads every cron cycle.
+- [ ] **Pagination on campaigns list** — Currently the worst offender (loads all campaigns + nested sequences + steps with zero limit).
+- [ ] **Pagination on email accounts and lead lists** — Follow the existing `page`/`limit` pattern from `messages.ts`.
+
+### Add After Validation (v1.1.x)
+
+- [ ] **Pagination on sequences list** — Loads ALL sequences across ALL campaigns. Less frequent access than campaigns.
+- [ ] **SELECT column filtering on list endpoints** — Reduce payload sizes for campaigns, email accounts.
+- [ ] **Audit and fix denormalized count columns** — Ensure `campaigns.totalLeads`, `campaigns.totalOpens`, etc. stay in sync.
+- [ ] **Add `EXPLAIN ANALYZE` logging in dev mode** — Log slow queries (>100ms) to catch regressions.
+
+### Future Consideration (v1.2+)
+
+- [ ] **Cursor-based pagination for leads** — Only needed at 50K+ leads. Offset pagination is fine for now.
+- [ ] **Chunked batch inserts** — Only needed if bulk import starts timing out.
+- [ ] **Database-level constraints** — NOT NULL defaults, CHECK constraints on status fields.
+
+---
+
+## Feature Prioritization Matrix
+
+| Feature | User Value | Implementation Cost | Priority |
+|---------|------------|---------------------|----------|
+| FK indexes (17 tables) | HIGH | LOW | P1 |
+| Composite indexes (stats) | HIGH | LOW | P1 |
+| nextScheduledAt index | HIGH | LOW | P1 |
+| Pagination — campaigns | HIGH | MEDIUM | P1 |
+| Pagination — email accounts | MEDIUM | LOW | P1 |
+| Pagination — lead lists | MEDIUM | LOW | P1 |
+| SELECT column filtering | MEDIUM | LOW | P2 |
+| Fix denormalized counts | MEDIUM | MEDIUM | P2 |
+| Pagination — sequences | MEDIUM | MEDIUM | P2 |
+| Slow query logging | LOW | LOW | P2 |
+| Cursor pagination — leads | LOW | HIGH | P3 |
+| Batch insert chunking | LOW | LOW | P3 |
+
+**Priority key:**
+- P1: Must have — fixes the "every page loads slow" problem
+- P2: Should have — improves quality, prevents future issues
+- P3: Nice to have — only needed at significant scale
+
+---
+
+## Competitor Feature Analysis
+
+| Feature | Postal | SmartLead | Instantly | Our Approach |
+|---------|--------|-----------|-----------|--------------|
+| Indexes on org-scoped columns | Yes (Rails auto-indexes FKs) | Yes | Yes | Add manually via Drizzle — we're behind |
+| Paginated list endpoints | Yes | Yes | Yes | 4/15 endpoints paginated — need to complete |
+| Cursor pagination for leads | No (offset) | Yes | Yes | Defer — offset is fine at current scale |
+| Stats via denormalized columns | No (aggregate queries) | Yes | Yes | Columns exist, increment paths need audit |
+| Slow query detection | No | Yes (logging) | Yes | Add EXPLAIN ANALYZE in dev mode |
+
+---
+
+## Existing Infrastructure (Already Working)
+
+These don't need to be built — they're already in place:
+
+| Feature | Status | Location |
+|---------|--------|----------|
+| Connection pooling | Configured | `src/db/index.ts` — pool of 20, Supavisor transaction mode |
+| Prepared statements | Enabled | `postgres.js` with `prepare: true` |
+| Query logging in dev | Configured | `src/db/index.ts` — Drizzle logger enabled when `NODE_ENV=development` |
+| Database health check | Working | `checkDatabaseHealth()` in `src/db/index.ts` |
+| Pool stats monitoring | Working | `getPoolStats()` in `src/db/index.ts` |
+| Retry with backoff | Working | `withRetry()` in `src/db/index.ts` |
+| Zod validation on all routes | Working | All API routes validate request bodies |
+| RLS policies | Partially broken | Migration 001 references removed `servers` table — out of scope for this milestone |
+
+---
 
 ## Sources
 
-- `src/pages/outreach/sequences/NewSequencePage.tsx` — direct code inspection (HIGH confidence)
-- `src/server/routes/outreach/campaigns.ts` — API contract confirmed (HIGH confidence)
-- `src/server/jobs/processReplies.ts` — reply detection implementation (HIGH confidence)
-- `src/server/jobs/processBounces.ts` — bounce detection implementation (HIGH confidence)
-- `src/server/jobs/processOutreachSequences.ts` — sequence processor (HIGH confidence)
-- `src/server/lib/outreach-sender.ts` — shared sender module (HIGH confidence)
-- `src/db/schema.ts` — field names, types, and constraints (HIGH confidence)
-- `.planning/PROJECT.md` — scope decisions and active requirements (HIGH confidence)
-- Industry patterns (Instantly, Apollo, Lemlist campaign/sequence model) — training knowledge (MEDIUM confidence)
-- RFC 3464 DSN structure — training knowledge (HIGH confidence, well-established standard)
-- SMTP bounce code classification (5xx hard, 4xx soft) — training knowledge (HIGH confidence, well-established standard)
+- Direct codebase analysis: `src/db/schema.ts` (1254 lines, 15 unique indexes, 0 performance indexes)
+- Direct codebase analysis: `src/server/routes/outreach/campaigns.ts` (6/8 endpoints unpaginated)
+- Direct codebase analysis: `src/server/routes/outreach/leads.ts` (3/7 endpoints unpaginated)
+- Direct codebase analysis: `src/server/routes/organizations.ts` (stats endpoint, full table scans)
+- Direct codebase analysis: `src/server/routes/messages.ts` (reference pagination implementation)
+- Direct codebase analysis: `src/server/jobs/processOutreachSequences.ts` (unbounded lead query)
+- Direct codebase analysis: `src/db/index.ts` (connection pool, retry, health checks)
+- `.planning/codebase/CONCERNS.md` (Performance section, lines 24-36)
+
+---
+
+*Feature research for: database health improvements*
+*Researched: 2026-03-31*

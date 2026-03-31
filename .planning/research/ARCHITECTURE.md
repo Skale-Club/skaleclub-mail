@@ -1,470 +1,564 @@
-# Architecture Patterns
+# Architecture Research: Database Health Improvements
 
-**Domain:** Cold email outreach system — completion pass
-**Researched:** 2026-03-30
-**Confidence:** HIGH (all patterns derived from direct code inspection, not training assumptions)
+**Domain:** Multi-tenant email platform database optimization
+**Researched:** 2026-03-31
+**Confidence:** HIGH
 
----
+## Current Architecture Assessment
 
-## Context: What Was Found
+### System Overview
 
-Four distinct architectural gaps exist in the outreach module. Each is analyzed with
-the concrete pattern to apply, grounded in what the codebase already does elsewhere.
-
----
-
-## Gap 1: Code Consolidation — Shared Sending Logic
-
-### Current State
-
-`processOutreachSequences.ts` has three private functions that duplicate logic
-already exported from `outreach-sender.ts`:
-
-| Duplicate in job | Canonical in outreach-sender.ts |
-|---|---|
-| `isWithinSendWindow(campaign, now)` | `isWithinSendWindow(campaign, now)` — identical signature |
-| `canSendFromAccount(account)` | `canSendFromAccount(account)` — slightly weaker (omits `.status !== 'verified'` check) |
-| `sendEmail(account, to, ...)` | `sendOutreachEmail(params)` — superset: handles Outlook, A/B variants, template interpolation, tracking |
-
-The job also duplicates `recordOutreachEmail` inline (`db.insert(outreachEmails)`) and
-duplicates stat increment logic instead of calling `incrementAccountStats` and
-`incrementCampaignStats`.
-
-### Correct Pattern
-
-**Replace private implementations with imports from the shared module.**
-
-The shared module is the authoritative source. The job's role is orchestration:
-fetch pending leads, apply eligibility filters, call the shared module, advance state.
-
-```typescript
-// processOutreachSequences.ts — correct import block
-import {
-    isWithinSendWindow,
-    canSendFromAccount,
-    sendOutreachEmail,
-    recordOutreachEmail,
-    updateCampaignLeadProgress,
-    incrementAccountStats,
-    incrementCampaignStats,
-    calculateNextScheduledAt,
-    getNextStepForLead,
-} from '../lib/outreach-sender'
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   Current State (v1.0)                        │
+├─────────────────────────────────────────────────────────────┤
+│  src/db/schema.ts (1263 lines, 30+ tables)                   │
+│  ├── 12 unique indexes defined in Drizzle schema             │
+│  ├── 0 non-unique performance indexes in schema              │
+│  ├── 30+ foreign keys (most without covering indexes)        │
+│  └── Single-file schema, all tables in one place             │
+├─────────────────────────────────────────────────────────────┤
+│  supabase/migrations/013_add_performance_indexes.sql         │
+│  ├── 35 hand-written CREATE INDEX statements                 │
+│  ├── Exists OUTSIDE Drizzle schema (drift risk)              │
+│  ├── 7 indexes commented out (not yet created)               │
+│  └── No partial indexes beyond 2 webhooks/campaigns          │
+├─────────────────────────────────────────────────────────────┤
+│  Query Layer (route handlers + jobs)                         │
+│  ├── db.query.*.findMany() — no pagination on most routes    │
+│  ├── Nested eager loading via `with: {}` — full depth        │
+│  ├── N+1 in processQueue (load delivery → load message →     │
+│  │   load org separately per delivery)                       │
+│  └── Raw SQL only in tracking.ts (upserts, increments)       │
+├─────────────────────────────────────────────────────────────┤
+│  Drizzle ORM + PostgreSQL (Supabase)                         │
+│  ├── postgres.js pool (max 20, Supavisor transaction mode)   │
+│  ├── drizzle.config.ts → ./drizzle (generated migrations)    │
+│  └── RLS policies in supabase/migrations/*.sql               │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-The private `sendEmail`, `isWithinSendWindow`, and `canSendFromAccount` functions in
-the job file can then be deleted entirely.
+## Where Indexes Go: Dual-Track Problem
 
-### Why `sendOutreachEmail` is the Right Replacement for `sendEmail`
+### The Core Issue
 
-`sendEmail` in the job only handles SMTP. `sendOutreachEmail` in the shared module:
-- Routes Outlook accounts through `sendMessageWithOutlook` automatically
-- Handles A/B variant selection from `step.htmlBodyB` / `step.subjectB`
-- Returns `{ success, messageId, finalHtml, finalText }` — the job needs to check
-  `result.success` before proceeding, rather than catching a thrown error
+This project has **two places** where indexes can be defined, and they're out of sync:
 
-Call signature difference to account for:
+| Location | What's There | Who Uses It |
+|----------|-------------|-------------|
+| `src/db/schema.ts` | 12 unique indexes (on unique constraints) | Drizzle ORM types, `db:generate` |
+| `supabase/migrations/013_*.sql` | 35 hand-written indexes (7 commented out) | `npm run db:push` direct SQL |
+
+**Drizzle schema-defined indexes** only generate SQL during `npm run db:generate`. The hand-written SQL migration in `013_add_performance_indexes.sql` runs via `npm run db:push` and exists outside Drizzle's awareness.
+
+**Problem:** If someone runs `npm run db:generate` after modifying schema.ts, Drizzle may not know about the manual indexes. If someone modifies `013_*.sql`, the schema doesn't reflect it. This is schema drift.
+
+### Recommended Approach: Schema-First with Drizzle
+
+**Move all indexes INTO `src/db/schema.ts`** using Drizzle's index API. This is the correct integration point because:
+
+1. **Drizzle ORM** uses `pgTable`'s second argument (callback) for indexes — `uniqueIndex`, `index`, etc.
+2. **`npm run db:generate`** produces migration SQL that includes index changes
+3. **Single source of truth** — schema.ts is the authority, no drift between manual SQL and ORM definitions
+4. **Type safety** — index names are co-located with table definitions
 
 ```typescript
-// OLD: job private function (throws on SMTP failure)
-const { messageId, finalHtml } = await sendEmail(account, lead.email, ...)
+// Current: only unique indexes in schema.ts
+export const campaignLeads = pgTable('campaign_leads', {
+    // ...columns...
+}, (table) => ({
+    campaignLeadUnique: uniqueIndex('campaign_lead_unique').on(table.campaignId, table.leadId),
+}))
 
-// NEW: shared module (returns success flag, never throws for send failures)
-const result = await sendOutreachEmail({
-    account,
-    lead,
-    campaign,
-    step,
-    campaignLeadId: campaignLead.id,
-    trackOpens: campaign.trackOpens,
-    trackClicks: campaign.trackClicks,
-    trackingBaseUrl: process.env.FRONTEND_URL || 'http://localhost:9000',
-    abVariant: selectAbVariant(step), // see Gap 3 below
+// After optimization: add performance indexes alongside unique indexes
+export const campaignLeads = pgTable('campaign_leads', {
+    // ...columns...
+}, (table) => ({
+    // Existing unique constraint
+    campaignLeadUnique: uniqueIndex('campaign_lead_unique').on(table.campaignId, table.leadId),
+    // NEW: Performance indexes for common queries
+    campaignIdIdx: index('idx_campaign_leads_campaign_id').on(table.campaignId),
+    leadIdIdx: index('idx_campaign_leads_lead_id').on(table.leadId),
+    statusIdx: index('idx_campaign_leads_status').on(table.status),
+    nextScheduledIdx: index('idx_campaign_leads_next_scheduled').on(table.nextScheduledAt),
+    // NEW: Composite index for the processOutreachSequences job query
+    pendingLeadsIdx: index('idx_campaign_leads_pending').on(
+        table.nextScheduledAt, table.status
+    ),
+}))
+```
+
+### Migration Strategy for Dual-Track
+
+**Step 1:** Add all indexes to `src/db/schema.ts` using Drizzle's `index()` API
+**Step 2:** Run `npm run db:generate` — Drizzle generates migration SQL
+**Step 3:** Review generated migration — indexes that already exist in 013 will get `CREATE INDEX IF NOT EXISTS` (safe)
+**Step 4:** `013_add_performance_indexes.sql` becomes legacy — can be kept for historical reference but schema.ts becomes source of truth
+**Step 5:** Future `npm run db:push` applies schema changes directly
+
+**Key constraint:** Drizzle's `index()` function in schema.ts is a **schema definition**, not a push action. The migration workflow is:
+- `npm run db:generate` → generates migration files in `./drizzle/`
+- `npm run db:push` → pushes schema to database directly (skips migration files)
+
+The project currently uses `db:push` (direct push), not `db:migrate` (versioned migrations). This means schema.ts changes take effect immediately on push.
+
+## Index Placement: Critical Locations
+
+### Tier 1: Background Job Hot Paths (Highest Impact)
+
+These queries run every 1-5 minutes and scan thousands of rows:
+
+#### `processOutreachSequences` (every 5 min)
+
+```typescript
+// Current query (src/server/jobs/processOutreachSequences.ts line 80-91)
+const pendingLeads = await db.query.campaignLeads.findMany({
+    where: and(
+        lte(campaignLeads.nextScheduledAt, now),
+        notInArray(campaignLeads.status, ['replied', 'bounced', 'unsubscribed'])
+    ),
+    with: {
+        campaign: true,
+        lead: true,
+        currentStep: true,
+        assignedEmailAccount: true
+    }
 })
+```
 
-if (!result.success) {
-    console.error(`[processOutreachSequences] Send failed: ${result.error}`)
-    result.errors++
-    continue
+**Required index:** `campaign_leads(next_scheduled_at, status)` — composite index on the two filter columns. PostgreSQL can use this for the range scan on `nextScheduledAt <= now` AND the status exclusion.
+
+```typescript
+// In schema.ts — campaignLeads table
+nextScheduledStatusIdx: index('idx_cl_next_sched_status').on(
+    table.nextScheduledAt, table.status
+),
+```
+
+#### `processQueue` (every 1 min)
+
+```typescript
+// Current query (src/server/jobs/processQueue.ts line 18-21)
+const pendingDeliveries = await db.query.deliveries.findMany({
+    where: eq(deliveries.status, 'pending'),
+    limit: 50,
+})
+```
+
+**Existing index:** `idx_deliveries_status` already exists in `013_*.sql`. This should be migrated to schema.ts.
+
+**Required index (schema.ts):**
+```typescript
+// deliveries table
+statusIdx: index('idx_deliveries_status').on(table.status),
+```
+
+#### `processReplies` (every 15 min) and `processBounces` (every 30 min)
+
+These queries scan `messages` or `outreach_emails` filtered by status + timestamp.
+
+**Required indexes:**
+```typescript
+// messages table — composite for org-scoped status queries
+orgStatusCreatedIdx: index('idx_messages_org_status_created').on(
+    table.organizationId, table.status, table.createdAt
+),
+tokenIdx: index('idx_messages_token').on(table.token),  // tracking lookups
+```
+
+```typescript
+// outreach_emails table
+campaignIdIdx: index('idx_outreach_emails_campaign').on(table.campaignId),
+campaignLeadIdIdx: index('idx_outreach_emails_campaign_lead').on(table.campaignLeadId),
+statusIdx: index('idx_outreach_emails_status').on(table.status),
+```
+
+### Tier 2: API Route Endpoints (Medium Impact)
+
+These run on user interaction — list endpoints without pagination will become slow as data grows.
+
+#### Campaign listing (GET /api/outreach/campaigns)
+
+```typescript
+// Current (campaigns.ts line 98-114) — loads ALL campaigns for org + nested sequences
+const campaignsList = await db.query.campaigns.findMany({
+    where: and(...conditions),  // eq(campaigns.organizationId, orgId)
+    orderBy: (campaigns, { desc }) => [desc(campaigns.createdAt)],
+    with: { sequences: { with: { steps: true } } },
+})
+```
+
+**Required indexes:**
+```typescript
+// campaigns table
+orgStatusIdx: index('idx_campaigns_org_status').on(table.organizationId, table.status),
+orgCreatedIdx: index('idx_campaigns_org_created').on(table.organizationId, table.createdAt),
+```
+
+#### Leads listing (GET /api/outreach/leads)
+
+Similar pattern — loads all leads for org, no pagination.
+
+**Required indexes:**
+```typescript
+// leads table — org-scoped with optional list filter
+orgListIdx: index('idx_leads_org_list').on(table.organizationId, table.leadListId),
+orgStatusIdx: index('idx_leads_org_status').on(table.organizationId, table.status),
+```
+
+#### Message tracking (GET /t/open/:token, GET /t/click/:token)
+
+```typescript
+// In tracking.ts — looks up message by token for every tracking hit
+const message = await db.query.messages.findFirst({
+    where: eq(messages.token, token),
+})
+```
+
+**Critical index:** `messages(token)` — this is a per-email-open lookup, must be instant.
+
+### Tier 3: Supporting Tables — FK Column Indexes (Lower Impact)
+
+PostgreSQL does NOT automatically index foreign key columns. Every FK needs a corresponding index for efficient joins and cascading deletes.
+
+**All FK columns needing indexes:**
+
+| Table | Column | Index Name |
+|-------|--------|------------|
+| `domains` | `organization_id` | `idx_domains_org` |
+| `credentials` | `organization_id` | `idx_credentials_org` |
+| `routes` | `organization_id` | `idx_routes_org` |
+| `smtp_endpoints` | `organization_id` | `idx_smtp_endpoints_org` |
+| `http_endpoints` | `organization_id` | `idx_http_endpoints_org` |
+| `address_endpoints` | `organization_id` | `idx_address_endpoints_org` |
+| `outlook_mailboxes` | `organization_id` | `idx_outlook_mailboxes_org` |
+| `webhooks` | `organization_id` | `idx_webhooks_org` |
+| `webhook_requests` | `webhook_id` | `idx_webhook_requests_webhook` |
+| `suppressions` | `organization_id` | `idx_suppressions_org` |
+| `track_domains` | `organization_id` | `idx_track_domains_org` |
+| `statistics` | `organization_id` | `idx_statistics_org` |
+| `templates` | `organization_id` | `idx_templates_org` |
+| `email_accounts` | `organization_id` | `idx_email_accounts_org` |
+| `lead_lists` | `organization_id` | `idx_lead_lists_org` |
+| `leads` | `organization_id` | `idx_leads_org` |
+| `leads` | `lead_list_id` | `idx_leads_list` |
+| `campaigns` | `organization_id` | `idx_campaigns_org` |
+| `sequences` | `campaign_id` | `idx_sequences_campaign` |
+| `sequence_steps` | `sequence_id` | `idx_sequence_steps_seq` |
+| `campaign_leads` | `campaign_id` | `idx_cl_campaign` |
+| `campaign_leads` | `lead_id` | `idx_cl_lead` |
+| `campaign_leads` | `assigned_email_account_id` | `idx_cl_email_account` |
+| `campaign_leads` | `current_step_id` | `idx_cl_current_step` |
+| `outreach_emails` | `organization_id` | `idx_oe_org` |
+| `outreach_emails` | `campaign_id` | `idx_oe_campaign` |
+| `outreach_emails` | `campaign_lead_id` | `idx_oe_campaign_lead` |
+| `outreach_emails` | `sequence_step_id` | `idx_oe_step` |
+| `outreach_emails` | `email_account_id` | `idx_oe_email_account` |
+| `outreach_analytics` | `organization_id` | `idx_oa_org` |
+| `outreach_analytics` | `campaign_id` | `idx_oa_campaign` |
+| `outreach_analytics` | `email_account_id` | `idx_oa_email_account` |
+| `deliveries` | `message_id` | `idx_deliveries_msg` |
+| `deliveries` | `organization_id` | `idx_deliveries_org` |
+| `mailboxes` | `user_id` | `idx_mailboxes_user` |
+| `mail_folders` | `mailbox_id` | `idx_mail_folders_mb` |
+| `mail_messages` | `mailbox_id` | `idx_mm_mailbox` |
+| `mail_messages` | `folder_id` | `idx_mm_folder` |
+
+## Query Layer Changes
+
+### Pattern 1: Add Pagination to List Endpoints
+
+**Current pattern (N+1 / full-table scans):**
+```typescript
+// BAD — loads entire table for org
+const campaignsList = await db.query.campaigns.findMany({
+    where: eq(campaigns.organizationId, orgId),
+    orderBy: (campaigns, { desc }) => [desc(campaigns.createdAt)],
+})
+res.json({ campaigns: campaignsList })
+```
+
+**Target pattern:**
+```typescript
+// GOOD — offset pagination
+const page = Math.max(1, parseInt(req.query.page as string) || 1)
+const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize as string) || 25))
+const offset = (page - 1) * pageSize
+
+const [items, [{ count }]] = await Promise.all([
+    db.query.campaigns.findMany({
+        where: eq(campaigns.organizationId, orgId),
+        orderBy: (campaigns, { desc }) => [desc(campaigns.createdAt)],
+        limit: pageSize,
+        offset,
+    }),
+    db.select({ count: count() }).from(campaigns).where(eq(campaigns.organizationId, orgId)),
+])
+res.json({ campaigns: items, pagination: { page, pageSize, total: Number(count) } })
+```
+
+**Integration point:** All `GET /api/outreach/*` list routes and `GET /api/*` list routes.
+
+**Files requiring modification:**
+- `src/server/routes/outreach/campaigns.ts` — `GET /` (list campaigns)
+- `src/server/routes/outreach/leads.ts` — `GET /` (list leads), `GET /lists` (list lead lists)
+- `src/server/routes/outreach/email-accounts.ts` — `GET /` (list email accounts)
+
+### Pattern 2: Fix N+1 in processQueue
+
+**Current (processQueue.ts lines 35-68):**
+```typescript
+// BAD — 3 queries PER delivery (load delivery → load message → load org)
+for (const delivery of readyDeliveries) {
+    const message = await db.query.messages.findFirst({ where: eq(messages.id, delivery.messageId) })
+    const org = await db.query.organizations.findFirst({ where: eq(organizations.id, message.organizationId) })
+    // ...process
 }
 ```
 
-### A/B Variant Selection
-
-The job hardcodes `abVariant: null`. The correct pattern reads from the step:
-
+**Target: batch-load messages and orgs upfront:**
 ```typescript
-function selectAbVariant(step: typeof sequenceSteps.$inferSelect): 'a' | 'b' {
-    if (!step.abTestEnabled) return 'a'
-    const threshold = step.abTestPercentage ?? 50
-    return Math.random() * 100 < threshold ? 'a' : 'b'
+// GOOD — 2 queries total instead of 3*N
+const messageIds = readyDeliveries.map(d => d.messageId)
+const messagesMap = new Map(
+    (await db.query.messages.findMany({
+        where: inArray(messages.id, messageIds),
+    })).map(m => [m.id, m])
+)
+const orgIds = [...new Set([...messagesMap.values()].map(m => m.organizationId))]
+const orgsMap = new Map(
+    (await db.query.organizations.findMany({
+        where: inArray(organizations.id, orgIds),
+    })).map(o => [o.id, o])
+)
+
+for (const delivery of readyDeliveries) {
+    const message = messagesMap.get(delivery.messageId)
+    const org = message ? orgsMap.get(message.organizationId) : null
+    // ...process
 }
 ```
 
-This function belongs in the job file (it is orchestration logic, not send logic), or
-optionally exported from `outreach-sender.ts` if other callers need it.
+**Integration point:** `src/server/jobs/processQueue.ts` — modify `processDelivery()` function signature to accept pre-loaded maps, or restructure to batch-load before the loop.
 
----
+### Pattern 3: Selective Column Loading
 
-## Gap 2: IMAP Polling Job — imapflow Pattern
+**Current:** Most queries use `db.query.*.findFirst()` which loads ALL columns including large text fields (htmlBody, plainBody).
 
-### Current State
+**Target for specific cases:**
+```typescript
+// When only checking existence or getting a count
+const count = await db.select({ count: count() })
+    .from(campaignLeads)
+    .where(eq(campaignLeads.campaignId, campaignId))
 
-`processReplies.ts` uses the `imap` package (callback-based, event-driven). All other
-IMAP code in this codebase uses `imapflow` (promise-based). The `imap` package
-remains in `package.json` and `@types/imap` is present, so no install step is needed
-for the migration — only `imapflow` must be kept, and the `imap` import removed.
+// When only needing specific fields (skip large text columns)
+const statuses = await db.select({
+    id: campaignLeads.id,
+    status: campaignLeads.status,
+    nextScheduledAt: campaignLeads.nextScheduledAt,
+}).from(campaignLeads).where(eq(campaignLeads.campaignId, campaignId))
+```
 
-### Canonical Pattern (from processBounces.ts)
+**Integration point:** `src/server/jobs/processOutreachSequences.ts`, route handlers where full objects aren't needed.
 
-`processBounces.ts` is the reference implementation. It demonstrates the complete
-imapflow lifecycle as used in this codebase:
+### Pattern 4: Partial Indexes for Hot Filters
+
+For queries that always filter on the same value (e.g., `status = 'active'`, `active = true`):
 
 ```typescript
-import { ImapFlow } from 'imapflow'
+// In schema.ts — partial index only indexes rows matching the WHERE clause
+// Smaller index = faster scans for hot-path queries
+import { index } from 'drizzle-orm/pg-core'
 
-// Per-account iteration — one connection per account
-for (const account of accounts) {
-    let client: ImapFlow | null = null
-
-    try {
-        client = new ImapFlow({
-            host: account.imapHost!,
-            port: account.imapPort || 993,
-            secure: account.imapSecure !== false,
-            auth: {
-                user: account.imapUsername!,
-                pass: decryptSecret(account.imapPassword!),
-            },
-            logger: false,     // suppress imapflow's built-in logging
-        })
-
-        await client.connect()
-
-        const lock = await client.getMailboxLock('INBOX')
-
-        try {
-            // All mailbox operations go inside the lock block
-            const uids = await client.search({ unseen: true }, { uid: true })
-
-            for (const uid of uids) {
-                const message = await client.fetchOne(uid, { source: true })
-                // process message ...
-            }
-        } finally {
-            lock.release()   // ALWAYS release in finally — prevents deadlock
-        }
-    } catch (error) {
-        console.error(`Error processing account ${account.email}:`, error)
-        result.errors++
-    } finally {
-        if (client) {
-            try {
-                await client.logout()
-            } catch {
-                // Ignore logout errors — connection may already be dead
-            }
-        }
-    }
-}
+export const campaigns = pgTable('campaigns', {
+    // ...columns...
+}, (table) => ({
+    // Partial index: only active campaigns indexed
+    activeOrgIdx: index('idx_campaigns_active_org')
+        .on(table.organizationId)
+        .where(sql`status = 'active'`),
+}))
 ```
 
-### Key imapflow Concepts for processReplies Migration
+**Use cases:**
+- `campaigns` where `status = 'active'` (processOutreachSequences joins active campaigns)
+- `webhooks` where `active = true` (tracking webhook dispatch)
+- `deliveries` where `status = 'pending'` (processQueue)
+- `emailAccounts` where `status = 'active'` (account selection for sending)
 
-**Fetching headers only (not full source):**
+## Schema Constraint Improvements
 
-The replies job only needs `In-Reply-To` and `References` headers, not the full
-message body. imapflow supports this:
+### Missing NOT NULL Constraints
+
+Assessment: NOT NULL constraints are generally well-applied across the schema. All primary ownership columns (organizationId, campaignId, etc.) are `.notNull()`. No critical gaps found.
+
+### Recommended CHECK Constraints
 
 ```typescript
-for await (const message of client.fetch(
-    { unseen: true },
-    { headers: ['in-reply-to', 'references'] },
-    { uid: true }
-)) {
-    const inReplyTo = message.headers.get('in-reply-to') || null
-    const references = message.headers.get('references') || null
-    // match against outreach_emails.message_id ...
-}
+// In schema.ts — add check constraints via the table callback
+import { check, sql } from 'drizzle-orm/pg-core'
+
+export const emailAccounts = pgTable('email_accounts', {
+    // ...columns...
+    dailySendLimit: integer('daily_send_limit').default(50).notNull(),
+    currentDailySent: integer('current_daily_sent').default(0).notNull(),
+}, (table) => ({
+    orgEmailUnique: uniqueIndex('email_account_org_email_unique').on(table.organizationId, table.email),
+    // NEW: validate daily limits are positive
+    dailyLimitCheck: check('daily_send_limit_positive', sql`${table.dailySendLimit} > 0`),
+    dailySentCheck: check('current_daily_sent_non_negative', sql`${table.currentDailySent} >= 0`),
+}))
+
+export const campaignLeads = pgTable('campaign_leads', {
+    // ...columns...
+    currentStepOrder: integer('current_step_order').default(0).notNull(),
+}, (table) => ({
+    campaignLeadUnique: uniqueIndex('campaign_lead_unique').on(table.campaignId, table.leadId),
+    // NEW: step order cannot be negative
+    stepOrderCheck: check('step_order_non_negative', sql`${table.currentStepOrder} >= 0`),
+}))
 ```
 
-`client.fetch()` returns an async iterator. Use `for await...of` rather than the
-callback-heavy event emitter pattern from the `imap` library.
+## Migration Workflow: How Changes Integrate
 
-**Marking messages as seen after processing:**
+### Current Workflow
 
-```typescript
-await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true })
+```
+Developer modifies schema.ts
+    ↓
+npm run db:push  →  Drizzle compares schema vs database
+    ↓
+Applies DDL directly to Supabase (CREATE TABLE, ALTER TABLE, CREATE INDEX)
+    ↓
+No migration file generated (push mode, not migrate mode)
 ```
 
-This is the same call used in `processBounces.ts` line 380.
+### For Index Changes
 
-**Connection management rules (imapflow-specific):**
+1. **Edit `src/db/schema.ts`** — add `index()` or `uniqueIndex()` to table definitions
+2. **Run `npm run db:push`** — Drizzle detects new indexes and creates them
+3. **Optional: `npm run db:generate`** — generates SQL migration file in `./drizzle/` for version control
 
-1. One `getMailboxLock` at a time per connection — never nest locks
-2. Always `lock.release()` in a `finally` block
-3. `client.logout()` in a `finally` block — safe to ignore errors from it
-4. `logger: false` suppresses verbose output in the job context
-5. Do not reuse `ImapFlow` instances across reconnect attempts — create a new instance
+### For Schema Constraints
 
-**Error handling for transient failures:**
+Same workflow. Drizzle handles `CHECK`, `NOT NULL`, `DEFAULT` changes via `db:push`.
 
-imapflow throws `Error` with descriptive messages for connection failures. The
-per-account `try/catch` in the outer loop (shown above) is sufficient — if one
-account's connection fails, processing continues for remaining accounts and
-`result.errors` is incremented. This matches the pattern in `processBounces.ts`.
+### RLS Policies (Unchanged)
 
-There is no reconnect logic in `processBounces.ts` and none is needed here — the
-job runs on a cron interval, so the next scheduled invocation provides the retry.
-
-### processReplies Migration Checklist
-
-- Replace `import Imap from 'imap'` with `import { ImapFlow } from 'imapflow'`
-- Remove the `Promise`-wrapper anti-pattern (`new Promise((resolve, reject) => { ... imap.connect() })`)
-- Replace `connectImap()` exported function (builds old `Imap` instance) — delete or rewrite as an imapflow helper if still needed
-- Replace `imap.search(['UNSEEN'], callback)` with `await client.search({ unseen: true }, { uid: true })`
-- Replace `imap.fetch(results, { bodies: 'HEADER.FIELDS (IN-REPLY-TO REFERENCES)' })` with `client.fetch(..., { headers: ['in-reply-to', 'references'] })`
-- Replace event-based message stream parsing with direct `message.headers.get()`
-- Wrap all mailbox operations in `getMailboxLock` / `lock.release()` in finally
-- The business logic (`findOutreachEmailByMessageId`, `markAsReplied`) stays unchanged
-
----
-
-## Gap 3: TypeScript Unused Import Errors
-
-### Current State
-
-`tsconfig.json` has `"noUnusedLocals": true` and `"noUnusedParameters": true`.
-There is no `.eslintrc.*` or `eslintConfig` key in `package.json` at the project root —
-the lint command (`eslint . --ext ts,tsx`) uses the old-style config lookup but no
-config file was found. This means the TypeScript compiler itself (via `tsc --noEmit`)
-is the active enforcement mechanism for unused imports.
-
-### How ESLint Auto-Fix Works for This Project
-
-The `@typescript-eslint/no-unused-vars` rule supports `--fix` via ESLint. However,
-because there is no ESLint config file at the root, ESLint currently applies no
-TypeScript-specific rules — `tsc --noEmit` is what catches the errors.
-
-**ESLint cannot auto-remove unused imports without a rule configured.** The fix
-must be done manually (or with editor tooling).
-
-### Correct Pattern: Manual Removal
-
-For each file with unused import errors:
-
-1. Run `tsc --noEmit` to see the exact list of offending symbols
-2. Remove only the named import that is unused — do not remove the entire import
-   line if other names from the same module are still used
-3. If an entire `import` statement is unused, delete the whole line
-
-Example pattern for a typical case:
-
-```typescript
-// BEFORE — causes TS2305 or TS6133 (unused)
-import { useState, useEffect, useCallback } from 'react'
-//                             ^ never referenced
-
-// AFTER
-import { useState, useEffect } from 'react'
-```
-
-### ESLint Rule That Would Auto-Fix (for future reference)
-
-If an ESLint config is added to the project, the rule to configure is:
-
-```json
-{
-    "rules": {
-        "@typescript-eslint/no-unused-vars": ["error", {
-            "vars": "all",
-            "args": "after-used",
-            "ignoreRestSiblings": true
-        }]
-    }
-}
-```
-
-With this rule active, `eslint --fix` will remove unused variable declarations.
-**However, ESLint does not remove unused import specifiers automatically — it errors
-on them, but the removal must be done by the developer or by an editor integration
-(VS Code "Organize Imports", or the `unused-imports` ESLint plugin).**
-
-The `eslint-plugin-unused-imports` package adds a rule (`unused-imports/no-unused-imports`)
-that does auto-remove import lines on `--fix`. It is not currently installed.
-
-**For this fix pass:** Manual removal is the correct approach. Do not add new
-dependencies or configure ESLint as part of this milestone — that is out of scope
-per the project constraints.
-
-### Verification Command
-
-```bash
-npx tsc --noEmit 2>&1 | grep "TS6133\|TS6196\|is declared but"
-```
-
-This surfaces all unused local / import errors from the TypeScript compiler.
-
----
-
-## Gap 4: API Client Consistency
-
-### Current State
-
-Two modules both export `apiFetch`:
-
-| File | Class | Token handling | Retry | Timeout |
-|---|---|---|---|---|
-| `src/lib/api.ts` | `ApiError` | `getSession()` each call | No | 30s (AbortController) |
-| `src/lib/api-client.ts` | `ApiClientError` | Token cache + proactive refresh | GET/HEAD once | No explicit timeout |
-
-`api-client.ts` is the more capable implementation:
-- Token caching avoids a Supabase round-trip on every request
-- Proactive token refresh before expiry (60-second buffer)
-- On-401 automatic refresh-and-retry
-- GET/HEAD network error retry (250ms delay, once)
-- `204 No Content` handled (returns `null` instead of trying to parse empty body)
-- `apiRequest` / `apiFetch` separation (callers who need the raw `Response` use `apiRequest`)
-
-`api.ts` is simpler but weaker:
-- Calls `supabase.auth.getSession()` on every request (extra async overhead)
-- No retry logic
-- Aborts after 30 seconds (good for long requests, but hardcoded)
-- `fetchWithAuth` utility for raw Response access
-
-### Correct Pattern: Standardize on api-client.ts
-
-The project decision in `PROJECT.md` is: "Use `lib/api-client.ts` across all outreach
-pages." This aligns with what `CONVENTIONS.md` documents — `ApiClientError` is the
-client used by `useAuth`.
-
-**For new outreach page code and for the `NewInboxPage` fix:**
-
-```typescript
-// CORRECT import for outreach pages
-import { apiFetch } from '../../lib/api-client'
-
-// WRONG import (what NewInboxPage currently uses)
-import { apiFetch } from '../../lib/api'
-```
-
-### Migration Rule for This Fix Pass
-
-Only change the import source, not the call sites. Both modules export `apiFetch<T>(path, options)` with compatible signatures for the simple GET/POST cases used in outreach pages:
-
-```typescript
-// api.ts signature
-apiFetch<T>(path: string, init: ApiFetchOptions): Promise<T>
-// where ApiFetchOptions extends RequestInit
-
-// api-client.ts signature
-apiFetch<T>(path: string, options: ApiRequestOptions): Promise<T>
-// where ApiRequestOptions extends RequestInit
-```
-
-Both accept the same `{ method, body }` shape for POST calls. The only behavioral
-difference is that `api-client.ts` sets `Content-Type: application/json` only when
-`body` is a string (not when it is a FormData or absent), whereas `api.ts` sets it
-whenever body is not FormData. For outreach pages sending `JSON.stringify(payload)`,
-both behave identically — the switch is safe.
-
-### Error Handling After Switch
-
-After switching to `api-client.ts`, catch blocks must handle `ApiClientError` instead
-of `ApiError`:
-
-```typescript
-import { apiFetch, ApiClientError } from '../../lib/api-client'
-
-// In catch blocks:
-} catch (error) {
-    if (error instanceof ApiClientError) {
-        console.error('API error:', error.message, 'status:', error.status)
-    } else {
-        console.error('Unexpected error:', error)
-    }
-}
-```
-
-If existing outreach pages catch `ApiError` by name, those catch blocks need updating.
-If they only catch generic `Error` or log the error without type-checking, no change
-is needed.
-
----
+RLS policies remain in `supabase/migrations/*.sql` as hand-written SQL. Index optimization does NOT affect RLS.
 
 ## Component Boundaries After Changes
 
 ```
-processOutreachSequences.ts (orchestration)
-    |
-    +-- imports --> outreach-sender.ts (send logic, stat helpers)
-                        |
-                        +-- imports --> nodemailer (SMTP)
-                        +-- imports --> outlook.ts (Outlook OAuth)
-                        +-- imports --> tracking.ts (pixel/URL injection)
-                        +-- imports --> template-variables.ts (interpolation)
+src/db/schema.ts (single source of truth for all tables, indexes, constraints)
+    ├── pgTable() definitions with index() callbacks
+    ├── relations() definitions (unchanged)
+    ├── Zod schemas (unchanged)
+    └── TypeScript types (unchanged)
 
-processReplies.ts (IMAP polling, after migration)
-    |
-    +-- imports --> imapflow (replaces imap)
-    +-- imports --> crypto.ts (password decrypt)
-    +-- internal --> findOutreachEmailByMessageId (unchanged)
-    +-- internal --> markAsReplied (unchanged)
+src/db/index.ts (connection pool — unchanged)
+    ├── postgres.js pool (unchanged)
+    ├── withRetry() utility (unchanged)
+    └── health checks (unchanged)
 
-src/pages/outreach/* (React pages, after fix)
-    |
-    +-- imports --> lib/api-client.ts (all outreach pages, uniform)
+src/server/jobs/* (modified — batch queries, pagination-aware)
+    ├── processQueue.ts — batch-load messages + orgs
+    ├── processOutreachSequences.ts — selective column loading
+    └── Other jobs — unchanged
+
+src/server/routes/outreach/* (modified — add pagination)
+    ├── campaigns.ts — paginated list endpoint
+    ├── leads.ts — paginated list endpoint
+    └── email-accounts.ts — paginated list endpoint
+
+supabase/migrations/013_add_performance_indexes.sql (deprecated)
+    └── Keep for reference, schema.ts is now source of truth
 ```
-
-`processBounces.ts` already matches this boundary and serves as the reference for
-both the imapflow pattern and the job structure pattern.
-
----
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: Promise-wrapping a callback library alongside async/await
+### Anti-Pattern 1: Adding Indexes Everywhere
 
-`processReplies.ts` currently wraps the `imap` callback API in a `new Promise(...)` and
-then runs async DB calls inside `fetch.once('end', async () => { ... })`. Mixing
-`async/await` inside event-callback chains creates silent error swallowing — errors
-thrown inside the async callback are not connected to the outer Promise's `reject`.
+**What people do:** Index every column "just in case"
+**Why it's wrong:** Each index slows INSERT/UPDATE (must maintain index). For a write-heavy email platform, over-indexing hurts throughput.
+**Do this instead:** Index only columns used in WHERE, JOIN, ORDER BY. Prioritize hot-path queries (jobs, tracking).
 
-**Instead:** Use imapflow's native promise/async-iterator API throughout. No
-Promise wrapping required.
+### Anti-Pattern 2: Parallel Schema Definitions
 
-### Anti-Pattern 2: Duplicating shared module logic in jobs
+**What people do:** Keep `013_add_performance_indexes.sql` AND add indexes to schema.ts
+**Why it's wrong:** Two sources of truth — drift. `db:generate` may create conflicting migrations.
+**Do this instead:** Migrate all indexes into schema.ts. Keep `013_*.sql` as historical record but don't modify it.
 
-The `sendEmail` function in `processOutreachSequences.ts` is a reduced copy of
-`sendOutreachEmail` in `outreach-sender.ts`. When Outlook support was added to the
-shared module, the job did not receive it. Duplication causes silent feature gaps.
+### Anti-Pattern 3: N+1 Queries in Loops
 
-**Instead:** Jobs own orchestration (which leads to process, in what order, guard
-conditions). Shared modules own mechanics (how to send, how to record, how to
-increment stats). The boundary is strict.
+**What people do:** Load related records one-by-one inside a for loop
+**Why it's wrong:** 50 deliveries x 3 queries = 150 DB round-trips per minute
+**Do this instead:** Batch-load related records with `inArray()` before the loop, use Map for lookups.
 
-### Anti-Pattern 3: Importing from two API clients in the same feature area
+### Anti-Pattern 4: Loading All Rows for Lists
 
-Having half the outreach pages use `api.ts` and half use `api-client.ts` means
-different retry and error behavior depending on which page the user is on. This
-makes debugging inconsistent.
+**What people do:** `findMany({ where: eq(orgId) })` with no limit
+**Why it's wrong:** Works at 100 rows, fails at 100K. Memory exhaustion, slow response.
+**Do this instead:** Always paginate. Default pageSize=25, max=100.
 
-**Instead:** Pick one client per domain area and enforce it consistently. Outreach
-pages use `api-client.ts`.
+## Build Order: Dependencies
 
----
+### Phase Structure Recommendation
+
+```
+Phase 1: Index Foundation (schema.ts)
+  ├── Import `index` from 'drizzle-orm/pg-core' (already imported uniqueIndex)
+  ├── Add indexes to ALL tables for FK columns (Tier 3 from above)
+  ├── Add composite indexes for job hot paths (Tier 1: campaignLeads, deliveries, messages)
+  ├── Run `npm run db:push` to apply
+  └── Verify with EXPLAIN ANALYZE on key queries
+
+Phase 2: Partial Indexes (schema.ts)
+  ├── Add partial indexes for status filters (active campaigns, pending deliveries)
+  ├── Add partial indexes for boolean flags (active webhooks, active email accounts)
+  ├── Run `npm run db:push`
+  └── Verify index usage with pg_stat_user_indexes
+
+Phase 3: Query Layer — Pagination (route handlers)
+  ├── Add pagination to GET /api/outreach/campaigns
+  ├── Add pagination to GET /api/outreach/leads
+  ├── Add pagination to GET /api/outreach/email-accounts
+  └── Each route: add limit/offset, return pagination metadata
+
+Phase 4: Query Layer — N+1 Fixes (jobs)
+  ├── Fix processQueue.ts — batch-load messages + orgs
+  ├── Fix processOutreachSequences.ts — selective column loading
+  └── Other jobs (processReplies, processBounces) — verify, fix if N+1
+
+Phase 5: Schema Constraints (schema.ts)
+  ├── Add CHECK constraints for positive/non-negative integers
+  └── Run `npm run db:push`
+
+Phase 6: Verification & Cleanup
+  ├── Run EXPLAIN ANALYZE on all job queries
+  ├── Check pg_stat_user_indexes for index usage
+  ├── Compare query times before/after
+  └── Deprecate supabase/migrations/013_add_performance_indexes.sql
+```
+
+**Dependency order matters because:**
+- Indexes (Phase 1-2) must exist BEFORE query changes (Phase 3-4) take advantage of them
+- Query changes before indexes = same slow queries, different code
+- Schema constraints (Phase 5) are independent but should come after index/query work to avoid merge conflicts in schema.ts
 
 ## Sources
 
-All findings are based on direct code inspection of:
-- `src/server/lib/outreach-sender.ts` — canonical shared module
-- `src/server/jobs/processOutreachSequences.ts` — job with duplications
-- `src/server/jobs/processBounces.ts` — reference imapflow implementation
-- `src/server/jobs/processReplies.ts` — legacy imap implementation to replace
-- `src/lib/api.ts` — simpler API client
-- `src/lib/api-client.ts` — more capable API client
-- `tsconfig.json` — compiler enforcement of unused locals
-- `package.json` — dependency inventory and lint command
+- Drizzle ORM indexes & constraints: https://orm.drizzle.team/docs/indexes-constraints (verified 2026-03-31)
+- Drizzle ORM raw SQL & goodies: https://orm.drizzle.team/docs/goodies (verified 2026-03-31)
+- Current schema: `src/db/schema.ts` (1263 lines, 30+ tables, 12 unique indexes)
+- Existing manual indexes: `supabase/migrations/013_add_performance_indexes.sql` (35 indexes, 7 commented out)
+- Query patterns: `src/server/jobs/processQueue.ts`, `src/server/jobs/processOutreachSequences.ts`
+- Route patterns: `src/server/routes/outreach/campaigns.ts`, `src/server/routes/outreach/leads.ts`
+- Connection config: `src/db/index.ts` (postgres.js pool, Supavisor transaction mode)
+- Migration config: `drizzle.config.ts` (push mode, pg driver, DIRECT_URL)
 
-No external sources consulted. Confidence is HIGH because all architectural
-decisions are grounded in existing, working code in the same repository.
+---
+
+*Architecture research for database health improvements*
+*Researched: 2026-03-31*
