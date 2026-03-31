@@ -33,6 +33,7 @@ const LeadsPage = React.lazy(() => import('./pages/outreach/LeadsPage'))
 const InboxesPage = React.lazy(() => import('./pages/outreach/InboxesPage'))
 const NewInboxPage = React.lazy(() => import('./pages/outreach/inboxes/NewInboxPage'))
 const SequencesPage = React.lazy(() => import('./pages/outreach/SequencesPage'))
+const NewSequencePage = React.lazy(() => import('./pages/outreach/sequences/NewSequencePage'))
 const OutreachAnalyticsPage = React.lazy(() => import('./pages/outreach/AnalyticsPage'))
 const OutreachSettingsPage = React.lazy(() => import('./pages/outreach/SettingsPage'))
 
@@ -394,6 +395,13 @@ function App() {
                                         </OrganizationProvider>
                                     </AdminCheck>
                                 </Route>
+                                <Route path="/outreach/campaigns/:id/sequences/new">
+                                    <AdminCheck>
+                                        <OrganizationProvider>
+                                            <PageSuspense><NewSequencePage /></PageSuspense>
+                                        </OrganizationProvider>
+                                    </AdminCheck>
+                                </Route>
                                 <Route path="/outreach/campaigns">
                                     <AdminCheck>
                                         <OrganizationProvider>
@@ -423,13 +431,6 @@ function App() {
                                     </AdminCheck>
                                 </Route>
                                 <Route path="/outreach/sequences">
-                                    <AdminCheck>
-                                        <OrganizationProvider>
-                                            <PageSuspense><SequencesPage /></PageSuspense>
-                                        </OrganizationProvider>
-                                    </AdminCheck>
-                                </Route>
-                                <Route path="/outreach/sequences/new">
                                     <AdminCheck>
                                         <OrganizationProvider>
                                             <PageSuspense><SequencesPage /></PageSuspense>

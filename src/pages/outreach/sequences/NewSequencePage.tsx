@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Save, Clock, Mail, Trash2 } from 'lucide-react'
 import { OutreachLayout } from '../../../components/outreach/OutreachLayout'
 import { toast } from '../../../components/ui/toaster'
-import { apiFetch, apiRequest } from '../../lib/api-client'
+import { apiFetch, apiRequest } from '../../../lib/api-client'
 
 interface Step {
     id: string
