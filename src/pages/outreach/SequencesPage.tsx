@@ -1,6 +1,6 @@
 import React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useLocation } from 'wouter'
+import { useLocation } from 'wouter'
 import { Plus, Mail, ChevronDown, Clock, Trash2 } from 'lucide-react'
 import { OutreachLayout } from '../../components/outreach/OutreachLayout'
 import { apiFetch, apiRequest } from '../../lib/api-client'

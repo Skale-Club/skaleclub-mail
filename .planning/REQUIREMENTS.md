@@ -30,9 +30,9 @@
 
 ### Code Quality
 
-- [ ] **QUAL-01**: `NewInboxPage.tsx` import updated from `lib/api` to `lib/api-client` — consistent with all other outreach pages
-- [ ] **QUAL-02**: Unused imports removed from `NewSequencePage.tsx` (`Plus`) and `SequencesPage.tsx` (`Link`) — eliminates TypeScript `TS6133` errors
-- [ ] **QUAL-03**: `processOutreachSequences.ts` private `sendEmail` function removed after consolidation to shared module
+- [x] **QUAL-01**: `NewInboxPage.tsx` import updated from `lib/api` to `lib/api-client` — consistent with all other outreach pages
+- [x] **QUAL-02**: Unused imports removed from `NewSequencePage.tsx` (`Plus`) and `SequencesPage.tsx` (`Link`) — eliminates TypeScript `TS6133` errors
+- [x] **QUAL-03**: `processOutreachSequences.ts` private `sendEmail` function removed after consolidation to shared module
 - [ ] **QUAL-04**: Cron job concurrency guard added — `isProcessing` flag in `jobs/index.ts` prevents overlapping sequence processor runs
 
 ## v2 Requirements
@@ -81,9 +81,9 @@
 | SEQ-03 | Phase 3 | Complete |
 | SEQ-04 | Phase 3 | Complete |
 | SEQ-05 | Phase 3 | Complete |
-| QUAL-01 | Phase 4 | Pending |
-| QUAL-02 | Phase 4 | Pending |
-| QUAL-03 | Phase 4 | Pending |
+| QUAL-01 | Phase 4 | Complete |
+| QUAL-02 | Phase 4 | Complete |
+| QUAL-03 | Phase 4 | Complete |
 | QUAL-04 | Phase 4 | Pending |
 
 **Coverage:**
