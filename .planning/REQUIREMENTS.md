@@ -22,11 +22,11 @@
 
 ### Sequence Builder UI
 
-- [ ] **SEQ-01**: `NewSequencePage` save button calls the API: `POST /api/outreach/campaigns/:campaignId/sequences` then `POST .../steps` for each step — currently does `console.log` only
-- [ ] **SEQ-02**: `NewSequencePage` uses correct field names: `delayHours` (not `delayDays`), `htmlBody` (not `bodyHtml`) — matches API schema and Zod validation
-- [ ] **SEQ-03**: `NewSequencePage` receives `campaignId` from route param (`/outreach/campaigns/:id/sequences/new`) — sequences require a campaign FK in schema
-- [ ] **SEQ-04**: Route for `NewSequencePage` added to `src/main.tsx` with the `:id` param pattern
-- [ ] **SEQ-05**: After successful save, user is navigated back to the campaign/sequences list with a success toast
+- [x] **SEQ-01**: `NewSequencePage` save button calls the API: `POST /api/outreach/campaigns/:campaignId/sequences` then `POST .../steps` for each step — currently does `console.log` only
+- [x] **SEQ-02**: `NewSequencePage` uses correct field names: `delayHours` (not `delayDays`), `htmlBody` (not `bodyHtml`) — matches API schema and Zod validation
+- [x] **SEQ-03**: `NewSequencePage` receives `campaignId` from route param (`/outreach/campaigns/:id/sequences/new`) — sequences require a campaign FK in schema
+- [x] **SEQ-04**: Route for `NewSequencePage` added to `src/main.tsx` with the `:id` param pattern
+- [x] **SEQ-05**: After successful save, user is navigated back to the campaign/sequences list with a success toast
 
 ### Code Quality
 
@@ -76,11 +76,11 @@
 | REPLY-01 | Phase 2 | Pending |
 | REPLY-02 | Phase 2 | Pending |
 | REPLY-03 | Phase 2 | Pending |
-| SEQ-01 | Phase 3 | Pending |
-| SEQ-02 | Phase 3 | Pending |
-| SEQ-03 | Phase 3 | Pending |
-| SEQ-04 | Phase 3 | Pending |
-| SEQ-05 | Phase 3 | Pending |
+| SEQ-01 | Phase 3 | Complete |
+| SEQ-02 | Phase 3 | Complete |
+| SEQ-03 | Phase 3 | Complete |
+| SEQ-04 | Phase 3 | Complete |
+| SEQ-05 | Phase 3 | Complete |
 | QUAL-01 | Phase 4 | Pending |
 | QUAL-02 | Phase 4 | Pending |
 | QUAL-03 | Phase 4 | Pending |

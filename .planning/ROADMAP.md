@@ -54,7 +54,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 03-01-PLAN.md — Wire NewSequencePage save handler, fix field names, add route with :id param (SEQ-01, SEQ-02, SEQ-03, SEQ-04, SEQ-05)
+- [x] 03-01-PLAN.md — Wire NewSequencePage save handler, fix field names, add route with :id param (SEQ-01, SEQ-02, SEQ-03, SEQ-04, SEQ-05)
 
 ### Phase 4: Code Quality
 **Goal**: TypeScript compiles cleanly, all outreach pages use lib/api-client consistently, and the cron scheduler has a concurrency guard
