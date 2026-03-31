@@ -6,6 +6,8 @@ import { processOutreachSequences, resetDailyLimits } from './processOutreachSeq
 import { processReplies } from './processReplies'
 import { processBounces } from './processBounces'
 
+let isSequenceProcessing = false
+
 export function startJobs(): void {
     console.log('[jobs] Starting background job scheduler...')
 
@@ -26,7 +28,14 @@ export function startJobs(): void {
 
     // Process outreach sequences every 5 minutes
     cron.schedule('*/5 * * * *', () => {
-        processOutreachSequences().catch((err) => console.error('[jobs] processOutreachSequences failed:', err))
+        if (isSequenceProcessing) {
+            console.log('[jobs] processOutreachSequences already running, skipping tick')
+            return
+        }
+        isSequenceProcessing = true
+        processOutreachSequences()
+            .catch((err) => console.error('[jobs] processOutreachSequences failed:', err))
+            .finally(() => { isSequenceProcessing = false })
     })
 
     // Reset daily limits at midnight
