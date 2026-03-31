@@ -1,32 +1,36 @@
 import React from 'react'
-import { Link, useLocation } from 'wouter'
-import { ArrowLeft, Save, Plus, Clock, Mail, Trash2 } from 'lucide-react'
+import { useLocation, useParams } from 'wouter'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, Save, Clock, Mail, Trash2 } from 'lucide-react'
 import { OutreachLayout } from '../../../components/outreach/OutreachLayout'
 import { toast } from '../../../components/ui/toaster'
+import { apiFetch, apiRequest } from '../../lib/api-client'
 
 interface Step {
     id: string
     type: 'email' | 'delay'
     order: number
-    delayDays: number
+    delayHours: number
     subject: string
-    bodyHtml: string
+    htmlBody: string
 }
 
 export function NewSequencePage() {
-    const [, navigate] = useLocation()
+    const queryClient = useQueryClient()
+    const [, setLocation] = useLocation()
+    const params = useParams<{ id: string }>()
+    const campaignId = params?.id
     const [name, setName] = React.useState('')
     const [steps, setSteps] = React.useState<Step[]>([
         {
             id: '1',
             type: 'email',
             order: 1,
-            delayDays: 0,
+            delayHours: 0,
             subject: '',
-            bodyHtml: ''
+            htmlBody: ''
         }
     ])
-    const [isSaving, setIsSaving] = React.useState(false)
 
     const addStep = (type: 'email' | 'delay') => {
         setSteps(prev => [
@@ -35,9 +39,9 @@ export function NewSequencePage() {
                 id: Math.random().toString(36).substring(7),
                 type,
                 order: prev.length + 1,
-                delayDays: type === 'delay' ? 3 : 0,
+                delayHours: type === 'delay' ? 72 : 0,
                 subject: '',
-                bodyHtml: ''
+                htmlBody: ''
             }
         ])
     }
@@ -50,23 +54,47 @@ export function NewSequencePage() {
         setSteps(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s))
     }
 
-    const handleSave = async () => {
+    const createMutation = useMutation({
+        mutationFn: async (payload: { name: string; steps: Step[] }) => {
+            if (!campaignId) throw new Error('No campaign ID — check route configuration')
+            const { sequence } = await apiFetch<{ sequence: { id: string } }>(
+                `/api/outreach/campaigns/${campaignId}/sequences`,
+                { method: 'POST', body: JSON.stringify({ name: payload.name }) }
+            )
+            for (const step of payload.steps) {
+                await apiRequest(`/api/outreach/campaigns/sequences/${sequence.id}/steps`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        stepOrder: step.order,
+                        type: step.type,
+                        delayHours: step.delayHours,
+                        subject: step.type === 'email' ? step.subject : undefined,
+                        htmlBody: step.type === 'email' ? step.htmlBody : undefined,
+                    }),
+                })
+            }
+            return sequence
+        },
+        onSuccess: () => {
+            toast({ title: 'Sequence created successfully', variant: 'success' })
+            queryClient.invalidateQueries({ queryKey: ['sequences'] })
+            setLocation('/outreach/sequences')
+        },
+        onError: (error: Error) => {
+            toast({ title: 'Failed to save sequence', description: error.message, variant: 'destructive' })
+        },
+    })
+
+    const handleSave = () => {
         if (!name.trim()) {
             toast({ title: 'Please enter a sequence name', variant: 'destructive' })
             return
         }
-
-        setIsSaving(true)
-        try {
-            // NOTE: Replace with actual API call
-            console.log('Saving sequence:', { name, steps })
-            toast({ title: 'Sequence saved successfully', variant: 'success' })
-            navigate('/outreach/sequences')
-        } catch (error) {
-            toast({ title: 'Failed to save sequence', variant: 'destructive' })
-        } finally {
-            setIsSaving(false)
+        if (!campaignId) {
+            toast({ title: 'Campaign not found — navigate from a campaign page', variant: 'destructive' })
+            return
         }
+        createMutation.mutate({ name, steps })
     }
 
     return (
@@ -74,9 +102,9 @@ export function NewSequencePage() {
             <div className="mx-auto max-w-4xl space-y-6">
                 <div className="flex items-center justify-between border-b border-border pb-6">
                     <div className="flex items-center gap-4">
-                        <Link href="/outreach/sequences" className="rounded-lg p-2 text-muted-foreground hover:bg-accent hover:text-foreground">
+                        <a href="/outreach/sequences" className="rounded-lg p-2 text-muted-foreground hover:bg-accent hover:text-foreground">
                             <ArrowLeft className="h-5 w-5" />
-                        </Link>
+                        </a>
                         <div>
                             <input
                                 type="text"
@@ -90,11 +118,11 @@ export function NewSequencePage() {
                     </div>
                     <button
                         onClick={handleSave}
-                        disabled={isSaving}
+                        disabled={createMutation.isPending}
                         className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                     >
                         <Save className="h-5 w-5" />
-                        {isSaving ? 'Saving...' : 'Save Sequence'}
+                        {createMutation.isPending ? 'Saving...' : 'Save Sequence'}
                     </button>
                 </div>
 
@@ -132,11 +160,11 @@ export function NewSequencePage() {
                                         <span className="text-sm text-foreground">Wait for</span>
                                         <input
                                             type="number"
-                                            value={step.delayDays}
-                                            onChange={(e) => updateStep(step.id, { delayDays: parseInt(e.target.value) || 0 })}
+                                            value={step.delayHours}
+                                            onChange={(e) => updateStep(step.id, { delayHours: parseInt(e.target.value) || 0 })}
                                             className="w-20 rounded-lg border border-border bg-background px-3 py-1.5 text-sm"
                                         />
-                                        <span className="text-sm text-foreground">days</span>
+                                        <span className="text-sm text-foreground">hours</span>
                                     </div>
                                 ) : (
                                     <div className="space-y-4">
@@ -153,8 +181,8 @@ export function NewSequencePage() {
                                         <div>
                                             <label className="mb-1 block text-sm font-medium text-foreground">Message Body</label>
                                             <textarea
-                                                value={step.bodyHtml}
-                                                onChange={(e) => updateStep(step.id, { bodyHtml: e.target.value })}
+                                                value={step.htmlBody}
+                                                onChange={(e) => updateStep(step.id, { htmlBody: e.target.value })}
                                                 rows={5}
                                                 placeholder="Hi {{firstName}}, ..."
                                                 className="w-full rounded-lg border border-border bg-background px-4 py-2 focus:border-primary focus:outline-none"
