@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Link, useLocation } from 'wouter'
 import { MailLayout } from '../../components/mail/MailLayout'
 import { EmailList, EmailItem, EmailToolbar } from '../../components/mail/EmailList'
@@ -11,6 +11,7 @@ import { useMessages, useMessage, useDeleteMessage, useBatchUpdate, useSpamMessa
 import { EmailHtmlViewer } from '../../components/mail/EmailHtmlViewer'
 import { EmailMessageHeader } from '../../components/mail/EmailMessageHeader'
 import { ShieldAlert, Trash2 } from 'lucide-react'
+import { ResizablePanels } from '../../components/mail/ResizablePanels'
 
 export default function SpamPage() {
     const isMobile = useIsMobile()
@@ -169,8 +170,8 @@ export default function SpamPage() {
 
     return (
         <MailLayout>
-            <div className="flex h-full">
-                <div className={`w-full ${!isMobile ? 'lg:w-1/2 xl:w-2/5 border-r border-border' : ''} flex flex-col bg-background`}>
+            {isMobile ? (
+                <div className="flex h-full flex-col bg-background">
                     <div className="px-4 py-2 border-b border-border bg-background">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
@@ -242,28 +243,105 @@ export default function SpamPage() {
                         />
                     </div>
                 </div>
-
-                {!isMobile && (
-                    <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col bg-muted/30">
-                        {selectedEmailData ? (
-                            <EmailDetail
-                                email={selectedEmailData}
-                                onNotSpam={handleNotSpam}
-                                onDelete={handleDelete}
-                            />
-                        ) : (
-                            <div className="flex-1 flex items-center justify-center text-muted-foreground">
-                                <div className="text-center">
-                                    <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
-                                        <ShieldAlert className="w-10 h-10 text-amber-500" />
+            ) : (
+                <ResizablePanels
+                    storageKey="mail-panels-spam"
+                    left={
+                        <>
+                            <div className="px-4 py-2 border-b border-border bg-background">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <ShieldAlert className="w-5 h-5 text-amber-500" />
+                                        <h1 className="text-lg font-bold text-foreground">Spam</h1>
                                     </div>
-                                    <p className="text-lg font-medium text-foreground">Select a spam message</p>
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                                            <button onClick={() => setFilter('all')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === 'all' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>All</button>
+                                            <button onClick={() => setFilter('unread')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === 'unread' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Unread {unreadCount > 0 && `(${unreadCount})`}</button>
+                                            <button onClick={() => setFilter('starred')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === 'starred' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Starred</button>
+                                            <button onClick={() => setFilter('attachments')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === 'attachments' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Attachments</button>
+                                        </div>
+                                        {emails.length > 0 && (
+                                            <div className="relative group">
+                                                <button
+                                                    onClick={handleEmptySpam}
+                                                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-destructive transition-colors hover:bg-destructive/10"
+                                                    aria-label="Delete all spam"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </button>
+                                                <div className="pointer-events-none absolute right-0 top-full z-20 mt-2 whitespace-nowrap rounded-md bg-popover px-2 py-1 text-xs text-popover-foreground opacity-0 shadow-md ring-1 ring-border transition-opacity group-hover:opacity-100">
+                                                    Delete all
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
-                        )}
-                    </div>
-                )}
-            </div>
+
+                            <EmailToolbar
+                                selectedCount={selectedEmails.size}
+                                onSelectAll={() => {
+                                    if (selectedEmails.size === emails.length) {
+                                        setSelectedEmails(new Set())
+                                    } else {
+                                        setSelectedEmails(new Set(emails.map(e => e.id)))
+                                    }
+                                }}
+                                totalCount={emails.length}
+                                onMarkRead={() => {
+                                    if (selectedEmails.size === 0) return
+                                    batchUpdate.mutate({ messageIds: Array.from(selectedEmails), action: 'read' })
+                                    setSelectedEmails(new Set())
+                                }}
+                                onMarkUnread={() => {
+                                    if (selectedEmails.size === 0) return
+                                    batchUpdate.mutate({ messageIds: Array.from(selectedEmails), action: 'unread' })
+                                    setSelectedEmails(new Set())
+                                }}
+                                onDelete={handleBulkDelete}
+                                onArchive={() => {}}
+                                onSpam={handleBulkNotSpam}
+                                spamLabel="Not Spam"
+                                onRefresh={handleRefresh}
+                                isRefreshing={isFetching || syncMailbox.isPending}
+                            />
+
+                            <div className="flex-1 overflow-y-auto">
+                                <EmailList
+                                    emails={emails}
+                                    selectedId={selectedEmail || undefined}
+                                    selectedEmails={selectedEmails}
+                                    onSelect={handleSelectEmail}
+                                    onSelectMultiple={(ids) => setSelectedEmails(new Set(ids))}
+                                    onDelete={handleDelete}
+                                    emptyMessage="No spam messages"
+                                />
+                            </div>
+                        </>
+                    }
+                    right={
+                        <>
+                            {selectedEmailData ? (
+                                <EmailDetail
+                                    email={selectedEmailData}
+                                    onNotSpam={handleNotSpam}
+                                    onDelete={handleDelete}
+                                />
+                            ) : (
+                                <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                                    <div className="text-center">
+                                        <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+                                            <ShieldAlert className="w-10 h-10 text-amber-500" />
+                                        </div>
+                                        <p className="text-lg font-medium text-foreground">Select a spam message</p>
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    }
+                />
+            )}
             <ConfirmDialog
                 open={confirmDialog.open}
                 onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
@@ -288,6 +366,7 @@ function EmailDetail({
 }) {
     const { data: messageData } = useMessage(email.id)
     const fullMessage = messageData?.message
+    const [emailDarkMode, setEmailDarkMode] = useState(false)
 
     return (
         <div className="flex-1 overflow-y-auto">
@@ -302,6 +381,8 @@ function EmailDetail({
                         isSpam
                         onSpam={() => onNotSpam(email.id)}
                         onDelete={() => onDelete(email.id)}
+                        emailDarkMode={emailDarkMode}
+                        onToggleEmailDarkMode={() => setEmailDarkMode(!emailDarkMode)}
                     />
                     <h2 className="text-sm font-bold text-foreground mb-3">{email.subject}</h2>
 
@@ -309,6 +390,7 @@ function EmailDetail({
                         <EmailHtmlViewer
                             html={fullMessage?.bodyHtml || fullMessage?.htmlBody}
                             plainText={fullMessage?.bodyText || fullMessage?.plainBody || email.snippet}
+                            emailDarkMode={emailDarkMode}
                         />
                     </div>
 

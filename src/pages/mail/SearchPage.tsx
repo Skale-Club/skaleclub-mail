@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Link, useLocation } from 'wouter'
 import { MailLayout } from '../../components/mail/MailLayout'
 import { EmailList, EmailItem, EmailToolbar } from '../../components/mail/EmailList'
@@ -18,6 +18,7 @@ import {
     Mail,
     AlertCircle
 } from 'lucide-react'
+import { ResizablePanels } from '../../components/mail/ResizablePanels'
 
 interface SearchFilters {
     query: string
@@ -237,8 +238,8 @@ export default function SearchPage() {
 
     return (
         <MailLayout>
-            <div className="flex h-full">
-                <div className={`w-full ${!isMobile ? 'lg:w-1/2 xl:w-2/5 border-r border-border' : ''} flex flex-col bg-background`}>
+            {isMobile ? (
+                <div className="flex h-full flex-col bg-background">
                     <div className="px-4 sm:px-5 py-4 border-b border-border">
                         <form onSubmit={handleSearch} className="relative">
                             <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -469,32 +470,268 @@ export default function SearchPage() {
                         )}
                     </div>
                 </div>
+            ) : (
+                <ResizablePanels
+                    storageKey="mail-panels-search"
+                    left={
+                        <>
+                            <div className="px-4 sm:px-5 py-4 border-b border-border">
+                                <form onSubmit={handleSearch} className="relative">
+                                    <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search emails..."
+                                        value={filters.query}
+                                        onChange={(e) => setFilters({ ...filters, query: e.target.value })}
+                                        className="w-full pl-10 pr-12 py-2.5 bg-muted border-0 rounded-xl text-sm focus:ring-2 focus:ring-primary text-foreground placeholder-muted-foreground"
+                                        autoFocus
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowFilters(!showFilters)}
+                                        className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-colors ${
+                                            showFilters || activeFilterCount > 0
+                                                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600'
+                                                : 'hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-500'
+                                        }`}
+                                    >
+                                        <Filter className="w-4 h-4" />
+                                        {activeFilterCount > 0 && (
+                                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center">
+                                                {activeFilterCount}
+                                            </span>
+                                        )}
+                                    </button>
+                                </form>
 
-                {!isMobile && (
-                    <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col bg-muted/30">
-                        {selectedEmailData ? (
-                            <EmailDetail
-                                email={selectedEmailData}
-                                onToggleRead={handleToggleRead}
-                                onArchive={handleArchive}
-                                onSpam={handleSpam}
-                                onDelete={handleDelete}
-                                onStar={handleStar}
-                            />
-                        ) : (
-                            <div className="flex-1 flex items-center justify-center text-muted-foreground">
-                                <div className="text-center">
-                                    <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
-                                        <SearchIcon className="w-10 h-10 text-muted-foreground" />
+                                {showFilters && (
+                                    <div className="mt-4 p-4 bg-muted/50 rounded-xl space-y-3">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-sm font-medium text-foreground">Filters</span>
+                                            {activeFilterCount > 0 && (
+                                                <button
+                                                    onClick={handleClearFilters}
+                                                    className="text-sm text-primary hover:text-primary/80"
+                                                >
+                                                    Clear all
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                                                    <User className="w-3 h-3" />
+                                                    From
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="sender@example.com"
+                                                    value={filters.from}
+                                                    onChange={(e) => setFilters({ ...filters, from: e.target.value })}
+                                                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <label className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                                                    <Mail className="w-3 h-3" />
+                                                    To
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="recipient@example.com"
+                                                    value={filters.to}
+                                                    onChange={(e) => setFilters({ ...filters, to: e.target.value })}
+                                                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                                                />
+                                            </div>
+
+                                            <div className="sm:col-span-2">
+                                                <label className="text-xs text-muted-foreground mb-1 block">
+                                                    Subject contains
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Keywords in subject"
+                                                    value={filters.subject}
+                                                    onChange={(e) => setFilters({ ...filters, subject: e.target.value })}
+                                                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <label className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                                                    <Calendar className="w-3 h-3" />
+                                                    Date
+                                                </label>
+                                                <select
+                                                    value={filters.dateRange}
+                                                    onChange={(e) => setFilters({ ...filters, dateRange: e.target.value as SearchFilters['dateRange'] })}
+                                                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                                                >
+                                                    {Object.entries(dateRangeLabels).map(([value, label]) => (
+                                                        <option key={value} value={value}>{label}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+
+                                            <div>
+                                                <label className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                                                    <Paperclip className="w-3 h-3" />
+                                                    Attachments
+                                                </label>
+                                                <select
+                                                    value={filters.hasAttachment === null ? '' : filters.hasAttachment ? 'yes' : 'no'}
+                                                    onChange={(e) => setFilters({
+                                                        ...filters,
+                                                        hasAttachment: e.target.value === '' ? null : e.target.value === 'yes'
+                                                    })}
+                                                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                                                >
+                                                    <option value="">Any</option>
+                                                    <option value="yes">Has attachments</option>
+                                                    <option value="no">No attachments</option>
+                                                </select>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <p className="text-lg font-medium text-foreground">Select a result to preview</p>
-                                    <p className="text-sm mt-1">Click on an email from the search results</p>
+                                )}
+
+                                <div className="mt-3 flex items-center justify-between">
+                                    <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                        Search Results
+                                    </h1>
+                                    {!isLoading && (
+                                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                                            {emails.length} {emails.length === 1 ? 'result' : 'results'}
+                                            {filters.query && ` for "${filters.query}"`}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
-                        )}
-                    </div>
-                )}
-            </div>
+
+                            <EmailToolbar
+                                selectedCount={selectedEmails.size}
+                                totalCount={data?.total}
+                                onSelectAll={() => {
+                                    if (selectedEmails.size === emails.length) {
+                                        setSelectedEmails(new Set())
+                                    } else {
+                                        setSelectedEmails(new Set(emails.map(e => e.id)))
+                                    }
+                                }}
+                                onMarkRead={() => {
+                                    if (selectedMailbox) {
+                                        batchUpdate.mutate({ messageIds: Array.from(selectedEmails), action: 'read' })
+                                    }
+                                    setSelectedEmails(new Set())
+                                }}
+                                onMarkUnread={() => {
+                                    if (selectedMailbox) {
+                                        batchUpdate.mutate({ messageIds: Array.from(selectedEmails), action: 'unread' })
+                                    }
+                                    setSelectedEmails(new Set())
+                                }}
+                                onDelete={() => {
+                                    if (selectedMailbox) {
+                                        batchUpdate.mutate({ messageIds: Array.from(selectedEmails), action: 'delete' })
+                                    }
+                                    setSelectedEmails(new Set())
+                                    toast({ title: 'Emails deleted', variant: 'success' })
+                                }}
+                                onArchive={() => {
+                                    if (selectedMailbox) {
+                                        batchUpdate.mutate({ messageIds: Array.from(selectedEmails), action: 'archive' })
+                                    }
+                                    setSelectedEmails(new Set())
+                                    toast({ title: 'Emails archived', variant: 'success' })
+                                }}
+                                onSpam={() => {
+                                    if (selectedMailbox) {
+                                        batchUpdate.mutate({ messageIds: Array.from(selectedEmails), action: 'spam' })
+                                    }
+                                    setSelectedEmails(new Set())
+                                    toast({ title: 'Emails marked as spam', variant: 'success' })
+                                }}
+                                onRefresh={() => {
+                                    refetch()
+                                    toast({ title: 'Search refreshed', variant: 'success' })
+                                }}
+                                isRefreshing={isFetching}
+                            />
+
+                            <div className="flex-1 overflow-y-auto">
+                                {isLoading ? (
+                                    <div className="flex items-center justify-center h-64">
+                                        <div className="flex flex-col items-center gap-4">
+                                            <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                                            <p className="text-gray-500 dark:text-gray-400">Searching...</p>
+                                        </div>
+                                    </div>
+                                ) : !filters.query ? (
+                                    <div className="flex flex-col items-center justify-center h-64 text-gray-500 dark:text-gray-400">
+                                        <SearchIcon className="w-12 h-12 mb-4 opacity-50" />
+                                        <p className="text-lg font-medium">Search your emails</p>
+                                        <p className="text-sm mt-1">Enter keywords to find emails</p>
+                                    </div>
+                                ) : emails.length > 0 ? (
+                                    <EmailList
+                                        emails={emails}
+                                        selectedId={selectedEmail || undefined}
+                                        selectedEmails={selectedEmails}
+                                        onSelect={handleSelectEmail}
+                                        onSelectMultiple={(ids) => setSelectedEmails(new Set(ids))}
+                                        onStar={handleStar}
+                                        onDelete={handleDelete}
+                                        onArchive={handleArchive}
+                                        onSpam={handleSpam}
+                                        emptyMessage="No results found"
+                                    />
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center h-64 text-gray-500 dark:text-gray-400">
+                                        <SearchIcon className="w-12 h-12 mb-4 opacity-50" />
+                                        <p className="text-lg font-medium">No results found</p>
+                                        <p className="text-sm mt-1">Try different keywords or check your spelling</p>
+                                        {activeFilterCount > 0 && (
+                                            <button
+                                                onClick={handleClearFilters}
+                                                className="mt-4 text-sm text-blue-600 hover:text-blue-700"
+                                            >
+                                                Clear filters
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    }
+                    right={
+                        <>
+                            {selectedEmailData ? (
+                                <EmailDetail
+                                    email={selectedEmailData}
+                                    onToggleRead={handleToggleRead}
+                                    onArchive={handleArchive}
+                                    onSpam={handleSpam}
+                                    onDelete={handleDelete}
+                                    onStar={handleStar}
+                                />
+                            ) : (
+                                <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                                    <div className="text-center">
+                                        <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+                                            <SearchIcon className="w-10 h-10 text-muted-foreground" />
+                                        </div>
+                                        <p className="text-lg font-medium text-foreground">Select a result to preview</p>
+                                        <p className="text-sm mt-1">Click on an email from the search results</p>
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    }
+                />
+            )}
         </MailLayout>
     )
 }
@@ -517,6 +754,7 @@ function EmailDetail({
     const { data: messageData } = useMessage(email.id)
     const { openCompose } = useCompose()
     const fullMessage = messageData?.message
+    const [emailDarkMode, setEmailDarkMode] = useState(false)
 
     return (
         <div className="flex-1 overflow-y-auto">
@@ -533,6 +771,8 @@ function EmailDetail({
                         onSpam={onSpam ? () => onSpam(email.id) : undefined}
                         onDelete={onDelete ? () => onDelete(email.id) : undefined}
                         onStar={onStar ? () => onStar(email.id) : undefined}
+                        emailDarkMode={emailDarkMode}
+                        onToggleEmailDarkMode={() => setEmailDarkMode(!emailDarkMode)}
                     />
                     <h2 className="text-sm font-bold text-foreground mb-3">{email.subject}</h2>
 
@@ -540,6 +780,7 @@ function EmailDetail({
                         <EmailHtmlViewer
                             html={fullMessage?.bodyHtml || fullMessage?.htmlBody}
                             plainText={fullMessage?.bodyText || fullMessage?.plainBody || email.snippet}
+                            emailDarkMode={emailDarkMode}
                         />
                     </div>
 

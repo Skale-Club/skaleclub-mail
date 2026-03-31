@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Link, useLocation } from 'wouter'
 import { MailLayout } from '../../components/mail/MailLayout'
 import { EmailList, EmailItem, EmailToolbar } from '../../components/mail/EmailList'
@@ -23,6 +23,7 @@ import {
 import { EmailHtmlViewer } from '../../components/mail/EmailHtmlViewer'
 import { EmailMessageHeader } from '../../components/mail/EmailMessageHeader'
 import { Inbox as InboxIcon, Mail, MailOpen, AlertCircle } from 'lucide-react'
+import { ResizablePanels } from '../../components/mail/ResizablePanels'
 
 export default function InboxPage() {
     const isMobile = useIsMobile()
@@ -339,8 +340,8 @@ export default function InboxPage() {
 
     return (
         <MailLayout>
-            <div className="flex h-full">
-                <div className={`w-full ${!isMobile ? 'lg:w-1/2 xl:w-2/5 border-r border-border' : ''} flex flex-col bg-background`}>
+            {isMobile ? (
+                <div className="flex h-full flex-col bg-background">
                     <div className="px-4 py-2 border-b border-border bg-background">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
@@ -391,32 +392,88 @@ export default function InboxPage() {
                         />
                     </div>
                 </div>
-
-                {!isMobile && (
-                    <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col bg-muted/30">
-                        {selectedEmailData ? (
-                            <EmailDetail
-                                email={selectedEmailData}
-                                onToggleRead={handleToggleRead}
-                                onArchive={handleArchive}
-                                onSpam={handleSpam}
-                                onDelete={handleDelete}
-                                onStar={handleStar}
-                            />
-                        ) : (
-                            <div className="flex-1 flex items-center justify-center text-muted-foreground">
-                                <div className="text-center">
-                                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-accent flex items-center justify-center">
-                                        <InboxIcon className="w-8 h-8 text-muted-foreground" />
+            ) : (
+                <ResizablePanels
+                    storageKey="mail-panels-inbox"
+                    left={
+                        <>
+                            <div className="px-4 py-2 border-b border-border bg-background">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <InboxIcon className="w-5 h-5 text-muted-foreground" />
+                                        <h1 className="text-lg font-bold text-foreground">Inbox</h1>
                                     </div>
-                                    <p className="text-base font-medium text-foreground">Select an email to read</p>
-                                    <p className="text-sm mt-1">Click on an email from the list to view its contents</p>
+                                    <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                                        <button onClick={() => setFilter('all')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === 'all' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>All</button>
+                                        <button onClick={() => setFilter('unread')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === 'unread' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Unread {unreadCount > 0 && `(${unreadCount})`}</button>
+                                        <button onClick={() => setFilter('starred')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === 'starred' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Starred</button>
+                                        <button onClick={() => setFilter('attachments')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === 'attachments' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Attachments</button>
+                                    </div>
                                 </div>
                             </div>
-                        )}
-                    </div>
-                )}
-            </div>
+
+                            <EmailToolbar
+                                selectedCount={selectedEmails.size}
+                                totalCount={data?.total}
+                                onSelectAll={() => {
+                                    if (selectedEmails.size === emails.length) {
+                                        setSelectedEmails(new Set())
+                                    } else {
+                                        setSelectedEmails(new Set(emails.map(email => email.id)))
+                                    }
+                                }}
+                                onMarkRead={() => handleBulkRead(true)}
+                                onMarkUnread={() => handleBulkRead(false)}
+                                onDelete={handleBulkDelete}
+                                onArchive={handleBulkArchive}
+                                onSpam={handleBulkSpam}
+                                onRefresh={handleRefresh}
+                                isRefreshing={isFetching || syncMailbox.isPending}
+                            />
+
+                            <div className="flex-1 overflow-y-auto">
+                                <EmailList
+                                    emails={emails}
+                                    selectedId={selectedEmail || undefined}
+                                    selectedEmails={selectedEmails}
+                                    onSelect={handleSelectEmail}
+                                    onSelectMultiple={(ids) => setSelectedEmails(new Set(ids))}
+                                    onToggleRead={handleToggleRead}
+                                    onStar={handleStar}
+                                    onDelete={handleDelete}
+                                    onArchive={handleArchive}
+                                    onSpam={handleSpam}
+                                    emptyMessage={filter === 'all' ? "No emails in inbox" : `No ${filter} emails`}
+                                />
+                            </div>
+                        </>
+                    }
+                    right={
+                        <>
+                            {selectedEmailData ? (
+                                <EmailDetail
+                                    email={selectedEmailData}
+                                    onToggleRead={handleToggleRead}
+                                    onArchive={handleArchive}
+                                    onSpam={handleSpam}
+                                    onDelete={handleDelete}
+                                    onStar={handleStar}
+                                />
+                            ) : (
+                                <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                                    <div className="text-center">
+                                        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-accent flex items-center justify-center">
+                                            <InboxIcon className="w-8 h-8 text-muted-foreground" />
+                                        </div>
+                                        <p className="text-base font-medium text-foreground">Select an email to read</p>
+                                        <p className="text-sm mt-1">Click on an email from the list to view its contents</p>
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    }
+                />
+            )}
             <ConfirmDialog
                 open={confirmDialog.open}
                 onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
@@ -448,6 +505,7 @@ function EmailDetail({
     const { data: messageData } = useMessage(email.id)
     const { openCompose } = useCompose()
     const fullMessage = messageData?.message
+    const [emailDarkMode, setEmailDarkMode] = useState(false)
 
     return (
         <div className="flex-1 overflow-y-auto">
@@ -464,6 +522,8 @@ function EmailDetail({
                         onSpam={onSpam ? () => onSpam(email.id) : undefined}
                         onDelete={onDelete ? () => onDelete(email.id) : undefined}
                         onStar={onStar ? () => onStar(email.id) : undefined}
+                        emailDarkMode={emailDarkMode}
+                        onToggleEmailDarkMode={() => setEmailDarkMode(!emailDarkMode)}
                     />
                     <h2 className="text-sm font-bold text-foreground mb-3">
                         {email.subject}
@@ -486,6 +546,7 @@ function EmailDetail({
                         <EmailHtmlViewer
                             html={fullMessage?.bodyHtml || fullMessage?.htmlBody}
                             plainText={fullMessage?.bodyText || fullMessage?.plainBody || email.snippet}
+                            emailDarkMode={emailDarkMode}
                         />
                     </div>
 

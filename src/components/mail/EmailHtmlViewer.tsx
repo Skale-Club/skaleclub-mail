@@ -1,9 +1,12 @@
 import React, { useRef, useEffect, useState } from 'react'
+import { Maximize2 } from 'lucide-react'
+import { Dialog, DialogContent } from '../ui/Dialog'
 
 interface EmailHtmlViewerProps {
     html?: string | null
     plainText?: string | null
     emailDarkMode?: boolean
+    expandable?: boolean
 }
 
 /**
@@ -11,9 +14,10 @@ interface EmailHtmlViewerProps {
  * Falls back to plain text if no HTML is available.
  * The iframe auto-resizes to fit its content.
  */
-export function EmailHtmlViewer({ html, plainText, emailDarkMode }: EmailHtmlViewerProps) {
+export function EmailHtmlViewer({ html, plainText, emailDarkMode, expandable = true }: EmailHtmlViewerProps) {
     const iframeRef = useRef<HTMLIFrameElement>(null)
     const [height, setHeight] = useState(200)
+    const [isExpanded, setIsExpanded] = useState(false)
 
     useEffect(() => {
         const iframe = iframeRef.current
@@ -118,19 +122,48 @@ export function EmailHtmlViewer({ html, plainText, emailDarkMode }: EmailHtmlVie
     }
 
     return (
-        <iframe
-            ref={iframeRef}
-            sandbox="allow-same-origin"
-            title="Email content"
-            style={{
-                width: '100%',
-                height: `${height}px`,
-                border: 'none',
-                overflow: 'hidden',
-                display: 'block',
-                filter: emailDarkMode ? 'invert(1) hue-rotate(180deg)' : undefined,
-                transition: 'filter 0.2s ease',
-            }}
-        />
+        <>
+            <div className="relative group">
+                {expandable && (
+                    <button
+                        onClick={() => setIsExpanded(true)}
+                        className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 inline-flex h-7 w-7 items-center justify-center rounded-md bg-background/80 backdrop-blur-sm border border-border text-muted-foreground transition-all hover:text-foreground hover:bg-accent"
+                        title="Expand email"
+                        aria-label="Expand email"
+                    >
+                        <Maximize2 className="h-3.5 w-3.5" />
+                    </button>
+                )}
+                <iframe
+                    ref={iframeRef}
+                    sandbox="allow-same-origin"
+                    title="Email content"
+                    style={{
+                        width: '100%',
+                        height: `${height}px`,
+                        border: 'none',
+                        overflow: 'hidden',
+                        display: 'block',
+                        filter: emailDarkMode ? 'invert(1) hue-rotate(180deg)' : undefined,
+                        transition: 'filter 0.2s ease',
+                    }}
+                />
+            </div>
+
+            {expandable && (
+                <Dialog open={isExpanded} onOpenChange={setIsExpanded}>
+                    <DialogContent className="max-w-[95vw] w-[95vw] h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
+                        <div className="flex-1 overflow-y-auto p-6">
+                            <EmailHtmlViewer
+                                html={html}
+                                plainText={plainText}
+                                emailDarkMode={emailDarkMode}
+                                expandable={false}
+                            />
+                        </div>
+                    </DialogContent>
+                </Dialog>
+            )}
+        </>
     )
 }
