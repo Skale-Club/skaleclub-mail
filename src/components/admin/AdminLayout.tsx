@@ -17,7 +17,7 @@ import {
     Home,
     Palette,
     Target,
-    Mail,
+    Inbox,
 } from 'lucide-react'
 
 interface NavItem {
@@ -161,8 +161,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                             className="gap-2"
                             onClick={() => navigate('/mail/inbox')}
                         >
-                            <Mail className="w-4 h-4" />
-                            <span className="hidden sm:inline">Open Mailboxes</span>
+                            <Inbox className="w-4 h-4" />
+                            <span className="hidden sm:inline">Open Inbox</span>
                             <ArrowRight className="w-4 h-4 hidden sm:inline" />
                         </Button>
                         <Button

@@ -9,6 +9,7 @@ import { Button } from '../ui/button'
 import { DeployFooter } from '../DeployFooter'
 import {
     ArrowLeft,
+    Inbox,
     LayoutDashboard,
     Mail,
     Users,
@@ -210,8 +211,8 @@ export function OutreachLayout({ children }: OutreachLayoutProps) {
                                 onClick={() => navigate('/mail/inbox')}
                                 className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                             >
-                                <Mail className="w-4 h-4" />
-                                <span className="hidden sm:inline">Open Mailboxes</span>
+                                <Inbox className="w-4 h-4" />
+                                <span className="hidden sm:inline">Open Inbox</span>
                             </button>
                             <button
                                 onClick={() => navigate('/admin')}
