@@ -11,7 +11,7 @@ import {
     EyeOff,
 } from 'lucide-react'
 import { OutreachLayout } from '../../../components/outreach/OutreachLayout'
-import { apiFetch } from '../../../lib/api'
+import { apiFetch } from '../../../lib/api-client'
 
 interface Organization {
     id: string
