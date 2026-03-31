@@ -17,6 +17,7 @@
         "db:generate": "drizzle-kit generate:pg",
         "db:push": "drizzle-kit push:pg",
         "db:studio": "drizzle-kit studio",
+        "db:indexes": "psql \"$DATABASE_URL\" -f sql/indexes.sql",
         "db:rls": "tsx scripts/run-rls-migration.ts",
         "db:audit": "tsx scripts/audit-schema-drift.ts",
         "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
