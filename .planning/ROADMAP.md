@@ -51,8 +51,10 @@ Plans:
   2. A sequence created from a campaign's detail page is correctly associated with that campaign (no FK violation at the DB layer)
   3. Step delay and body fields submitted to the API match the schema column names (`delayHours`, `htmlBody`)
   4. After a successful save the user lands on the campaign/sequences list with a success toast visible
-**Plans**: TBD
-**UI hint**: yes
+**Plans**: 1 plan
+
+Plans:
+- [ ] 03-01-PLAN.md — Wire NewSequencePage save handler, fix field names, add route with :id param (SEQ-01, SEQ-02, SEQ-03, SEQ-04, SEQ-05)
 
 ### Phase 4: Code Quality
 **Goal**: TypeScript compiles cleanly, all outreach pages use lib/api-client consistently, and the cron scheduler has a concurrency guard
@@ -76,5 +78,5 @@ Recommended order: [1 + 2 + 4 in parallel] → [3]
 |-------|----------------|--------|-----------|
 | 1. Sending Correctness | 0/2 | Not started | - |
 | 2. Reply Detection | 0/1 | Not started | - |
-| 3. Sequence Builder UI | 0/? | Not started | - |
+| 3. Sequence Builder UI | 0/1 | Not started | - |
 | 4. Code Quality | 0/? | Not started | - |
