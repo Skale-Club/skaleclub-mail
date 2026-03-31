@@ -7,7 +7,7 @@
 
 ### RLS & Migration Safety
 
-- [ ] **DBS-01**: RLS policies audited and fixed — policies no longer reference removed `servers` table; data isolation verified between organizations
+- [x] **DBS-01**: RLS policies audited and fixed — policies no longer reference removed `servers` table; data isolation verified between organizations
 - [x] **DBS-02**: Safe index migration workflow established — `sql/indexes.sql` file with `CREATE INDEX CONCURRENTLY` statements, applied via `npm run db:indexes` script (not `db:push`)
 - [x] **DBS-03**: Index health verification — script checks `indisvalid` after CONCURRENTLY creation; drops and retries invalid indexes
 
@@ -62,7 +62,7 @@ Deferred to future release.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DBS-01 | Phase 05 | Pending |
+| DBS-01 | Phase 05 | Complete |
 | DBS-02 | Phase 05 | Complete |
 | DBS-03 | Phase 05 | Complete |
 | IDX-01 | Phase 06 | Pending |

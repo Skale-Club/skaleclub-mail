@@ -10,7 +10,7 @@
 
 ## Phases
 
-- [ ] **Phase 05: RLS & Migration Safety** — Fix broken RLS policies and establish safe index migration workflow
+- [x] **Phase 05: RLS & Migration Safety** — Fix broken RLS policies and establish safe index migration workflow (completed 2026-03-31)
 - [ ] **Phase 06: Index Foundation** — Add all FK and composite indexes to schema.ts, apply via CONCURRENTLY
 - [ ] **Phase 07: Pagination** — Add paginated responses to all list endpoints
 - [ ] **Phase 08: Query Optimization** — Fix N+1 patterns, add column filtering, scope unbounded queries
@@ -29,10 +29,10 @@
   2. A user in one organization cannot read or modify another organization's data — verified by testing with two org accounts
   3. `npm run db:indexes` script executes `sql/indexes.sql` containing `CREATE INDEX CONCURRENTLY` statements
   4. Invalid indexes (where `indisvalid = false`) are automatically detected, dropped, and retried by the verification script
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 05-01-PLAN.md — Fix RLS policies (migration 016 + verification script) — DBS-01
+- [x] 05-01-PLAN.md — Fix RLS policies (migration 016 + verification script) — DBS-01
 - [x] 05-02-PLAN.md — Safe index migration workflow (sql/indexes.sql + verify script) — DBS-02, DBS-03
 
 ### Phase 06: Index Foundation
@@ -87,7 +87,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 05. RLS & Migration Safety | 1/2 | In Progress|  |
+| 05. RLS & Migration Safety | 2/2 | Complete    | 2026-03-31 |
 | 06. Index Foundation | 0/0 | Not started | — |
 | 07. Pagination | 0/0 | Not started | — |
 | 08. Query Optimization | 0/0 | Not started | — |

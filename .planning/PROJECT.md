@@ -32,10 +32,16 @@ A user can create a campaign, build a sequence, add leads, and have emails actua
 - ✓ Consistent api-client.ts usage across outreach pages — v1.0
 - ✓ TypeScript errors resolved — v1.0
 - ✓ Cron concurrency guard — v1.0
+- ✓ RLS policies fixed — org-scoped with is_org_member, no server references — v1.1 Phase 05
+- ✓ Safe index migration workflow (CREATE INDEX CONCURRENTLY) — v1.1 Phase 05
+- ✓ Index health verification script — v1.1 Phase 05
 
 ### Active
 
-**(New milestone v1.1 — to be defined)**
+- [ ] **IDX-01 through IDX-06** — Index all FK/composite columns, consolidate in schema.ts
+- [ ] **PAGE-01 through PAGE-05** — Pagination on all list endpoints
+- [ ] **QRY-01 through QRY-03** — N+1 fixes, column filtering, scoped queries
+- [ ] **SCH-01 through SCH-02** — CHECK constraints, deprecate old migration
 
 ### Out of Scope
 
@@ -68,6 +74,7 @@ A user can create a campaign, build a sequence, add leads, and have emails actua
 | Sequence creation tied to campaign | Data model requires it; UI flow must reflect this constraint | ✓ v1.0 |
 | Use lib/api-client.ts across all outreach pages | Consistent error handling and retry logic vs lib/api.ts | ✓ v1.0 |
 | Module-level isSequenceProcessing flag | Prevents cron overlap without DB locks; .finally() resets unconditionally | ✓ v1.0 |
+| Consolidate is_outreach_org_member into is_org_member | Identical function body; reduces maintenance surface | ✓ v1.1 Phase 05 |
 
 ## Evolution
 
@@ -87,4 +94,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-31 after v1.1 milestone start (database health)*
+*Last updated: 2026-03-31 after v1.1 Phase 05 (RLS & migration safety)*
