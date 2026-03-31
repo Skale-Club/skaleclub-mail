@@ -9,7 +9,7 @@ A targeted fix pass on a partially-built outreach module. The backend infrastruc
 - [ ] **Phase 1: Sending Correctness** - Fix blocking backend bugs in the sequence processor and cron scheduler
 - [ ] **Phase 2: Reply Detection** - Migrate processReplies.ts from `imap` to `imapflow`
 - [x] **Phase 3: Sequence Builder UI** - Wire NewSequencePage to the API with correct field names and route param (completed 2026-03-31)
-- [ ] **Phase 4: Code Quality** - Remove TypeScript errors, dead code, and inconsistent imports
+- [x] **Phase 4: Code Quality** - Remove TypeScript errors, dead code, and inconsistent imports (completed 2026-03-31)
 
 ## Phase Details
 
@@ -68,7 +68,7 @@ Plans:
 
 Plans:
 - [x] 04-01-PLAN.md — Fix import hygiene: NewInboxPage lib/api-client swap, SequencesPage Link removal, verify QUAL-03 (QUAL-01, QUAL-02, QUAL-03)
-- [ ] 04-02-PLAN.md — Add isSequenceProcessing concurrency guard to jobs/index.ts (QUAL-04)
+- [x] 04-02-PLAN.md — Add isSequenceProcessing concurrency guard to jobs/index.ts (QUAL-04)
 
 ## Progress
 
@@ -83,4 +83,4 @@ Recommended order: [1 + 2 + 4 in parallel] → [3]
 | 1. Sending Correctness | 0/2 | Not started | - |
 | 2. Reply Detection | 0/1 | Not started | - |
 | 3. Sequence Builder UI | 0/1 | Complete    | 2026-03-31 |
-| 4. Code Quality | 1/2 | In Progress|  |
+| 4. Code Quality | 2/2 | Complete   | 2026-03-31 |
