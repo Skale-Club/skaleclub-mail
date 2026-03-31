@@ -62,30 +62,30 @@ Deferred to future release.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DBS-01 | — | Pending |
-| DBS-02 | — | Pending |
-| DBS-03 | — | Pending |
-| IDX-01 | — | Pending |
-| IDX-02 | — | Pending |
-| IDX-03 | — | Pending |
-| IDX-04 | — | Pending |
-| IDX-05 | — | Pending |
-| IDX-06 | — | Pending |
-| PAGE-01 | — | Pending |
-| PAGE-02 | — | Pending |
-| PAGE-03 | — | Pending |
-| PAGE-04 | — | Pending |
-| PAGE-05 | — | Pending |
-| QRY-01 | — | Pending |
-| QRY-02 | — | Pending |
-| QRY-03 | — | Pending |
-| SCH-01 | — | Pending |
-| SCH-02 | — | Pending |
+| DBS-01 | Phase 05 | Pending |
+| DBS-02 | Phase 05 | Pending |
+| DBS-03 | Phase 05 | Pending |
+| IDX-01 | Phase 06 | Pending |
+| IDX-02 | Phase 06 | Pending |
+| IDX-03 | Phase 06 | Pending |
+| IDX-04 | Phase 06 | Pending |
+| IDX-05 | Phase 06 | Pending |
+| IDX-06 | Phase 06 | Pending |
+| PAGE-01 | Phase 07 | Pending |
+| PAGE-02 | Phase 07 | Pending |
+| PAGE-03 | Phase 07 | Pending |
+| PAGE-04 | Phase 07 | Pending |
+| PAGE-05 | Phase 07 | Pending |
+| QRY-01 | Phase 08 | Pending |
+| QRY-02 | Phase 08 | Pending |
+| QRY-03 | Phase 08 | Pending |
+| SCH-01 | Phase 09 | Pending |
+| SCH-02 | Phase 09 | Pending |
 
 **Coverage:**
 - v1 requirements: 19 total
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 19 ⚠️
+- Mapped to phases: 19 ✓
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-31*

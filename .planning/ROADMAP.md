@@ -1,86 +1,134 @@
-# Roadmap: SkaleClub Mail — Outreach System Completion
+# Roadmap: SkaleClub Mail — Database Health (v1.1)
 
-## Overview
+**Milestone:** v1.1 — Database Health
+**Created:** 2026-03-31
+**Granularity:** coarse
+**Requirements:** 19 v1 requirements
+**Phases:** 5 (continuing from v1.0 phase 04)
 
-A targeted fix pass on a partially-built outreach module. The backend infrastructure is substantially complete; this milestone fills the implementation gaps that prevent end-to-end function: a daily send counter that never resets, a sequence job that duplicates and bypasses the shared sending module, a UI that never calls the API, and a reply detector using a legacy IMAP library. Phases are ordered so that the backend is correct before the UI connects to it, with code quality work running in parallel from the start.
+---
 
 ## Phases
 
-- [ ] **Phase 1: Sending Correctness** - Fix blocking backend bugs in the sequence processor and cron scheduler
-- [ ] **Phase 2: Reply Detection** - Migrate processReplies.ts from `imap` to `imapflow`
-- [x] **Phase 3: Sequence Builder UI** - Wire NewSequencePage to the API with correct field names and route param (completed 2026-03-31)
-- [x] **Phase 4: Code Quality** - Remove TypeScript errors, dead code, and inconsistent imports (completed 2026-03-31)
+- [ ] **Phase 05: RLS & Migration Safety** — Fix broken RLS policies and establish safe index migration workflow
+- [ ] **Phase 06: Index Foundation** — Add all FK and composite indexes to schema.ts, apply via CONCURRENTLY
+- [ ] **Phase 07: Pagination** — Add paginated responses to all list endpoints
+- [ ] **Phase 08: Query Optimization** — Fix N+1 patterns, add column filtering, scope unbounded queries
+- [ ] **Phase 09: Schema Hardening** — Add CHECK constraints, deprecate old migration file
+
+---
 
 ## Phase Details
 
-### Phase 1: Sending Correctness
-**Goal**: The sequence processor correctly sends emails for all account types, records every send, resets daily limits at midnight, and cannot double-send on retry
-**Depends on**: Nothing (first phase)
-**Requirements**: SEND-01, SEND-02, SEND-03, SEND-04, SEND-05, SEND-06
+### Phase 05: RLS & Migration Safety
+**Goal:** Data isolation between organizations is verified and index migrations can be applied safely without blocking writes
+**Depends on:** Nothing (prerequisite for all other phases)
+**Requirements:** DBS-01, DBS-02, DBS-03
 **Success Criteria** (what must be TRUE):
-  1. An email account that hit its daily send limit on day 1 resumes sending on day 2 without manual intervention
-  2. An Outlook-configured email account has its messages delivered (not silently dropped)
-  3. A step with `abTestEnabled: true` assigns the same variant to the same lead on every run — retries do not flip variants
-  4. No lead receives the same sequence step email twice even if the job is interrupted between SMTP send and DB write
-  5. `processOutreachSequences.ts` contains no local copies of `isWithinSendWindow`, `canSendFromAccount`, or `sendEmail`
-**Plans**: 2 plans
+  1. RLS policies no longer reference the removed `servers` table — verified by inspecting the migration SQL
+  2. A user in one organization cannot read or modify another organization's data — verified by testing with two org accounts
+  3. `npm run db:indexes` script executes `sql/indexes.sql` containing `CREATE INDEX CONCURRENTLY` statements
+  4. Invalid indexes (where `indisvalid = false`) are automatically detected, dropped, and retried by the verification script
+**Plans:** TBD
 
-Plans:
-- [x] 01-01-PLAN.md — Verify/fix daily reset cron + add idempotency guard (SEND-01, SEND-05)
-- [x] 01-02-PLAN.md — Consolidate to outreach-sender.ts: remove duplicate functions, wire Outlook routing, deterministic A/B (SEND-02, SEND-03, SEND-04, SEND-06)
-
-### Phase 2: Reply Detection
-**Goal**: processReplies.ts detects replies using imapflow with the same connection pattern as processBounces.ts, and the legacy `imap` package is removed
-**Depends on**: Nothing (parallel with Phase 1)
-**Requirements**: REPLY-01, REPLY-02, REPLY-03
+### Phase 06: Index Foundation
+**Goal:** All foreign key and composite query columns are indexed so that no query performs a full sequential scan
+**Depends on:** Phase 05
+**Requirements:** IDX-01, IDX-02, IDX-03, IDX-04, IDX-05, IDX-06
 **Success Criteria** (what must be TRUE):
-  1. A reply to an outreach email is detected and marked as replied in the next cron tick without hanging connections
-  2. A processed message is flagged `\Seen` so it is not reprocessed on the next run
-  3. `package.json` contains no `imap` or `@types/imap` entries
-**Plans**: 1 plan
+  1. Every FK column (`organizationId`, `campaignId`, `serverId`, `domainId`, `credentialId`, `routeId`, `webhookId`, `leadListId`) has an index across all org-scoped tables
+  2. Dashboard stats query (`messages WHERE organizationId = ? AND status = ?`) returns in under 100ms with EXPLAIN ANALYZE showing index usage
+  3. Campaign lead status counts (`campaignLeads WHERE campaignId = ? AND status = ?`) return in under 100ms
+  4. Send pipeline cron query filters on `nextScheduledAt` without scanning all leads — verified with EXPLAIN ANALYZE
+  5. Open/click tracking lookup by `messages.token` returns in under 10ms
+  6. All index definitions exist in `src/db/schema.ts` using Drizzle `index()` API — `013_add_performance_indexes.sql` is superseded
+**Plans:** TBD
 
-Plans:
-- [ ] 02-01-PLAN.md — Migrate processReplies.ts to imapflow, remove imap package (REPLY-01, REPLY-02, REPLY-03)
-
-### Phase 3: Sequence Builder UI
-**Goal**: Users can create a sequence with steps through the NewSequencePage UI and have it saved to the database and executed by the job
-**Depends on**: Phase 1
-**Requirements**: SEQ-01, SEQ-02, SEQ-03, SEQ-04, SEQ-05
+### Phase 07: Pagination
+**Goal:** All list endpoints return paginated results so that page loads don't degrade as data grows
+**Depends on:** Phase 06
+**Requirements:** PAGE-01, PAGE-02, PAGE-03, PAGE-04, PAGE-05
 **Success Criteria** (what must be TRUE):
-  1. Clicking Save on NewSequencePage creates a sequence record and all step records via the API — no console.log in the network tab
-  2. A sequence created from a campaign's detail page is correctly associated with that campaign (no FK violation at the DB layer)
-  3. Step delay and body fields submitted to the API match the schema column names (`delayHours`, `htmlBody`)
-  4. After a successful save the user lands on the campaign/sequences list with a success toast visible
-**Plans**: 1 plan
+  1. `GET /api/outreach/campaigns` returns `{ items, pagination: { page, pageSize, total } }` instead of all rows
+  2. `GET /api/outreach/leads` returns paginated results
+  3. `GET /api/outreach/lead-lists` returns paginated results
+  4. `GET /api/email-accounts` returns paginated results
+  5. `GET /api/outreach/sequences` returns paginated results
+  6. List endpoints accept `?page=1&pageSize=25` query parameters and return correct `total` count
+**Plans:** TBD
 
-Plans:
-- [x] 03-01-PLAN.md — Wire NewSequencePage save handler, fix field names, add route with :id param (SEQ-01, SEQ-02, SEQ-03, SEQ-04, SEQ-05)
-
-### Phase 4: Code Quality
-**Goal**: TypeScript compiles cleanly, all outreach pages use lib/api-client consistently, and the cron scheduler has a concurrency guard
-**Depends on**: Nothing (parallel with Phases 1 and 2)
-**Requirements**: QUAL-01, QUAL-02, QUAL-03, QUAL-04
+### Phase 08: Query Optimization
+**Goal:** Background jobs and list endpoints load data efficiently with no N+1 patterns and no oversized payloads
+**Depends on:** Phase 06, Phase 07
+**Requirements:** QRY-01, QRY-02, QRY-03
 **Success Criteria** (what must be TRUE):
-  1. `npx tsc --noEmit` exits with code 0 and zero TS6133 errors across all outreach files
-  2. No outreach page imports from `lib/api` — all use `lib/api-client`
-  3. An overlapping cron invocation of the sequence processor is skipped, not stacked
-**Plans**: 2 plans
+  1. `processQueue.ts` batch-loads all needed messages and organizations before the delivery loop — 2 queries instead of 3*N (verified by logging query count)
+  2. List endpoints exclude `htmlBody`, `plainBody`, and other large text columns from SELECT — response payload sizes reduced (verified by comparing before/after)
+  3. `processOutreachSequences` lead query includes `WHERE nextScheduledAt <= now()` and uses the index from Phase 06 — no full table scan (verified with EXPLAIN ANALYZE)
+**Plans:** TBD
 
-Plans:
-- [x] 04-01-PLAN.md — Fix import hygiene: NewInboxPage lib/api-client swap, SequencesPage Link removal, verify QUAL-03 (QUAL-01, QUAL-02, QUAL-03)
-- [x] 04-02-PLAN.md — Add isSequenceProcessing concurrency guard to jobs/index.ts (QUAL-04)
+### Phase 09: Schema Hardening
+**Goal:** Database constraints prevent invalid data and the old migration file is properly deprecated
+**Depends on:** Nothing (independent, last to avoid schema.ts merge conflicts)
+**Requirements:** SCH-01, SCH-02
+**Success Criteria** (what must be TRUE):
+  1. `campaignSteps.delayHours` rejects negative values — insert of -1 fails with constraint violation (verified by testing)
+  2. `campaignSteps.order` rejects values less than 1 — insert of 0 fails with constraint violation (verified by testing)
+  3. `supabase/migrations/013_add_performance_indexes.sql` has a deprecation comment header explaining that indexes are now managed via Drizzle schema.ts
+**Plans:** TBD
+
+---
 
 ## Progress
 
-**Execution Order:**
-Phase 2 and Phase 4 can start immediately and run in parallel with Phase 1.
-Phase 3 requires Phase 1 complete. Phase 3 is easier after Phase 4 (clean TypeScript baseline).
-
-Recommended order: [1 + 2 + 4 in parallel] → [3]
-
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Sending Correctness | 0/2 | Not started | - |
-| 2. Reply Detection | 0/1 | Not started | - |
-| 3. Sequence Builder UI | 0/1 | Complete    | 2026-03-31 |
-| 4. Code Quality | 2/2 | Complete   | 2026-03-31 |
+| 05. RLS & Migration Safety | 0/0 | Not started | — |
+| 06. Index Foundation | 0/0 | Not started | — |
+| 07. Pagination | 0/0 | Not started | — |
+| 08. Query Optimization | 0/0 | Not started | — |
+| 09. Schema Hardening | 0/0 | Not started | — |
+
+---
+
+## Coverage
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| DBS-01 | Phase 05 | Pending |
+| DBS-02 | Phase 05 | Pending |
+| DBS-03 | Phase 05 | Pending |
+| IDX-01 | Phase 06 | Pending |
+| IDX-02 | Phase 06 | Pending |
+| IDX-03 | Phase 06 | Pending |
+| IDX-04 | Phase 06 | Pending |
+| IDX-05 | Phase 06 | Pending |
+| IDX-06 | Phase 06 | Pending |
+| PAGE-01 | Phase 07 | Pending |
+| PAGE-02 | Phase 07 | Pending |
+| PAGE-03 | Phase 07 | Pending |
+| PAGE-04 | Phase 07 | Pending |
+| PAGE-05 | Phase 07 | Pending |
+| QRY-01 | Phase 08 | Pending |
+| QRY-02 | Phase 08 | Pending |
+| QRY-03 | Phase 08 | Pending |
+| SCH-01 | Phase 09 | Pending |
+| SCH-02 | Phase 09 | Pending |
+
+**Coverage: 19/19 requirements mapped ✓**
+
+---
+
+## Dependency Chain
+
+```
+Phase 05 (RLS & Migration Safety)
+    ↓
+Phase 06 (Index Foundation)
+    ↓
+Phase 07 (Pagination) ──→ Phase 08 (Query Optimization)
+                               ↑
+Phase 09 (Schema Hardening) ───┘  (independent)
+```
+
+Phase 09 is independent — it can run in parallel with any other phase but is ordered last to avoid merge conflicts in schema.ts.

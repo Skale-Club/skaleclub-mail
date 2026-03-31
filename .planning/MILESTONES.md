@@ -20,6 +20,11 @@
 **Date:** 2026-03-31 →
 **Goal:** Make every page load fast and make the database layer robust enough that changes don't break things.
 
-**Phases:** TBD (requirements being defined)
+**Phases:**
+5. RLS & Migration Safety — Fix broken RLS policies, establish safe index migration workflow
+6. Index Foundation — Add all FK and composite indexes to schema.ts
+7. Pagination — Paginated responses on all list endpoints
+8. Query Optimization — N+1 fixes, column filtering, scoped queries
+9. Schema Hardening — CHECK constraints, deprecate old migration file
 
 ---
