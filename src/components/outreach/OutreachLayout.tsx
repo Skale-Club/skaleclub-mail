@@ -207,6 +207,13 @@ export function OutreachLayout({ children }: OutreachLayoutProps) {
                         <div className="flex-1" />
                         <div className="flex items-center gap-4">
                             <button
+                                onClick={() => navigate('/mail/inbox')}
+                                className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                            >
+                                <Mail className="w-4 h-4" />
+                                <span className="hidden sm:inline">Open Mailboxes</span>
+                            </button>
+                            <button
                                 onClick={() => navigate('/admin')}
                                 className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                             >
