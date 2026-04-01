@@ -14,9 +14,180 @@
 --   npx tsx scripts/verify-indexes.ts
 -- =============================================================================
 
--- Phase 06 will populate this file with all required indexes
--- (FK columns, composite indexes for common queries, etc.)
+-- =============================================================================
+-- Core tables — organizationId FK indexes
+-- =============================================================================
 
--- Example: Index on messages.organization_id for org-scoped message queries
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_domains_organization_id
+    ON domains (organization_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_credentials_organization_id
+    ON credentials (organization_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_outlook_mailboxes_organization_id
+    ON outlook_mailboxes (organization_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_routes_organization_id
+    ON routes (organization_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_smtp_endpoints_organization_id
+    ON smtp_endpoints (organization_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_http_endpoints_organization_id
+    ON http_endpoints (organization_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_address_endpoints_organization_id
+    ON address_endpoints (organization_id);
+
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_messages_organization_id
     ON messages (organization_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_messages_org_status
+    ON messages (organization_id, status);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_messages_token
+    ON messages (token);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_webhooks_organization_id
+    ON webhooks (organization_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_templates_organization_id
+    ON templates (organization_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_track_domains_organization_id
+    ON track_domains (organization_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_suppressions_organization_id
+    ON suppressions (organization_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_statistics_organization_id
+    ON statistics (organization_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_lead_lists_organization_id
+    ON lead_lists (organization_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_campaigns_organization_id
+    ON campaigns (organization_id);
+
+-- =============================================================================
+-- Deliveries — message + organization FK indexes
+-- =============================================================================
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_deliveries_message_id
+    ON deliveries (message_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_deliveries_organization_id
+    ON deliveries (organization_id);
+
+-- =============================================================================
+-- Webhook requests — webhook FK index
+-- =============================================================================
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_webhook_requests_webhook_id
+    ON webhook_requests (webhook_id);
+
+-- =============================================================================
+-- Email accounts — organization + outlook mailbox FK indexes
+-- =============================================================================
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_email_accounts_organization_id
+    ON email_accounts (organization_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_email_accounts_outlook_mailbox_id
+    ON email_accounts (outlook_mailbox_id);
+
+-- =============================================================================
+-- Leads — organization + lead list FK indexes
+-- =============================================================================
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_leads_organization_id
+    ON leads (organization_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_leads_lead_list_id
+    ON leads (lead_list_id);
+
+-- =============================================================================
+-- Sequences + steps — campaign/sequence FK indexes
+-- =============================================================================
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_sequences_campaign_id
+    ON sequences (campaign_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_sequence_steps_sequence_id
+    ON sequence_steps (sequence_id);
+
+-- =============================================================================
+-- Campaign leads — multiple FK indexes
+-- =============================================================================
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_campaign_leads_campaign_id
+    ON campaign_leads (campaign_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_campaign_leads_lead_id
+    ON campaign_leads (lead_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_campaign_leads_assigned_email_account_id
+    ON campaign_leads (assigned_email_account_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_campaign_leads_current_step_id
+    ON campaign_leads (current_step_id);
+
+-- =============================================================================
+-- Outreach emails — multiple FK indexes
+-- =============================================================================
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_outreach_emails_organization_id
+    ON outreach_emails (organization_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_outreach_emails_campaign_id
+    ON outreach_emails (campaign_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_outreach_emails_campaign_lead_id
+    ON outreach_emails (campaign_lead_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_outreach_emails_sequence_step_id
+    ON outreach_emails (sequence_step_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_outreach_emails_email_account_id
+    ON outreach_emails (email_account_id);
+
+-- =============================================================================
+-- Outreach analytics — FK indexes (some nullable)
+-- =============================================================================
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_outreach_analytics_organization_id
+    ON outreach_analytics (organization_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_outreach_analytics_campaign_id
+    ON outreach_analytics (campaign_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_outreach_analytics_email_account_id
+    ON outreach_analytics (email_account_id);
+
+-- =============================================================================
+-- Mail module — user/mailbox FK indexes
+-- =============================================================================
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_mailboxes_user_id
+    ON mailboxes (user_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_mail_folders_mailbox_id
+    ON mail_folders (mailbox_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_mail_messages_mailbox_id
+    ON mail_messages (mailbox_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_mail_messages_folder_id
+    ON mail_messages (folder_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_mail_filters_mailbox_id
+    ON mail_filters (mailbox_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_signatures_mailbox_id
+    ON signatures (mailbox_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_contacts_user_id
+    ON contacts (user_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_user_notifications_user_id
+    ON user_notifications (user_id);
