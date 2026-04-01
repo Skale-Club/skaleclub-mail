@@ -16,6 +16,7 @@ import {
     TrendingUp
 } from 'lucide-react'
 import { OutreachLayout } from '../../components/outreach/OutreachLayout'
+import { PaginationControls } from '../../components/ui/PaginationControls'
 import { apiFetch, apiRequest } from '../../lib/api-client'
 import { useOrganization } from '../../hooks/useOrganization'
 
@@ -35,13 +36,15 @@ interface Campaign {
 
 interface CampaignsResponse {
     campaigns: Campaign[]
-    total: number
+    pagination: { page: number; limit: number; total: number; totalPages: number }
 }
 
-async function fetchCampaigns(organizationId: string, params: { status?: string; search?: string }): Promise<CampaignsResponse> {
+async function fetchCampaigns(organizationId: string, params: { status?: string; search?: string; page?: number; limit?: number }): Promise<CampaignsResponse> {
     const query = new URLSearchParams({ organizationId })
     if (params.status && params.status !== 'all') query.set('status', params.status)
     if (params.search) query.set('search', params.search)
+    if (params.page) query.set('page', String(params.page))
+    if (params.limit) query.set('limit', String(params.limit))
 
     return apiFetch<CampaignsResponse>(`/api/outreach/campaigns?${query.toString()}`)
 }
@@ -188,11 +191,12 @@ export function CampaignsPage() {
     const { currentOrganization } = useOrganization()
     const [search, setSearch] = React.useState('')
     const [statusFilter, setStatusFilter] = React.useState('all')
+    const [page, setPage] = React.useState(1)
     const queryClient = useQueryClient()
 
     const { data, isLoading } = useQuery({
-        queryKey: ['campaigns', currentOrganization?.id, statusFilter, search],
-        queryFn: () => fetchCampaigns(currentOrganization!.id, { status: statusFilter, search }),
+        queryKey: ['campaigns', currentOrganization?.id, statusFilter, search, page],
+        queryFn: () => fetchCampaigns(currentOrganization!.id, { status: statusFilter, search, page, limit: 25 }),
         enabled: !!currentOrganization?.id,
     })
 
@@ -253,7 +257,7 @@ export function CampaignsPage() {
                             type="text"
                             placeholder="Search campaigns..."
                             value={search}
-                            onChange={(e) => setSearch(e.target.value)}
+                            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
                             className="w-full pl-10 pr-4 py-2 border border-input rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
                         />
                     </div>
@@ -261,7 +265,7 @@ export function CampaignsPage() {
                         <Filter className="w-5 h-5 text-muted-foreground" />
                         <select
                             value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
+                            onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
                             className="px-3 py-2 border border-input rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary"
                         >
                             <option value="all">All Status</option>
@@ -293,6 +297,7 @@ export function CampaignsPage() {
                         ))}
                     </div>
                 ) : data?.campaigns && data.campaigns.length > 0 ? (
+                    <>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {data.campaigns.map((campaign) => (
                             <CampaignCard
@@ -303,6 +308,16 @@ export function CampaignsPage() {
                             />
                         ))}
                     </div>
+                    {data?.pagination && data.pagination.totalPages > 1 && (
+                        <PaginationControls
+                            page={data.pagination.page}
+                            totalPages={data.pagination.totalPages}
+                            total={data.pagination.total}
+                            itemName="campaigns"
+                            onPageChange={setPage}
+                        />
+                    )}
+                    </>
                 ) : (
                     <div className="bg-card rounded-lg border border-border p-12 text-center">
                         <Target className="w-16 h-16 text-muted-foreground/50 mx-auto mb-4" />
