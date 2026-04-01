@@ -13,7 +13,7 @@
 - [x] **Phase 05: RLS & Migration Safety** — Fix broken RLS policies and establish safe index migration workflow (completed 2026-03-31)
 - [x] **Phase 06: Index Foundation** — Add all FK and composite indexes to schema.ts, apply via CONCURRENTLY (completed 2026-04-01)
 - [x] **Phase 07: Pagination** — Add paginated responses to all list endpoints (completed 2026-04-01)
-- [ ] **Phase 08: Query Optimization** — Fix N+1 patterns, add column filtering, scope unbounded queries
+- [x] **Phase 08: Query Optimization** — Fix N+1 patterns, add column filtering, scope unbounded queries (completed 2026-04-01)
 - [ ] **Phase 09: Schema Hardening** — Add CHECK constraints, deprecate old migration file
 
 ---
@@ -75,7 +75,7 @@ Plans:
   3. `processOutreachSequences` lead query includes `WHERE nextScheduledAt <= now()` and uses the index from Phase 06 — no full table scan (verified with EXPLAIN ANALYZE)
   4. Suppression and idempotency checks batch-loaded before lead loop (2 queries instead of 2*N)
   5. Cascade.ts, messages.ts POST, and processHeld.ts use batch queries instead of per-item loops
-**Plans:** 1/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 - [x] 08-01-PLAN.md — processQueue.ts N+1 fix (batch-load messages + orgs) — QRY-01
@@ -88,10 +88,13 @@ Plans:
 **Depends on:** Nothing (independent, last to avoid schema.ts merge conflicts)
 **Requirements:** SCH-01, SCH-02
 **Success Criteria** (what must be TRUE):
-  1. `campaignSteps.delayHours` rejects negative values — insert of -1 fails with constraint violation (verified by testing)
-  2. `campaignSteps.order` rejects values less than 1 — insert of 0 fails with constraint violation (verified by testing)
+  1. `sequenceSteps.delayHours` rejects negative values — insert of -1 fails with constraint violation (verified by testing)
+  2. `sequenceSteps.stepOrder` rejects values less than 1 — insert of 0 fails with constraint violation (verified by testing)
   3. `supabase/migrations/013_add_performance_indexes.sql` has a deprecation comment header explaining that indexes are now managed via Drizzle schema.ts
-**Plans:** TBD
+**Plans:** 1/1 plans
+
+Plans:
+- [ ] 09-01-PLAN.md — CHECK constraints on sequenceSteps + deprecate old migration — SCH-01, SCH-02
 
 ---
 
@@ -102,8 +105,8 @@ Plans:
 | 05. RLS & Migration Safety | 2/2 | Complete    | 2026-03-31 |
 | 06. Index Foundation | 1/2 | Complete    | 2026-04-01 |
 | 07. Pagination | 2/2 | Complete    | 2026-04-01 |
-| 08. Query Optimization | 1/4 | In Progress|  |
-| 09. Schema Hardening | 0/0 | Not started | — |
+| 08. Query Optimization | 1/4 | Complete    | 2026-04-01 |
+| 09. Schema Hardening | 0/1 | Not started | — |
 
 ---
 
