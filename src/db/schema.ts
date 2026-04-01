@@ -10,6 +10,7 @@ import {
     uniqueIndex,
     index,
     bigint,
+    check,
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { createInsertSchema, createSelectSchema } from 'drizzle-zod'
@@ -821,6 +822,8 @@ export const sequenceSteps = pgTable('sequence_steps', {
 }, (table) => ({
     sequenceOrderUnique: uniqueIndex('sequence_step_order_unique').on(table.sequenceId, table.stepOrder),
     idxSequenceStepsSequenceId: index('idx_sequence_steps_sequence_id').on(table.sequenceId),
+    sequenceStepsDelayHoursPositive: check('sequence_steps_delay_hours_positive', sql`${table.delayHours} >= 0`),
+    sequenceStepsOrderPositive: check('sequence_steps_order_positive', sql`${table.stepOrder} >= 1`),
 }))
 
 // Campaign Leads (junction table - leads assigned to campaigns)
