@@ -37,11 +37,13 @@ A user can create a campaign, build a sequence, add leads, and have emails actua
 - ✓ Index health verification script — v1.1 Phase 05
 - ✓ All FK columns indexed (48 indexes across 28 tables) — v1.1 Phase 06
 - ✓ Composite performance indexes (org+status, campaign+status, token, nextScheduledAt) — v1.1 Phase 06
+- ✓ Shared pagination utility + all list endpoints paginated — v1.1 Phase 07
+- ✓ PaginationControls component on all outreach list pages — v1.1 Phase 07
 
 ### Active
 
-- [ ] **PAGE-01 through PAGE-05** — Pagination on all list endpoints
 - [ ] **QRY-01 through QRY-03** — N+1 fixes, column filtering, scoped queries
+- [ ] **SCH-01 through SCH-02** — CHECK constraints, deprecate old migration
 - [ ] **SCH-01 through SCH-02** — CHECK constraints, deprecate old migration
 
 ### Out of Scope
