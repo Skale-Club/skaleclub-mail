@@ -2,8 +2,9 @@ import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { db } from '../../../db'
 import { campaigns, sequences, sequenceSteps, campaignLeads, leads, emailAccounts, organizationUsers, outreachEmails } from '../../../db/schema'
-import { eq, and, sql, inArray } from 'drizzle-orm'
+import { eq, and, sql, inArray, desc } from 'drizzle-orm'
 import { isPlatformAdmin } from '../../lib/admin'
+import { paginate, paginationQuerySchema } from '../../lib/pagination'
 
 const router = Router()
 
@@ -95,15 +96,19 @@ router.get('/', async (req: Request, res: Response) => {
             return res.status(403).json({ error: 'Access denied' })
         }
 
+        const { page, limit } = paginationQuerySchema.parse(req.query)
+
         const conditions = [eq(campaigns.organizationId, organizationId)]
 
         if (status) {
             conditions.push(eq(campaigns.status, status as any))
         }
 
-        const campaignsList = await db.query.campaigns.findMany({
+        const result = await paginate(db, campaigns, {
             where: and(...conditions),
-            orderBy: (campaigns, { desc }) => [desc(campaigns.createdAt)],
+            page,
+            limit,
+            orderBy: desc(campaigns.createdAt),
             with: {
                 sequences: {
                     with: {
@@ -113,7 +118,7 @@ router.get('/', async (req: Request, res: Response) => {
             },
         })
 
-        res.json({ campaigns: campaignsList })
+        res.json({ campaigns: result.data, pagination: result.pagination })
     } catch (error) {
         console.error('Error fetching campaigns:', error)
         res.status(500).json({ error: 'Internal server error' })
@@ -230,19 +235,23 @@ router.get('/sequences', async (req: Request, res: Response) => {
             return res.status(403).json({ error: 'Access denied' })
         }
 
+        const { page, limit } = paginationQuerySchema.parse(req.query)
+
         const orgCampaigns = await db.query.campaigns.findMany({
             where: eq(campaigns.organizationId, organizationId),
             columns: { id: true },
         })
 
         if (orgCampaigns.length === 0) {
-            return res.json({ sequences: [] })
+            return res.json({ sequences: [], pagination: { page, limit, total: 0, totalPages: 0 } })
         }
 
         const campaignIds = orgCampaigns.map(c => c.id)
 
-        const sequencesList = await db.query.sequences.findMany({
+        const result = await paginate(db, sequences, {
             where: inArray(sequences.campaignId, campaignIds),
+            page,
+            limit,
             with: {
                 campaign: {
                     columns: {
@@ -254,7 +263,7 @@ router.get('/sequences', async (req: Request, res: Response) => {
             },
         })
 
-        res.json({ sequences: sequencesList })
+        res.json({ sequences: result.data, pagination: result.pagination })
     } catch (error) {
         console.error('Error fetching sequences:', error)
         res.status(500).json({ error: 'Internal server error' })
