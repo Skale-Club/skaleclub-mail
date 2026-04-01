@@ -191,3 +191,18 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_contacts_user_id
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_user_notifications_user_id
     ON user_notifications (user_id);
+
+-- =============================================================
+-- Composite & Performance Indexes (Phase 06)
+-- =============================================================
+
+-- IDX-03: Campaign lead counts — campaignLeads WHERE campaignId AND status
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_campaign_leads_campaign_status
+    ON campaign_leads (campaign_id, status);
+
+-- IDX-04: Send pipeline cron — campaignLeads WHERE nextScheduledAt <= now()
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_campaign_leads_next_scheduled
+    ON campaign_leads (next_scheduled_at);
+
+-- NOTE: IDX-02 (idx_messages_org_status) and IDX-05 (idx_messages_token)
+-- are defined in the Core tables section above.
