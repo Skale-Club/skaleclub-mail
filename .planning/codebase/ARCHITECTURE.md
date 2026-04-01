@@ -1,6 +1,6 @@
 # Architecture
 
-**Analysis Date:** 2026-03-30
+**Analysis Date:** 2026-03-31
 
 ## Pattern Overview
 
@@ -11,188 +11,305 @@
 - Frontend is split into three role-gated zones: `/admin/*` (platform admin), `/outreach/*` (admin-only outreach), `/mail/*` (end-user webmail)
 - Database access is exclusively through Drizzle ORM with Supabase (PostgreSQL) as the persistence layer; RLS enforces org-level isolation at the DB layer
 - Native SMTP/IMAP servers run in-process alongside the HTTP server, sharing the same DB connection pool
-- Background cron jobs run in-process, started after server boot
+- Background cron jobs run in-process via `node-cron`, started after server boot
 
-## Layers
+## System Architecture Layers
 
-**Frontend - React SPA:**
-- Purpose: User interface across three product zones
-- Location: `src/main.tsx`, `src/pages/`, `src/components/`
-- Contains: Route definitions, page components, layout components, shared UI primitives
-- Depends on: `src/hooks/` (context providers), `src/lib/api-client.ts` (HTTP transport), `src/lib/supabase.ts` (auth)
-- Used by: End users via browser
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        React SPA Frontend                           │
+│  src/main.tsx (route tree) + src/pages/ + src/components/           │
+│  Context Providers: Auth, MultiSession, Mailbox, Compose, Org       │
+│  HTTP Transport: src/lib/api-client.ts (token refresh + retry)      │
+│  Server State: TanStack React Query (30s staleTime, no refetch)     │
+├─────────────────────────────────────────────────────────────────────┤
+│                        Express API Backend                          │
+│  src/server/index.ts (middleware stack, auth, route mounting)        │
+│  src/server/routes/ (one file per resource domain)                   │
+│  src/server/routes/mail/ (webmail endpoints)                         │
+│  src/server/routes/outreach/ (campaign/lead endpoints)               │
+│  src/server/lib/ (shared business logic)                             │
+├─────────────────────────────────────────────────────────────────────┤
+│                     Native Mail Protocol Servers                     │
+│  src/server/smtp-server.ts   — Outbound submission (port 2587)      │
+│  src/server/smtp-inbound.ts  — Inbound MX delivery (port 25)        │
+│  src/server/imap-server.ts   — IMAP access (port 2993)               │
+│  Shared auth: src/server/lib/native-mail.ts (bcrypt passwordHash)    │
+├─────────────────────────────────────────────────────────────────────┤
+│                  Background Jobs (node-cron, in-process)             │
+│  src/server/jobs/index.ts → 7 cron schedules                         │
+│  processQueue (1min), processHeld (5min), processOutreach (5min),    │
+│  processReplies (15min), processBounces (30min), cleanup (daily),    │
+│  resetDailyLimits (midnight)                                         │
+├─────────────────────────────────────────────────────────────────────┤
+│                   Drizzle ORM + PostgreSQL (Supabase)                │
+│  src/db/schema.ts — single file, all 30+ tables, relations, Zod     │
+│  src/db/index.ts  — postgres.js pool (max 20), health checks, retry │
+│  Supabase RLS policies — org-scoped data isolation                   │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
-**Frontend - Context Providers (State Layer):**
-- Purpose: Global state management for auth, sessions, mailboxes, compose
-- Location: `src/hooks/useAuth.tsx`, `src/hooks/useMultiSession.tsx`, `src/hooks/useMailbox.tsx`, `src/hooks/useCompose.tsx`, `src/hooks/useOrganization.tsx`
-- Contains: React context + providers, state derived from API calls
-- Depends on: `src/lib/api-client.ts`, `src/lib/supabase.ts`, `src/lib/session-store.ts`
-- Used by: All page and layout components
+## Request Flow
 
-**Frontend - API Transport:**
-- Purpose: Authenticated HTTP client with token caching, refresh, and retry
-- Location: `src/lib/api-client.ts`, `src/lib/api.ts`, `src/lib/mail-api.ts`
-- Contains: `apiFetch`, `apiRequest`, `ApiClientError`, token refresh logic
-- Depends on: `src/lib/supabase.ts` (for token retrieval)
-- Used by: Hooks and page components for all backend communication
+### API Request (Authenticated)
 
-**Backend - Express HTTP Server:**
-- Purpose: REST API and static file serving
-- Location: `src/server/index.ts`
-- Contains: Middleware stack, auth middleware, route mounting, global error handler, graceful shutdown
-- Depends on: All route modules, `src/db/index.ts`, `src/server/lib/supabase.ts`
-- Used by: Frontend (via `/api/*`), external webhook callers
+```
+Client (React SPA)
+  │  Authorization: Bearer <supabase-jwt>
+  ▼
+Vite Dev Proxy (port 9000 → 9001, dev only)
+  │
+  ▼
+Express Server (src/server/index.ts, port 9001)
+  ├── helmet() security headers + CSP
+  ├── cors() origin check (FRONTEND_URL or localhost:9000)
+  ├── rateLimit(/api/) — 500 req/IP/15min (prod), 2000 (dev)
+  ├── rateLimit(/api/auth/login) — 5 req/IP/15min
+  ├── express.json({ limit: '10mb' })
+  ├── Cache-Control: no-store (on /api/*)
+  ├── Auth Middleware (lines 158-184):
+  │   ├── Skip if path in PUBLIC_PATHS array
+  │   ├── Validate JWT via supabase.auth.getUser(token)
+  │   ├── Set x-user-id, x-user-email, x-user-first-name, x-user-last-name, x-user-email-verified
+  │   └── next()
+  ├── Route Handler (e.g., src/server/routes/organizations.ts)
+  │   ├── Zod validation on req.body
+  │   ├── isPlatformAdmin() check (if admin-only endpoint)
+  │   ├── Membership check via organizationUsers table
+  │   ├── Drizzle ORM queries (RLS enforced at DB layer)
+  │   └── res.json({ data })
+  └── Global Error Handler → 500 { error, message? }
+```
 
-**Backend - Route Handlers:**
-- Purpose: Handle individual API endpoints grouped by domain
-- Location: `src/server/routes/` (root-level), `src/server/routes/mail/` (webmail), `src/server/routes/outreach/` (campaigns)
-- Contains: Express Router instances, Zod validation, direct DB queries via Drizzle
-- Depends on: `src/db/index.ts`, `src/db/schema.ts`, `src/server/lib/`
-- Used by: Express server route mounts
+### Tracking Request (Public, No Auth)
 
-**Backend - Server Library:**
-- Purpose: Shared server-side logic
-- Location: `src/server/lib/`
-- Contains: `tracking.ts` (email tracking + webhooks), `native-mail.ts` (native mailbox management), `mail-sync.ts` (IMAP sync), `crypto.ts`, `admin.ts`, `health.ts`, `template-variables.ts`, `route-matcher.ts`, `outlook.ts`, `outreach-sender.ts`
-- Depends on: `src/db/`
-- Used by: Route handlers, SMTP servers, background jobs
+```
+Email Client
+  │  GET /t/open/:token  (1x1 transparent GIF)
+  │  GET /t/click/:token?u=<base64url>  (302 redirect)
+  ▼
+Express Server
+  ├── rateLimit(/t/) — 100 req/min
+  ├── trackRoutes (src/server/routes/track.ts)
+  │   ├── Lookup token in messages table
+  │   ├── Update message status (openedAt, etc.)
+  │   ├── incrementStat() for org analytics (upsert per org+date)
+  │   ├── fireWebhooks() → HMAC-SHA256 signed POST to subscriber URLs
+  │   └── Respond immediately (GIF or 302)
+```
 
-**Backend - Background Jobs:**
-- Purpose: Async email processing, outreach sequences, cleanup
-- Location: `src/server/jobs/`
-- Contains: `processQueue.ts`, `processHeld.ts`, `processReplies.ts`, `processBounces.ts`, `processOutreachSequences.ts`, `cleanupMessages.ts`
-- Depends on: `src/db/`, `src/server/lib/`
-- Used by: `src/server/jobs/index.ts` (cron scheduler, started from `src/server/index.ts`)
+### SMTP Inbound Flow
 
-**Backend - Native Mail Servers:**
-- Purpose: SMTP sending, SMTP inbound receiving, IMAP access
-- Location: `src/server/smtp-server.ts`, `src/server/smtp-inbound.ts`, `src/server/imap-server.ts`
-- Contains: Custom protocol server implementations
-- Depends on: `src/db/`, `src/server/lib/`
-- Used by: Express server startup, external mail clients
+```
+External Mail Server (Gmail, Outlook, etc.)
+  │  Port 25 (MX delivery, no auth)
+  ▼
+src/server/smtp-inbound.ts
+  ├── Parse raw email via mailparser
+  ├── findOrganizationForDomain(domain) — check verified domains
+  ├── findLocalUser(email) — check native mailboxes
+  ├── If local user → store in recipient's inbox (mailMessages table)
+  ├── If not local → processInboundEmail(recipient)
+  │   ├── findMatchingRoutes(orgId, recipient) — wildcard pattern matching
+  │   ├── Route modes: endpoint (smtp/http/address), hold, reject
+  │   └── deliverViaRoutes() — nodemailer relay, HTTP POST, or address forward
+  ├── Store sender copy in Sent folder
+  ├── incrementStat() + fireWebhooks()
+  └── Accept or reject at SMTP level
+```
 
-**Database Layer:**
-- Purpose: Schema definition, ORM client, Zod schema generation
-- Location: `src/db/index.ts` (Drizzle client), `src/db/schema.ts` (all tables, enums, relations, insert/select Zod schemas)
-- Contains: All table definitions, all Drizzle relations, auto-generated Zod schemas via `drizzle-zod`
-- Depends on: Supabase PostgreSQL via `DATABASE_URL`
-- Used by: All server-side code that touches the database
+### SMTP Outbound Flow (Native Mail Server)
+
+```
+Email Client (Thunderbird, etc.)
+  │  Port 2587 (STARTTLS, PLAIN/LOGIN auth)
+  ▼
+src/server/smtp-server.ts
+  ├── onAuth → authenticateNativeUser(email, password) — bcrypt against passwordHash
+  ├── onData → parseRawEmail(raw)
+  ├── Store copy in sender's Sent folder (mailMessages)
+  ├── Separate local vs external recipients
+  ├── Local → store directly in recipient's inbox
+  ├── External → relay via nodemailer (SMTP_HOST or direct delivery)
+  │   └── Also check route-based delivery via processInboundEmail()
+  └── Accept callback
+```
+
+### Background Job Flow
+
+```
+src/server/jobs/index.ts (cron scheduler)
+  ├── processQueue (every 1 min)
+  │   ├── Find pending deliveries (limit 50)
+  │   ├── Filter out deliveries in retry delay
+  │   ├── For each: load message, get org SMTP config, send via nodemailer
+  │   ├── Retry with exponential backoff (1min, 5min, 15min) up to 3 attempts
+  │   ├── Update delivery status, incrementStat, fireWebhooks
+  │   └── Mutex via `running` flag (prevents overlap)
+  ├── processHeldMessages (every 5 min) — release expired held messages
+  ├── cleanupOldMessages (daily 3am) — purge old data
+  ├── processOutreachSequences (every 5 min)
+  │   ├── Load active campaigns with pending leads
+  │   ├── For each lead in sequence: send next step email
+  │   ├── Respect daily limits, warm-up, randomized delays
+  │   └── Mutex via isSequenceProcessing flag
+  ├── resetDailyLimits (daily midnight) — reset emailAccount.currentDailySent
+  ├── processReplies (every 15 min) — detect replies to outreach campaigns
+  └── processBounces (every 30 min) — process bounced emails, update suppressions
+```
+
+## Authentication & Authorization
+
+**Auth Provider:** Supabase Auth (JWT-based)
+
+**Flow:**
+1. Frontend calls `supabase.auth.signInWithPassword()` → receives JWT access token + refresh token
+2. Refresh token stored in httpOnly cookie (`sb_refresh_token`, 7-day expiry, path `/api/auth`)
+3. Access token sent as `Authorization: Bearer <token>` on every API request
+4. Express middleware validates JWT with `supabase.auth.getUser(token)` (stateless verification against Supabase)
+5. User metadata extracted into `x-user-id`, `x-user-email`, `x-user-first-name`, `x-user-last-name` headers for downstream handlers
+6. RLS policies in PostgreSQL enforce org-scoped data isolation at the database layer
+
+**Public endpoints** (no auth required): `/api/auth/login`, `/api/auth/register` (returns 403), `/api/auth/reset-password`, `/api/auth/refresh`, `/api/system/branding`, `/api/system/mail-server-info`
+
+**Authorization levels:**
+- **Platform Admin** (`users.is_admin = true`) — full access to all organizations and system management
+- **Organization Admin** — manage org members, servers, domains, credentials
+- **Organization Member** — standard access within org
+- **Organization Viewer** — read-only access
+
+**Frontend route guards:**
+- `AdminCheck` (`src/main.tsx` line 80) — redirects non-admins to `/mail/inbox`
+- `MailCheck` (`src/main.tsx` line 101) — redirects admins to `/admin`
+- `RootRedirect` (`src/main.tsx` line 122) — sends to `/admin` or `/mail/inbox` based on role
+
+**Native SMTP/IMAP auth:** Separate bcrypt password stored in `users.password_hash`, synced on password update via `/api/auth/update-password`. Auth function: `src/server/lib/native-mail.ts` → `authenticateNativeUser()`
 
 ## Data Flow
 
-**Outbound Email (API-triggered):**
-1. Frontend calls `POST /api/messages` with auth token
-2. Express auth middleware validates JWT via Supabase, sets `x-user-id` header
-3. Route handler validates body with Zod, creates `messages` row with `status: pending`
-4. `processQueue` cron job (every 1 min) picks up pending messages
-5. Job calls `src/server/lib/tracking.ts` to inject tracking pixel and rewrite links
-6. Nodemailer sends via configured SMTP; delivery status recorded in `deliveries` table
-7. Webhook dispatch fires for relevant events (`message_sent`, `message_delivered`)
+### Multi-Tenancy Model
 
-**Inbound Email:**
-1. External SMTP server delivers to `src/server/smtp-inbound.ts`
-2. `mailparser` parses raw message; stored in `messages` table with `direction: incoming`
-3. `src/server/lib/route-matcher.ts` matches address to a configured `routes` record
-4. Route dispatches to endpoint (SMTP relay, HTTP webhook, or address forward) per route mode
-5. Frontend `useMail` hook polls `GET /api/mail/mailboxes/:id/messages` to reflect new mail
+```
+Users
+  └── organization_users (role: admin|member|viewer)
+       └── Organizations (owner_id → users.id)
+            ├── Domains (DKIM, SPF, DMARC, MX, return_path verification)
+            ├── Credentials (SMTP/API keys, bcrypt-hashed secrets)
+            ├── Routes → SMTP Endpoints / HTTP Endpoints / Address Endpoints
+            ├── Messages → Deliveries (per-recipient status tracking)
+            ├── Webhooks → Webhook Requests (delivery log with HMAC signatures)
+            ├── Statistics (daily aggregated counters per org)
+            ├── Suppressions (bounce/complaint opt-out list)
+            ├── Templates (email templates with variable interpolation)
+            ├── Outlook Mailboxes (Microsoft OAuth tokens, encrypted)
+            ├── Email Accounts (outreach sending inboxes)
+            │   ├── Campaigns → Sequences → Sequence Steps (A/B variants)
+            │   ├── Lead Lists → Leads → Campaign Leads → Outreach Emails
+            │   └── Outreach Analytics (daily stats per campaign/account)
+            └── Track Domains (custom tracking domains)
+```
 
-**Authentication:**
-1. User submits credentials; `POST /api/auth/login` calls Supabase Auth, returns JWT
-2. Frontend stores session via Supabase client; `src/lib/api-client.ts` caches token in memory
-3. Every API request attaches `Authorization: Bearer <token>`
-4. Express middleware (`src/server/index.ts` lines 158-184) validates token with Supabase, populates `x-user-*` headers for downstream handlers
-5. On 401 response, `api-client.ts` auto-refreshes session and retries once
+### Webmail Data Model (User-scoped, NOT org-scoped)
 
-**Multi-Session (Webmail):**
-1. `src/hooks/useMultiSession.tsx` maintains multiple stored sessions in `src/lib/session-store.ts` (localStorage-backed)
-2. `switchSession` swaps the active Supabase client session
-3. `src/hooks/useMailbox.tsx` re-fetches mailboxes whenever `activeSessionId` changes
+```
+Users
+  └── Mailboxes (userId-scoped, SMTP/IMAP config, isNative flag)
+       ├── Mail Folders (inbox, sent, drafts, trash, spam, custom)
+       ├── Mail Messages (synced from IMAP or stored directly)
+       ├── Mail Filters (JSON conditions + actions rules engine)
+       └── Signatures (HTML email signatures)
+  └── Contacts (address book with emailedCount tracking)
+  └── user_notifications (event-driven alerts)
+```
 
-**State Management (Frontend):**
-- Server state: TanStack React Query (cache, refetch, invalidation)
-- Auth state: `AuthContext` from `src/hooks/useAuth.tsx`
-- Mailbox state: `MailboxContext` from `src/hooks/useMailbox.tsx`
-- Multi-account state: `MultiSessionContext` from `src/hooks/useMultiSession.tsx`
-- Compose overlay state: `ComposeContext` from `src/hooks/useCompose.tsx`
-- Organization state (outreach/admin): `OrganizationContext` from `src/hooks/useOrganization.tsx`
-- UI/theme: `ThemeProvider` from `src/components/theme-provider.tsx`
+## Key Design Decisions
 
-## Key Abstractions
+| Decision | Rationale | Trade-offs |
+|----------|-----------|------------|
+| Monolithic single-process deployment | Simpler ops, single deploy, shared DB connection pool | Harder to scale individual subsystems independently |
+| Drizzle ORM with raw SQL for analytics | Type-safe schema, but raw SQL needed for upserts/increments (`tracking.ts`) | Split pattern — some queries use ORM, some use `db.execute()` |
+| Database polling for jobs (no message queue) | Simpler infrastructure, no Redis/SQS dependency | Higher latency for job processing (1-5 min poll intervals) |
+| Supabase for auth + Postgres | Managed auth service, RLS for multi-tenancy, single vendor | Vendor lock-in, RLS policies in raw SQL migrations |
+| Express 5 (beta) | Needed for modern middleware patterns | `req.params` vs `req.query` inconsistency noted in CLAUDE.md |
+| Single schema.ts file (1250+ lines) | Simple discovery, all types in one place, shared across modules | Very large file, harder to navigate as domain grows |
+| Native SMTP/IMAP servers (not Postfix/Dovecot) | Full control, runs in same Node process, no external deps | Less battle-tested than production MTA software |
+| Zod for validation (client + server) | Shared validation logic, type inference | Some duplication between drizzle-zod and route-level schemas |
+| In-memory mutex for jobs | Simple concurrency control in single-process architecture | No distributed locking — breaks if scaled horizontally |
+| No testing framework | (As noted in CLAUDE.md) | No automated quality gates |
 
-**Organization:**
-- Purpose: Top-level multi-tenancy boundary; all resources (domains, credentials, routes, messages, webhooks) belong to an organization
-- Examples: `src/db/schema.ts` (`organizations`, `organizationUsers` tables), `src/server/routes/organizations.ts`
-- Pattern: UUID primary key, RLS policies enforce access; `organizationId` FK on all child resources
+## Separation of Concerns
 
-**Mailbox:**
-- Purpose: Represents a user's email account (native platform mailbox or linked IMAP account)
-- Examples: `src/db/schema.ts` (`mailboxes` table), `src/server/routes/mail/mailboxes.ts`, `src/hooks/useMailbox.tsx`
-- Pattern: `isNative: boolean` distinguishes platform-managed from IMAP-synced; `userId` scoped (not org-scoped)
+| Layer | Responsibility | Key Files |
+|-------|---------------|-----------|
+| **Route Handlers** | HTTP request handling, validation, response formatting | `src/server/routes/*.ts`, `src/server/routes/mail/*.ts`, `src/server/routes/outreach/*.ts` |
+| **Business Logic** | Email routing, tracking, outreach sending, health checks, native mail auth | `src/server/lib/*.ts` (17 files) |
+| **Background Jobs** | Async processing: queue delivery, bounce handling, outreach sequences, cleanup | `src/server/jobs/*.ts` (7 jobs) |
+| **Native Mail Servers** | SMTP submission, SMTP inbound, IMAP protocol handling | `src/server/smtp-server.ts`, `smtp-inbound.ts`, `imap-server.ts` |
+| **Data Access** | ORM queries, connection pooling, health monitoring, retry logic | `src/db/schema.ts`, `src/db/index.ts` |
+| **Frontend Pages** | Route-specific UI components (admin, mail, outreach) | `src/pages/**/*.tsx` |
+| **Frontend Components** | Reusable UI primitives (shadcn/ui), layouts, domain-specific widgets | `src/components/**/*.tsx` |
+| **Frontend Hooks** | Context providers, API integration, client state management | `src/hooks/*.tsx` (11 files) |
+| **Frontend Lib** | API client, Supabase client, utilities, constants, branding | `src/lib/*.ts` (12 files) |
 
-**Message (Platform):**
-- Purpose: Outbound/inbound email record for the email server platform (admin domain)
-- Examples: `src/db/schema.ts` (`messages` table), `src/server/routes/messages.ts`
-- Pattern: `direction` field (`incoming`/`outgoing`), `status` enum, tracking `token` for open/click tracking
+## Error Handling Strategy
 
-**Mail Message (Webmail):**
-- Purpose: Individual email in a user's mailbox folder
-- Examples: `src/db/schema.ts` (`mailMessages` table), `src/server/routes/mail/messages.ts`
-- Pattern: Scoped to `mailboxId`, folder-based organization via `mailFolders` table
+**API Layer (Express):**
+- Zod validation errors → `400` with `{ error: errors }` array
+- Auth failures → `401` with `{ error: 'Unauthorized' }` or `{ error: 'Invalid or expired token' }`
+- Permission denied → `403` with `{ error: 'Forbidden' }`
+- Not found → `404` with `{ error: 'Not found' }` (or generic for security)
+- Unexpected errors → `500` with `{ error: 'Internal server error' }` (+ message in dev mode)
+- Global error handler at `src/server/index.ts` lines 211-219
 
-**ApiClientError:**
-- Purpose: Typed error from all API calls; carries `status`, `path`, `code`, and `details`
-- Examples: `src/lib/api-client.ts`
-- Pattern: All `apiFetch` / `apiRequest` calls throw this on non-2xx responses; callers check `instanceof ApiClientError`
+**Background Jobs:**
+- Each job wrapped in `.catch()` with `console.error` logging
+- Jobs use `running` / `isSequenceProcessing` flags to prevent overlapping execution
+- Individual delivery failures don't stop the batch
+- Process queue: 50 deliveries per tick, max 3 retries with exponential backoff (1min → 5min → 15min)
 
-**Background Job:**
-- Purpose: Cron-scheduled async processing, decoupled from HTTP request lifecycle
-- Examples: `src/server/jobs/processQueue.ts`, `src/server/jobs/processOutreachSequences.ts`
-- Pattern: Each job is an exported async function; `src/server/jobs/index.ts` schedules all of them with `node-cron`
+**Webhook Dispatch (`src/server/lib/tracking.ts`):**
+- `Promise.allSettled()` — one webhook failure doesn't block others
+- 10-second timeout per webhook call via `AbortSignal.timeout(10_000)`
+- All attempts logged to `webhook_requests` table (success or failure)
+- Errors swallowed — tracking never blocks the HTTP response
 
-## Entry Points
+**Database (`src/db/index.ts`):**
+- `withRetry()` utility — exponential backoff for connection errors (ECONNRESET, ETIMEDOUT)
+- `onConflictDoNothing()` used for idempotent inserts (messages, stats)
+- Health check endpoints: `/health`, `/health/db`, `/health/auth`, `/health/ready`
+- Connection pool stats via `getPoolStats()` for monitoring
 
-**Frontend SPA:**
-- Location: `src/main.tsx`
-- Triggers: Browser load, Vite dev server
-- Responsibilities: Creates React root, wraps app in all context providers, defines all client-side routes with `wouter`, implements role-based route guards (`AdminCheck`, `MailCheck`, `RootRedirect`)
+**Frontend (`src/lib/api-client.ts`):**
+- `ApiClientError` class carries `status`, `path`, `code`, `details`
+- Auto-refresh on 401: clears token cache, retries once
+- `src/hooks/useApiError.ts` maps error codes to user-facing messages
+- React Query: retries skip 401 and rate-limit errors
 
-**Backend HTTP Server:**
-- Location: `src/server/index.ts`
-- Triggers: `node dist/server/index.js` (production) or `tsx watch src/server/index.ts` (dev)
-- Responsibilities: Configures Express middleware (helmet, CORS, rate limiting, JSON parsing), mounts all API routes, applies JWT auth middleware, starts native mail servers and background jobs, serves static SPA in production
+## Concurrency Patterns
 
-**Vercel Serverless:**
-- Location: `api/index.js`
-- Triggers: Vercel function invocations
-- Responsibilities: Wraps Express app for serverless deployment (SMTP/IMAP servers not started)
+**Job Concurrency:**
+- In-memory mutex flags (`running` in `processQueue`, `isSequenceProcessing` in `jobs/index.ts`)
+- No distributed locking — single-process assumption
+- Rate-limited via batch size (50 deliveries per tick)
 
-**Background Jobs Scheduler:**
-- Location: `src/server/jobs/index.ts`
-- Triggers: Called during server startup (`import('./jobs/index').then(jobs => jobs.startJobs())`)
-- Responsibilities: Registers all cron schedules
+**Connection Pooling (`src/db/index.ts`):**
+- `postgres` library with configurable pool (default max 20 connections, env: `DB_POOL_MAX`)
+- Idle timeout: 10s (env: `DB_IDLE_TIMEOUT_SECONDS`)
+- Connection timeout: 30s (env: `DB_CONNECT_TIMEOUT_SECONDS`)
+- Max lifetime: 30min (env: `DB_MAX_LIFETIME_SECONDS`)
+- Supabase transaction mode (port 6543) with Supavisor
 
-## Error Handling
+**Rate Limiting (`src/server/index.ts`):**
+- General API: 500 req/IP/15min (prod), 2000 (dev)
+- Auth endpoints: 5 req/IP/15min (`/api/auth/login`, `/api/auth/reset-password`)
+- Tracking endpoints: 100 req/IP/min (`/t/`)
 
-**Strategy:** Centralized global error handler in Express; typed `ApiClientError` class on frontend for all API errors.
-
-**Patterns:**
-- Express global error handler at `src/server/index.ts` (lines 211-219): logs and returns 500 with message only in development
-- Route handlers use try/catch and return specific status codes (400 Zod validation, 401 auth, 403 org membership, 404 not found, 500 server)
-- Frontend `ApiClientError` carries `status` and `code`; `src/hooks/useApiError.ts` maps these to user-facing messages
-- React Query `retry` option skips retries for 401 and rate limit errors
-
-## Cross-Cutting Concerns
-
-**Logging:** `console.error` / `console.warn` / `console.log` directly; no structured logging library. Background jobs prefix messages with `[jobs]`.
-
-**Validation:** Zod on both sides. Server route handlers validate request bodies with inline Zod schemas. `src/db/schema.ts` exports `insertXSchema` / `selectXSchema` generated by `drizzle-zod` for reuse.
-
-**Authentication:** JWT from Supabase Auth. Public paths whitelisted in `PUBLIC_PATHS` array in `src/server/index.ts`. All other `/api/` routes require `Authorization: Bearer <token>`. User identity propagated via `x-user-id`, `x-user-email`, `x-user-first-name`, `x-user-last-name` headers.
-
-**Multi-tenancy Isolation:** Drizzle queries always filter by `organizationId` from the authenticated user context. Supabase RLS policies (`supabase/migrations/001_enable_rls.sql`) enforce this at the database layer as a safety net.
-
-**Branding:** `systemBranding` table + `src/server/lib/serverBranding.ts` + `src/lib/branding.ts`; consumed by frontend `BrandingHead` component to dynamically set page title, favicon, and app name.
+**Outreach Throttling (`src/server/lib/outreach-sender.ts`):**
+- Per-account `dailySendLimit` (default 50/day)
+- `minMinutesBetweenEmails` / `maxMinutesBetweenEmails` (randomized delay)
+- Warm-up ramp-up over `warmupDays` (default 14 days)
+- Daily counter reset via `resetDailyLimits` job at midnight
 
 ---
 
-*Architecture analysis: 2026-03-30*
+*Architecture analysis: 2026-03-31*

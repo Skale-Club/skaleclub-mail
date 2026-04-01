@@ -1,177 +1,388 @@
 # Codebase Structure
 
-**Analysis Date:** 2026-03-30
+**Analysis Date:** 2026-03-31
 
-## Directory Layout
+## Top-Level Layout
 
 ```
 skaleclub-mail/
-├── src/
-│   ├── components/          # Reusable React components
-│   │   ├── ui/              # shadcn/ui primitives (Button, Card, Dialog, etc.)
-│   │   ├── admin/           # Admin layout shell components
-│   │   └── mail/            # Mail-specific components (viewers, panels, etc.)
-│   ├── db/
-│   │   ├── index.ts         # Drizzle ORM client initialization
-│   │   └── schema.ts        # Full database schema (tables, enums, relations)
-│   ├── hooks/
-│   │   └── useAuth.tsx      # Auth context provider and hook
-│   ├── lib/
-│   │   ├── supabase.ts      # Supabase browser client
-│   │   └── utils.ts         # Shared utilities (cn, etc.)
-│   ├── pages/
-│   │   ├── Login.tsx        # Login page
-│   │   ├── Dashboard.tsx    # Main dashboard
-│   │   ├── admin/           # Admin section pages
-│   │   └── mail/            # Mail section pages (Inbox, Sent, Spam, etc.)
-│   ├── server/
-│   │   ├── index.ts         # Express entry point (middleware, auth, routing)
-│   │   ├── lib/
-│   │   │   └── tracking.ts  # Open/click tracking and webhook dispatch
-│   │   └── routes/          # API route handlers (auth, users, orgs, servers, etc.)
-│   └── main.tsx             # React entry point with client-side routes
-├── supabase/
-│   └── migrations/          # SQL migration files (RLS policies)
-├── scripts/                 # Migration runner and utility scripts
-├── public/                  # Static assets
-├── CLAUDE.md                # Project instructions
-├── package.json
-├── tsconfig.json
-├── vite.config.ts
-└── tailwind.config.ts
+├── src/                    # All application source code (frontend + backend)
+├── supabase/migrations/    # SQL migration files (RLS policies, schema reconciliation)
+├── scripts/                # Dev/ops utility scripts
+├── public/                 # Static assets
+├── api/                    # Vercel serverless entry point (api/index.js)
+├── dist/                   # Build output (dist/client, dist/server)
+├── drizzle/                # Drizzle Kit generated migration files
+├── docs/                   # Documentation
+├── plans/                  # Planning artifacts
+├── .planning/              # GSD planning documents
+├── CLAUDE.md               # Project instructions for AI agents
+├── package.json            # Dependencies, scripts
+├── tsconfig.json           # Frontend TypeScript config (excludes server/)
+├── tsconfig.server.json    # Backend TypeScript config
+├── tsconfig.node.json      # Node/Vite config
+├── vite.config.ts          # Vite build config + dev proxy
+├── drizzle.config.ts       # Drizzle Kit config
+├── tailwind.config.ts      # Tailwind theme + shadcn CSS vars
+├── postcss.config.js       # PostCSS (autoprefixer + tailwindcss)
+├── components.json         # shadcn/ui config
+├── Dockerfile              # Docker build
+├── docker-compose.yml      # Docker Compose config
+├── .env.example            # Environment variable template
+├── index.html              # SPA entry HTML
+└── README.md               # Project readme
 ```
 
-## Directory Purposes
+## Source Code Organization
 
-**`src/components/ui/`:**
-- Purpose: shadcn/ui primitive components, never modified directly
-- Contains: Button, Card, Dialog, Input, Toast, Badge, Dropdown, Select, Table, etc.
-- Key files: all lowercase kebab-case `.tsx` files matching shadcn naming
+```
+src/
+├── main.tsx                    # React entry point — route tree, context providers, role guards
+├── index.css                   # Tailwind base styles + shadcn CSS variables
+├── vite-env.d.ts               # Vite type declarations
+│
+├── components/
+│   ├── ui/                     # shadcn/ui primitives (generated, kebab-case)
+│   │   ├── Badge.tsx
+│   │   ├── button.tsx
+│   │   ├── card.tsx
+│   │   ├── ConfirmDialog.tsx
+│   │   ├── Dialog.tsx
+│   │   ├── input.tsx
+│   │   ├── label.tsx
+│   │   ├── progress.tsx
+│   │   ├── Skeleton.tsx
+│   │   ├── switch.tsx
+│   │   ├── Table.tsx
+│   │   ├── Toast.tsx
+│   │   └── toaster.tsx
+│   ├── admin/
+│   │   ├── AdminLayout.tsx      # Admin sidebar + header shell
+│   │   └── org-tabs/            # Tab components for org detail page
+│   ├── mail/
+│   │   ├── AccountSwitcher.tsx  # Multi-account switcher dropdown
+│   │   ├── AddAccountDialog.tsx # Add new mail account dialog
+│   │   ├── ComposeDialog.tsx    # Email compose overlay (lazy-loaded)
+│   │   ├── ContactAutocomplete.tsx
+│   │   ├── EmailDetailView.tsx  # Single email detail
+│   │   ├── EmailHtmlViewer.tsx  # HTML email renderer (light/dark toggle)
+│   │   ├── EmailList.tsx        # Email list with infinite scroll
+│   │   ├── EmailMessageHeader.tsx
+│   │   ├── EmailParts.tsx       # Email part components (from, subject, etc.)
+│   │   ├── EmailThread.tsx      # Threaded email conversation
+│   │   ├── KeyboardShortcutsHelp.tsx
+│   │   ├── MailLayout.tsx       # Mail sidebar + content shell
+│   │   ├── NotificationBell.tsx # Real-time notification bell
+│   │   ├── ResizablePanels.tsx  # Two-panel resizable layout
+│   │   └── RichTextEditor.tsx   # WYSIWYG editor (react-quill-new)
+│   ├── outreach/
+│   │   └── OutreachLayout.tsx   # Outreach section shell
+│   ├── AppLogo.tsx              # Dynamic app logo (branding-aware)
+│   ├── DeployFooter.tsx         # Deploy version footer
+│   ├── mode-toggle.tsx          # Dark/light/system theme toggle
+│   └── theme-provider.tsx       # ThemeContext provider
+│
+├── db/
+│   ├── index.ts                 # Drizzle client init, connection pool, health checks, retry
+│   └── schema.ts                # ALL tables, enums, relations, Zod schemas, types (1250+ lines)
+│
+├── hooks/
+│   ├── useApiError.ts           # Maps ApiClientError codes to user messages
+│   ├── useAuth.tsx              # AuthContext — Supabase session, user, isAdmin
+│   ├── useCompose.tsx           # ComposeContext — compose overlay state
+│   ├── useInfiniteScroll.ts     # Intersection observer for infinite scroll
+│   ├── useIsMobile.ts           # Responsive breakpoint detection
+│   ├── useKeyboardShortcuts.ts  # Global keyboard shortcut registration
+│   ├── useMail.ts               # Mail API queries (messages, threads)
+│   ├── useMailbox.tsx           # MailboxContext — mailbox selection state
+│   ├── useMultiSession.tsx      # MultiSessionContext — multi-account management
+│   ├── useNotifications.ts      # Notification polling and state
+│   └── useOrganization.tsx      # OrganizationContext — org selection for outreach
+│
+├── lib/
+│   ├── api-client.ts            # apiFetch() — authenticated HTTP client with token refresh
+│   ├── api.ts                   # Legacy API helpers
+│   ├── branding.ts              # useBranding() hook — fetches system branding config
+│   ├── constants.ts             # Shared constants
+│   ├── crypto.ts                # Client-side crypto utilities
+│   ├── email-threading.ts       # Email thread grouping logic
+│   ├── keyboard-shortcuts.ts    # Keyboard shortcut definitions
+│   ├── mail-api.ts              # Mail-specific API functions
+│   ├── mock-data.ts             # Development mock data
+│   ├── session-store.ts         # localStorage session storage for multi-account
+│   ├── supabase.ts              # Supabase browser client init
+│   └── utils.ts                 # cn() Tailwind class merger, other utilities
+│
+├── pages/
+│   ├── Login.tsx                # Login page
+│   ├── Dashboard.tsx            # Legacy dashboard (may redirect)
+│   ├── admin/
+│   │   ├── AdminDashboard.tsx   # Admin overview with stats
+│   │   ├── AdminsPage.tsx       # Platform admin management
+│   │   ├── BrandingPage.tsx     # System branding configuration
+│   │   ├── CredentialsPage.tsx  # SMTP/API credential management
+│   │   ├── DomainsPage.tsx      # Domain verification management
+│   │   ├── helpers.ts           # Admin page helper functions
+│   │   ├── MessagesPage.tsx     # Platform message log viewer
+│   │   ├── OrganizationDetailPage.tsx  # Single org detail with tabs
+│   │   ├── OrganizationsPage.tsx       # Org list
+│   │   ├── RoutesPage.tsx      # Email routing configuration
+│   │   └── WebhooksPage.tsx    # Webhook management
+│   ├── mail/
+│   │   ├── ArchivePage.tsx
+│   │   ├── ComposePage.tsx
+│   │   ├── ContactsPage.tsx
+│   │   ├── DraftsPage.tsx
+│   │   ├── EmailDetailPage.tsx
+│   │   ├── InboxPage.tsx
+│   │   ├── SearchPage.tsx
+│   │   ├── SentPage.tsx
+│   │   ├── SettingsPage.tsx
+│   │   ├── SpamPage.tsx
+│   │   ├── StarredPage.tsx
+│   │   └── TrashPage.tsx
+│   └── outreach/
+│       ├── inboxes/             # Inbox sub-pages
+│       │   └── NewInboxPage.tsx
+│       ├── sequences/           # Sequence sub-pages
+│       │   └── NewSequencePage.tsx
+│       ├── AnalyticsPage.tsx
+│       ├── CampaignsPage.tsx
+│       ├── InboxesPage.tsx
+│       ├── LeadsPage.tsx
+│       ├── OutreachDashboard.tsx
+│       ├── SequencesPage.tsx
+│       └── SettingsPage.tsx
+│
+└── server/
+    ├── index.ts                 # Express entry — middleware, auth, route mounts, static serving
+    ├── imap-server.ts           # Native IMAP server (RFC 3501, raw TCP)
+    ├── smtp-inbound.ts          # Inbound SMTP server (port 25, MX delivery)
+    ├── smtp-server.ts           # Outbound SMTP submission (port 2587, auth required)
+    ├── jobs.ts                  # Mail sync worker (interval-based, separate from cron)
+    ├── jobs/
+    │   ├── index.ts             # Cron scheduler — registers all 7 background jobs
+    │   ├── cleanupMessages.ts   # Daily message purge
+    │   ├── processBounces.ts    # Bounce detection and suppression
+    │   ├── processHeld.ts       # Release expired held messages
+    │   ├── processOutreachSequences.ts  # Outreach sequence stepper + daily limit reset
+    │   ├── processQueue.ts      # Outbound email delivery queue
+    │   └── processReplies.ts    # Reply detection for outreach campaigns
+    ├── lib/
+    │   ├── admin.ts             # isPlatformAdmin() check
+    │   ├── cascade.ts           # deleteOrganizationCascade() — recursive delete
+    │   ├── crypto.ts            # Server-side encryption (AES for Outlook tokens)
+    │   ├── health.ts            # runReadinessChecks() — DB + auth health
+    │   ├── html-to-text.ts      # HTML → plain text conversion
+    │   ├── inline-css.ts        # CSS inlining for HTML emails
+    │   ├── mail-sync.ts         # syncAllMailboxes() — IMAP sync worker
+    │   ├── mail.ts              # parseRawEmail() — mailparser wrapper
+    │   ├── native-mail.ts       # Native mailbox CRUD, auth, user creation
+    │   ├── outlook.ts           # Microsoft Graph API integration
+    │   ├── outreach-sender.ts   # Outreach email sending with throttling
+    │   ├── route-matcher.ts     # Inbound email route matching (wildcard patterns)
+    │   ├── serverBranding.ts    # Cached branding config loader
+    │   ├── supabase.ts          # Supabase admin + anon client (server-side)
+    │   ├── template-variables.ts # {{variable}} interpolation for email templates
+    │   ├── tracking.ts          # Open/click tracking injection, stat increment, webhook dispatch
+    │   └── user-sync.ts         # User profile sync utilities
+    └── routes/
+        ├── auth.ts              # Login, logout, register (403), refresh, password reset
+        ├── credentials.ts       # SMTP/API credential CRUD
+        ├── domains.ts           # Domain verification + DNS checks
+        ├── messages.ts          # Platform message CRUD + sending
+        ├── notifications.ts     # User notification endpoints
+        ├── organizations.ts     # Org CRUD + member management
+        ├── outlook.ts           # Outlook OAuth + mailbox management
+        ├── routes.ts            # Email routing rule CRUD
+        ├── system.ts            # System branding + mail server info
+        ├── templates.ts         # Email template CRUD
+        ├── track.ts             # Open/click tracking endpoints (/t/open, /t/click)
+        ├── users.ts             # User profile + admin user management
+        ├── webhooks.ts          # Webhook CRUD + request logs
+        ├── mail/
+        │   ├── index.ts         # Mail routes aggregator
+        │   ├── contacts.ts      # Contact CRUD + autocomplete
+        │   ├── filters.ts       # Mail filter rules CRUD
+        │   ├── mailboxes.ts     # Mailbox CRUD + folder listing
+        │   ├── messages.ts      # Mail message CRUD + search
+        │   ├── send.ts          # Mail send endpoint
+        │   ├── signatures.ts    # Email signature CRUD
+        │   └── sync.ts          # Manual IMAP sync trigger
+        └── outreach/
+            ├── index.ts         # Outreach routes aggregator + admin guard middleware
+            ├── campaigns.ts     # Campaign CRUD + sequence management
+            ├── email-accounts.ts # Outreach inbox (email account) CRUD
+            ├── leads.ts         # Lead + lead list CRUD + CSV import
+            └── unsubscribe.ts   # Unsubscribe endpoint (public)
+```
 
-**`src/components/admin/`:**
-- Purpose: Layout shell for the admin section
-- Contains: Sidebar, header, nav components
+## Key Entry Points
 
-**`src/components/mail/`:**
-- Purpose: Mail-reading UI components
-- Contains: `EmailHtmlViewer.tsx` (renders HTML email content with light/dark toggle), `ResizablePanels.tsx` (panel layout for mail views)
+| File | Purpose | Entry Type |
+|-----|---------|-----------|
+| `src/main.tsx` | React SPA bootstrap, all client routes, context provider tree | Browser |
+| `src/server/index.ts` | Express server, middleware stack, API routes, static serving, job startup | Node.js (primary) |
+| `api/index.js` | Vercel serverless wrapper around Express app | Vercel function |
+| `src/server/jobs/index.ts` | Cron job scheduler — registers all 7 background jobs | Called from server/index.ts |
 
-**`src/db/`:**
-- Purpose: Database layer — schema definition and ORM client
-- Key files: `src/db/schema.ts` (single source of truth for all tables), `src/db/index.ts` (Drizzle + postgres client)
+## Module Dependency Graph
 
-**`src/hooks/`:**
-- Purpose: Shared React hooks
-- Key files: `src/hooks/useAuth.tsx` (Supabase session, user object, org context)
+```
+Frontend:
+  main.tsx
+    → pages/* (lazy-loaded via React.lazy)
+    → components/admin/AdminLayout, components/mail/MailLayout
+    → hooks/useAuth, useMailbox, useMultiSession, useCompose, useOrganization
+      → lib/api-client (authenticated HTTP)
+        → lib/supabase (JWT token retrieval)
 
-**`src/lib/`:**
-- Purpose: Non-React utilities and external client initialization
-- Key files: `src/lib/supabase.ts` (browser Supabase client), `src/lib/utils.ts` (Tailwind class merger `cn()`)
+Backend:
+  server/index.ts
+    → server/routes/* (route handlers)
+      → server/lib/* (business logic)
+        → db/index.ts + db/schema.ts (Drizzle ORM)
+    → server/smtp-server.ts, smtp-inbound.ts, imap-server.ts (native servers)
+      → server/lib/native-mail.ts (auth), server/lib/mail.ts (parsing)
+        → db/*
+    → server/jobs/index.ts (cron scheduler)
+      → server/jobs/* (individual jobs)
+        → server/lib/* + db/*
 
-**`src/pages/admin/`:**
-- Purpose: Full-page React components for each admin route
-- Contains: Orgs, Servers, Domains, Messages, Credentials, Routes, Webhooks, Statistics pages
+Shared:
+  db/schema.ts ← used by ALL server-side code
+  server/lib/tracking.ts ← used by routes, jobs, SMTP servers
+```
 
-**`src/pages/mail/`:**
-- Purpose: Full-page React components for the mail client UI
-- Contains: `InboxPage.tsx`, `SentPage.tsx`, `SpamPage.tsx`, `StarredPage.tsx`, `SearchPage.tsx`
+## File Naming Conventions
 
-**`src/server/routes/`:**
-- Purpose: Express route handlers, one file per resource domain
-- Contains: `auth.ts`, `users.ts`, `organizations.ts`, `servers.ts`, `domains.ts`, `credentials.ts`, `routes.ts`, `messages.ts`, `webhooks.ts`, `track.ts`, `system.ts`
+**React Components (Pages):**
+- PascalCase with `Page` suffix: `InboxPage.tsx`, `OrganizationsPage.tsx`, `AdminDashboard.tsx`
+- Located in `src/pages/{domain}/`
 
-**`supabase/migrations/`:**
-- Purpose: SQL files applied to Supabase — primarily RLS policies
-- Key files: `001_enable_rls.sql`
-- Generated: No (hand-authored)
-- Committed: Yes
+**React Components (UI):**
+- shadcn primitives: lowercase kebab-case — `button.tsx`, `card.tsx`, `input.tsx`
+- Domain components: PascalCase — `EmailHtmlViewer.tsx`, `ComposeDialog.tsx`, `AccountSwitcher.tsx`
 
-**`scripts/`:**
-- Purpose: One-off migration runner scripts and database utilities
-- Generated: No
-- Committed: Yes
+**Hooks:**
+- camelCase with `use` prefix: `useAuth.tsx`, `useMailbox.tsx`, `useCompose.tsx`
+- Located in `src/hooks/`
 
-## Key File Locations
+**Server Routes:**
+- Lowercase resource name: `messages.ts`, `webhooks.ts`, `organizations.ts`
+- Sub-routes in subdirectories: `src/server/routes/mail/`, `src/server/routes/outreach/`
 
-**Entry Points:**
-- `src/main.tsx`: React app bootstrap, client-side route definitions (wouter)
-- `src/server/index.ts`: Express server bootstrap, middleware stack, route mounting
+**Server Lib:**
+- lowercase kebab-case: `route-matcher.ts`, `native-mail.ts`, `outreach-sender.ts`
 
-**Configuration:**
-- `vite.config.ts`: Vite build config, `/api` proxy to port 9001, `@/*` path alias
-- `tsconfig.json`: TypeScript config, `@/*` alias mapped to `./src/*`
-- `tailwind.config.ts`: Tailwind theme, shadcn CSS variable mappings
-- `package.json`: Scripts, dependencies
+**Server Lib (exceptions):**
+- Some files use camelCase: `tracking.ts`, `health.ts`, `mail.ts`
 
-**Core Logic:**
-- `src/db/schema.ts`: All table definitions — the authoritative data model
-- `src/hooks/useAuth.tsx`: Session management, org switching, auth state
-- `src/server/lib/tracking.ts`: Email open/click tracking and webhook dispatch logic
+## Configuration Files
 
-**Mail UI:**
-- `src/components/mail/EmailHtmlViewer.tsx`: HTML email renderer with per-email dark mode toggle
-- `src/components/mail/ResizablePanels.tsx`: Resizable two-panel layout for mail views
-- `src/pages/mail/InboxPage.tsx`: Inbox folder view
+| File | Purpose |
+|-----|---------|
+| `package.json` | npm scripts, dependencies (ESM: `"type": "module"`) |
+| `tsconfig.json` | Frontend TypeScript — targets ES2020, excludes `server/` and `db/` |
+| `tsconfig.server.json` | Backend TypeScript — includes server + db code |
+| `tsconfig.node.json` | Node tooling TypeScript (Vite config) |
+| `vite.config.ts` | Vite build config, `/api` proxy (9000→9001), `@/*` path alias, manual chunks |
+| `drizzle.config.ts` | Drizzle Kit config for migration generation |
+| `tailwind.config.ts` | Tailwind theme with shadcn CSS variable mappings |
+| `postcss.config.js` | PostCSS plugins (tailwindcss + autoprefixer) |
+| `components.json` | shadcn/ui config (style, paths, aliases) |
+| `Dockerfile` | Multi-stage Docker build |
+| `docker-compose.yml` | Docker Compose orchestration |
+| `.env.example` | Environment variable documentation |
 
-## Naming Conventions
+## Generated / Build Artifacts
 
-**Files:**
-- React components: PascalCase `.tsx` — `InboxPage.tsx`, `EmailHtmlViewer.tsx`
-- Hooks: camelCase prefixed with `use` — `useAuth.tsx`
-- Server routes: lowercase resource name — `messages.ts`, `webhooks.ts`
-- Utilities: camelCase — `utils.ts`, `tracking.ts`
-- shadcn primitives: kebab-case — `button.tsx`, `dropdown-menu.tsx`
-
-**Directories:**
-- Feature groupings: lowercase — `admin/`, `mail/`, `routes/`
-- shadcn components: `ui/`
+| Path | Generated By | Notes |
+|-----|-------------|-------|
+| `dist/client/` | `vite build` | SPA static assets (HTML, JS, CSS) |
+| `dist/server/` | `tsc -p tsconfig.server.json` | Compiled backend JS |
+| `api/index.js` | `esbuild` (for Vercel) | Bundled server for serverless |
+| `drizzle/` | `drizzle-kit generate:pg` | Generated SQL migration files |
+| `node_modules/` | `npm install` | Dependencies (not committed) |
+| `components/ui/*.tsx` | shadcn CLI (partially) | Generated primitives, then committed with customizations |
 
 ## Where to Add New Code
 
 **New admin page:**
 - Page component: `src/pages/admin/[FeatureName]Page.tsx`
-- Route registration: `src/main.tsx` (add wouter `<Route>`)
-- Nav link: `src/components/admin/` sidebar component
+- Route registration: `src/main.tsx` (add wouter `<Route>` wrapped in `<AdminCheck>`)
+- Nav link: `src/components/admin/AdminLayout.tsx` sidebar
 
-**New mail folder/view:**
-- Page component: `src/pages/mail/[FolderName]Page.tsx` (follow pattern of `InboxPage.tsx`)
-- Route registration: `src/main.tsx`
+**New mail page:**
+- Page component: `src/pages/mail/[FolderName]Page.tsx` (follow `InboxPage.tsx` pattern)
+- Route registration: `src/main.tsx` inside `<MailRoutes>` component
+
+**New outreach page:**
+- Page component: `src/pages/outreach/[FeatureName]Page.tsx`
+- Route registration: `src/main.tsx` (wrapped in `<AdminCheck>` + `<OrganizationProvider>`)
 
 **New API endpoint:**
-- Route handler: `src/server/routes/[resource].ts` (create new file or add to existing)
-- Mount in: `src/server/index.ts`
+- Route handler: `src/server/routes/[resource].ts` (new file or extend existing)
+- Mount: `src/server/index.ts` with `app.use('/api/[resource]', [resource]Routes)`
+- If sub-route of mail/outreach: add to `src/server/routes/mail/index.ts` or `src/server/routes/outreach/index.ts`
 
 **New database table:**
-- Schema definition: `src/db/schema.ts` (add table and relations)
-- Migration: run `npm run db:generate` then `npm run db:push`
-- RLS policy: `supabase/migrations/` (new SQL file)
+- Schema: `src/db/schema.ts` (add table, relations, insert/select Zod schemas, TypeScript types)
+- Migration: `npm run db:generate` then `npm run db:push`
+- RLS: `supabase/migrations/[NNN]_[description].sql`
+
+**New background job:**
+- Job function: `src/server/jobs/[jobName].ts` (export async function)
+- Schedule: `src/server/jobs/index.ts` (add `cron.schedule()` call)
 
 **New reusable component:**
-- If generic UI primitive: `src/components/ui/[component-name].tsx`
-- If mail-specific: `src/components/mail/[ComponentName].tsx`
-- If admin layout: `src/components/admin/[ComponentName].tsx`
+- Generic UI: `src/components/ui/[component-name].tsx` (kebab-case)
+- Mail-specific: `src/components/mail/[ComponentName].tsx` (PascalCase)
+- Admin layout: `src/components/admin/[ComponentName].tsx` (PascalCase)
+- Outreach: `src/components/outreach/[ComponentName].tsx` (PascalCase)
+
+**New hook:**
+- File: `src/hooks/use[Name].tsx`
+- Context provider: export Provider component + useXxx() hook
 
 **Shared utilities:**
-- Non-React helpers: `src/lib/utils.ts` or new file in `src/lib/`
-- React hooks: `src/hooks/use[Name].tsx`
+- Non-React: `src/lib/[name].ts`
+- Server-side: `src/server/lib/[name].ts`
+
+**New server lib:**
+- File: `src/server/lib/[name].ts`
+- Use kebab-case for multi-word names (e.g., `route-matcher.ts`)
 
 ## Special Directories
 
 **`src/components/ui/`:**
-- Purpose: shadcn/ui generated components
-- Generated: Partially (via shadcn CLI, then committed)
+- Purpose: shadcn/ui generated primitives
+- Generated: Partially (via shadcn CLI, then committed with customizations)
 - Committed: Yes — do not regenerate over customizations
+- Naming: lowercase kebab-case (shadcn convention)
 
 **`supabase/migrations/`:**
-- Purpose: Database RLS and schema SQL applied to Supabase
-- Generated: No
+- Purpose: Database RLS policies and schema reconciliation SQL
+- Generated: No (hand-authored)
 - Committed: Yes
+- Naming: `NNN_description.sql` (sequential numbering)
 
 **`scripts/`:**
-- Purpose: Dev/ops utility scripts (migration runners, etc.)
+- Purpose: Dev/ops utility scripts (migration runners, diagnostics, setup)
 - Generated: No
 - Committed: Yes
+- Notable: `set-admin.ts`, `run-rls-migration.ts`, `audit-schema-drift.ts`, `migrate-native-mailboxes.ts`
+
+**`drizzle/`:**
+- Purpose: Drizzle Kit generated migration SQL
+- Generated: Yes (via `npm run db:generate`)
+- Committed: Yes
+
+**`api/`:**
+- Purpose: Vercel serverless entry point
+- Generated: Yes (via `npm run build:api`)
+- Committed: Yes (single `index.js` bundling Express app)
 
 ---
 
-*Structure analysis: 2026-03-30*
+*Structure analysis: 2026-03-31*

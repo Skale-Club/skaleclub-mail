@@ -1,160 +1,153 @@
 # External Integrations
 
-**Analysis Date:** 2026-03-30
+**Analysis Date:** 2026-03-31
 
-## APIs & External Services
+## Authentication
 
-**Microsoft Graph / Azure AD (OAuth 2.0):**
-- Used for Outlook mailbox integration — read, send, and sync email via Microsoft Graph
-- OAuth flow: `POST /api/outlook/connect/start` → redirect to `https://login.microsoftonline.com/common/oauth2/v2.0/authorize` → callback at `/api/outlook/connect/callback`
-- SDK/Client: Native `fetch` against `https://graph.microsoft.com/v1.0` (no official SDK)
-- Auth: `OUTLOOK_CLIENT_ID`, `OUTLOOK_CLIENT_SECRET` env vars; tokens encrypted in DB with `OUTLOOK_TOKEN_ENCRYPTION_KEY`
-- Scopes: `offline_access`, `openid`, `profile`, `User.Read`, `Mail.Read`, `Mail.ReadWrite`, `Mail.Send`
-- Implementation: `src/server/lib/outlook.ts`, `src/server/routes/outlook.ts`
-- Token refresh handled server-side with `REFRESH_SKEW_MS = 2 min` buffer
+| Provider | SDK/Client | Config Location | Purpose |
+|---------|-----------|-----------------|---------|
+| Supabase Auth | `@supabase/supabase-js` 2.39.8 | `src/server/lib/supabase.ts`, `src/lib/supabase.ts` | JWT-based user authentication |
+| Supabase Auth (health) | Native `fetch` | `src/server/lib/supabase.ts` (`checkSupabaseAuthHealth`) | Auth service health monitoring |
+| bcrypt | `bcrypt` 6.0.0 | `src/server/lib/native-mail.ts` | SMTP/IMAP password hashing |
+| JWT | `jsonwebtoken` 9.0.2 | `src/server/lib/native-mail.ts` | SMTP/IMAP session tokens |
 
-**Supabase Auth (JWT validation):**
-- Frontend authenticates via `supabase.auth.signInWithPassword`; JWT validated on every protected API request
-- Healthcheck endpoint pings `${SUPABASE_URL}/auth/v1/settings`
-- Implementation: `src/server/lib/supabase.ts`, `src/lib/supabase.ts`
+**Auth flow:**
+1. Frontend: `supabase.auth.signInWithPassword` (`src/lib/supabase.ts`)
+2. JWT sent as `Authorization: Bearer <token>` on every API request
+3. Server middleware validates via `supabaseAnonClient.auth.getUser(token)` in `src/server/index.ts`
+4. Protected routes receive `x-user-id`, `x-user-email`, `x-user-first-name`, `x-user-last-name`, `x-user-email-verified` headers
+5. Platform admin: `users.isAdmin` flag checked via `isPlatformAdmin()` in `src/server/lib/admin.ts`
+6. RLS policies enforce organization-level data isolation at database layer
 
-## Data Storage
+**Supabase clients (server):**
+- `supabaseAnonClient` - validates user JWTs on API requests (`src/server/lib/supabase.ts`)
+- `supabaseAdminClient` - service role for admin operations (`src/server/lib/supabase.ts`)
+- `createSupabaseUserClient(accessToken)` - user-scoped client with custom auth header
 
-**Databases:**
-- PostgreSQL via Supabase (cloud-hosted)
-  - Connection: `DATABASE_URL` env var (Supavisor pooler, port 6543, transaction mode)
-  - Direct URL: `DIRECT_URL` env var (used by drizzle-kit for migrations)
-  - Client: `drizzle-orm` + `postgres` driver (`src/db/index.ts`)
-  - Pool: max 20 connections (configurable via `DB_POOL_MAX`), 10s idle timeout, 30s connect timeout, 30min max lifetime
-  - Retry logic: exponential backoff up to 3 attempts for connection errors (`withRetry` in `src/db/index.ts`)
-  - Schema: `src/db/schema.ts`
-  - RLS policies: `supabase/migrations/001_enable_rls.sql` through `015_schema_reconciliation.sql`
+## Email Services
 
-**Key Schema Tables:**
-- `users`, `organizations`, `organization_users` — multi-tenancy core
-- `servers`, `domains`, `credentials`, `routes` — email server config
-- `messages`, `deliveries`, `statistics`, `suppressions`, `track_domains` — email lifecycle
-- `webhooks`, `webhook_requests` — outgoing webhook system
-- `mailboxes`, `mail_folders`, `mail_messages`, `email_accounts` — native/IMAP mail storage
-- `outlook_mailboxes` — Microsoft OAuth token storage
-- `outreach_*` tables — outreach campaign system
-- `templates`, `user_notifications`, `system_branding` — app config
+| Service | SDK/Client | Config Location | Purpose |
+|--------|-----------|-----------------|---------|
+| Nodemailer | `nodemailer` 6.9.12 | `src/server/smtp-server.ts` | SMTP relay for outbound email |
+| mailparser | `mailparser` 3.6.9 | `src/server/lib/mail.ts` | Parse raw MIME email messages |
+| smtp-server | `smtp-server` 3.18.2 | `src/server/smtp-server.ts`, `src/server/smtp-inbound.ts` | Native SMTP server (submission + inbound) |
+| IMAP (native) | Custom `net` module | `src/server/imap-server.ts` | IMAP server (RFC 3501) |
+| imapflow | `imapflow` 1.2.16 | `src/server/lib/mail-sync.ts` | Sync external mailboxes (e.g., Gmail) |
+| imap | `imap` 0.8.19 | — | Lower-level IMAP client (supplemental) |
 
-**File Storage:**
-- Supabase Storage (avatars referenced by `avatarUrl` on `users` table; CSP `img-src` allows the Supabase origin)
-- Local filesystem: not used for persistent storage
-
-**Caching:**
-- Server-side in-memory cache for system branding (`src/server/lib/serverBranding.ts`, `getCachedBranding`)
-- No Redis or external cache layer
-
-## Authentication & Identity
-
-**Auth Provider:**
-- Supabase Auth (JWT-based)
-  - Frontend: `createClient` from `@supabase/supabase-js` (`src/lib/supabase.ts`)
-  - Server (anon): `supabaseAnonClient` — validates user JWTs on every API request (`src/server/lib/supabase.ts`)
-  - Server (admin): `supabaseAdminClient` (service role) — used for admin-level operations
-  - Auth context/hook: `src/hooks/useAuth.tsx`
-  - All protected routes validate `Authorization: Bearer <token>` header and inject `x-user-id`, `x-user-email`, etc.
-
-**Native Mail Auth:**
-- SMTP/IMAP clients authenticate with bcrypt-hashed passwords from `users.passwordHash`
-- JWT tokens issued for SMTP/IMAP session management (`JWT_SECRET` env var)
-- Implementation: `src/server/lib/native-mail.ts`
-
-**Platform Admin:**
-- `users.isAdmin` boolean flag; checked via `isPlatformAdmin()` in `src/server/lib/admin.ts`
-- Set via `scripts/set-admin.ts`
-
-## Monitoring & Observability
-
-**Error Tracking:**
-- None (no Sentry, Datadog, etc. detected)
-
-**Logs:**
-- `console.log` / `console.error` throughout server code
-- DB query logging in development via Drizzle's `logger` option (`src/db/index.ts`)
-- SMTP/IMAP event logging inline
-
-**Health Endpoints:**
-- `GET /health` — uptime, memory, Node version
-- `GET /health/db` — Drizzle DB ping latency
-- `GET /health/auth` — Supabase auth reachability
-- `GET /health/ready` — combined readiness check
-- Implementation: `src/server/lib/health.ts`
-
-## CI/CD & Deployment
-
-**Hosting:**
-- Docker: `Dockerfile` (node:20-alpine), `docker-compose.yml` for self-hosting
-- Railway: detected via `RAILWAY_ENVIRONMENT`; SMTP/IMAP disabled by default (set `ENABLE_MAIL_SERVER=true` to enable)
-- Vercel: `build:vercel` script creates `api/index.js` serverless bundle; SMTP/IMAP unavailable in this mode
-- Static client served from `dist/client/` by Express in production
-
-**CI Pipeline:**
-- None configured (no GitHub Actions, CircleCI, etc. detected)
-
-## SMTP / Email Transport
-
-**Outbound (relay):**
-- nodemailer 6.9 sending via configurable SMTP relay
+**SMTP Relay configuration:**
 - Config: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` env vars
-- Used for transactional delivery of queued messages
+- Used by: `relayMessage()` in `src/server/smtp-server.ts`
+- Fallback: direct delivery (requires proper MX setup) when `SMTP_HOST` not configured
 
-**Native SMTP Submission Server (port 587/2587):**
-- `smtp-server` package; accepts authenticated submissions from email clients (Thunderbird, etc.)
-- Auth: PLAIN/LOGIN against bcrypt-hashed user passwords
+**Native SMTP Submission Server:**
+- Port: `SMTP_SUBMISSION_PORT` (2587 dev, 587 prod)
+- Auth: PLAIN/LOGIN against `users.passwordHash` (bcrypt)
 - Implementation: `src/server/smtp-server.ts`
 
-**Native SMTP Inbound Server (port 25):**
-- `smtp-server` package; accepts delivery from external MTAs (Gmail, Outlook, etc.)
-- No auth required (standard MX delivery)
+**Native SMTP Inbound Server:**
+- Port: 25 (standard MX delivery)
+- No auth required (standard inbound delivery)
 - Validates recipient domain against verified domains in DB
 - Implementation: `src/server/smtp-inbound.ts`
 
-**Native IMAP Server (port 993/2993):**
-- Custom implementation using raw Node.js `net` module (no third-party IMAP server library)
-- Supports RFC 3501: LOGIN, CAPABILITY, LIST, LSUB, SELECT, EXAMINE, FETCH, STORE, EXPUNGE, SEARCH, APPEND, NOOP, LOGOUT, UID
+**Native IMAP Server:**
+- Port: `IMAP_PORT` (2993 dev, 993 prod)
+- Custom implementation using Node.js `net` module
+- Supports: LOGIN, CAPABILITY, LIST, LSUB, SELECT, EXAMINE, FETCH, STORE, EXPUNGE, SEARCH, APPEND, NOOP, LOGOUT, UID
 - Implementation: `src/server/imap-server.ts`
 
 **External IMAP Sync:**
-- `imapflow` 1.2 and `imap` 0.8 for connecting to external mailboxes (e.g., Gmail IMAP)
-- `mailparser` 3.6 for parsing raw MIME messages
-- Sync job: `src/server/jobs/processReplies.ts` (runs every 15 min)
-- Sync lib: `src/server/lib/mail-sync.ts`
+- `imapflow` + `mailparser` for connecting to external mailboxes
+- Sync job runs every 15 minutes (`src/server/jobs.ts`)
 
-## Background Jobs (node-cron)
+## Third-Party APIs
 
-- `processQueue` — every 1 min: sends queued outbound messages
-- `processHeldMessages` — every 5 min: processes expired held messages
-- `cleanupOldMessages` — daily 3am: purges old messages
-- `processOutreachSequences` — every 5 min: advances outreach campaigns
-- `resetDailyLimits` — daily midnight: resets outreach sending caps
-- `processReplies` — every 15 min: syncs inbound replies from external IMAP accounts
-- `processBounces` — every 30 min: processes bounce notifications
-- Scheduler entry: `src/server/jobs/index.ts`
+| Service | SDK/Client | Config Location | Purpose |
+|--------|-----------|-----------------|---------|
+| Microsoft Graph API | Native `fetch` | `src/server/lib/outlook.ts` | Send email via Outlook OAuth |
+| Azure AD OAuth 2.0 | Native `fetch` | `src/server/lib/outlook.ts` | Outlook mailbox connection |
+| Supabase REST API | `@supabase/supabase-js` | `src/server/lib/supabase.ts`, `src/db/index.ts` | Database + Auth |
 
-## Webhooks & Callbacks
+**Microsoft Graph / Outlook OAuth integration:**
+- API base: `https://graph.microsoft.com/v1.0`
+- OAuth base: `https://login.microsoftonline.com/common/oauth2/v2.0`
+- Scopes: `offline_access`, `openid`, `profile`, `User.Read`, `Mail.Read`, `Mail.ReadWrite`, `Mail.Send`
+- OAuth flow: `POST /api/outlook/connect/start` → redirect → callback at `/api/outlook/connect/callback`
+- Token refresh: automatic with 2-minute buffer before expiry (`REFRESH_SKEW_MS`)
+- Config: `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET` env vars
+- Token storage: encrypted with `OUTLOOK_TOKEN_ENCRYPTION_KEY` (falls back to `JWT_SECRET`)
+- Implementation: `src/server/lib/outlook.ts`, `src/server/routes/outlook.ts`
+- State validation: HMAC-SHA256 signed, 10-minute TTL
 
-**Outgoing (user-configured):**
-- Users configure webhook endpoints per organization in `/api/webhooks`
-- Events: `message_sent`, `message_delivered`, `message_bounced`, `message_held`, `message_opened`, `link_clicked`, `domain_verified`, `spam_alert`, `test`
-- Signed with HMAC-SHA256 using a user-provided secret
-- Delivery tracked in `webhook_requests` table
-- Dispatch: `src/server/lib/tracking.ts` (`fireWebhooks`)
+## Webhooks (Outbound)
 
-**Incoming (tracking):**
-- `GET /t/open/:token` — 1×1 GIF pixel for email open tracking
-- `GET /t/click/:token?u=<base64url>` — click tracking redirect
-- Rate limited to 100 req/min
-- Tracking processed asynchronously after immediate response
+| Event | Target | Format | Auth |
+|-------|--------|--------|------|
+| `message_sent` | User-configured URL | JSON | HMAC-SHA256 (X-Webhook-Signature header) |
+| `message_delivered` | User-configured URL | JSON | HMAC-SHA256 |
+| `message_bounced` | User-configured URL | JSON | HMAC-SHA256 |
+| `message_held` | User-configured URL | JSON | HMAC-SHA256 |
+| `message_opened` | User-configured URL | JSON | HMAC-SHA256 |
+| `link_clicked` | User-configured URL | JSON | HMAC-SHA256 |
+| `domain_verified` | User-configured URL | JSON | HMAC-SHA256 |
+| `spam_alert` | User-configured URL | JSON | HMAC-SHA256 |
+| `test` | User-configured URL | JSON | HMAC-SHA256 |
+
+**Configuration:** Users configure webhook endpoints per organization via `/api/webhooks`
+**Dispatch:** `fireWebhooks()` in `src/server/lib/tracking.ts`
+**Payload:** `{ event, timestamp, organizationId, data }` with 10-second timeout
+**Logging:** All attempts tracked in `webhook_requests` table
+**Notifications:** Critical events (`message_bounced`, `message_held`, `spam_alert`) also create user notifications
+
+## Webhooks (Inbound)
+
+| Endpoint | Source | Purpose | Auth |
+|---------|--------|---------|------|
+| `GET /t/open/:token` | Email client pixel load | Open tracking (1×1 GIF) | Token-based |
+| `GET /t/click/:token?u=<base64>` | Email client link click | Click tracking redirect | Token-based |
+| `GET /api/outlook/connect/callback` | Azure AD | OAuth callback | State validation |
+| `GET /health` | Monitoring | System health | None |
+| `GET /health/db` | Monitoring | Database health | None |
+| `GET /health/auth` | Monitoring | Auth service health | None |
+| `GET /health/ready` | Monitoring | Combined readiness | None |
+| `GET /app-config.js` | Browser | Runtime config | None |
+
+**Tracking endpoints:**
+- Rate limited: 100 req/min
+- Respond immediately, process asynchronously
 - Implementation: `src/server/routes/track.ts`
+- HTML injection: tracking pixel and link rewriting in `src/server/lib/tracking.ts`
 
-**Microsoft OAuth Callback:**
-- `GET /api/outlook/connect/callback` — receives authorization code from Azure AD
-- State validated with HMAC + TTL (10 min expiry)
-- Tokens encrypted with AES before DB storage
+## External Dependencies Audit
+
+| Package | Version | Purpose | Security Notes |
+|--------|---------|---------|----------------|
+| `express` | 5.0.0-beta.2 | HTTP framework | **Beta version** — potential stability risks |
+| `@supabase/supabase-js` | 2.39.8 | Supabase client | Auth JWT validation critical path |
+| `drizzle-orm` | 0.30.4 | PostgreSQL ORM | SQL injection protection via parameterized queries |
+| `postgres` | 3.4.3 | PostgreSQL driver | Direct connection to Supabase pooler |
+| `nodemailer` | 6.9.12 | SMTP sending | Handles credentials (`SMTP_USER`, `SMTP_PASS`) |
+| `jsonwebtoken` | 9.0.2 | JWT operations | Tokens for SMTP/IMAP auth |
+| `bcrypt` | 6.0.0 | Password hashing | 12 rounds (adequate) |
+| `helmet` | 7.1.0 | HTTP headers | Security headers (CSP, HSTS, etc.) |
+| `express-rate-limit` | 7.2.0 | Rate limiting | Auth: 5 req/15min, API: 500 req/15min |
+| `uuid` | 9.0.1 | UUID generation | Crypto-random (v4) |
+| `crypto` (Node.js) | Built-in | HMAC, encryption | Used for webhook signing and token encryption |
+| `smtp-server` | 3.18.2 | SMTP server | Handles external email submissions |
+| `imapflow` | 1.2.16 | IMAP client | External mailbox sync |
+| `mailparser` | 3.6.9 | Email parser | Parses raw MIME from external sources |
+| `react-quill-new` | 3.8.3 | Rich text editor | XSS risk: sanitize HTML output before sending |
+| `lodash` | 4.17.21 | Utilities | Consider tree-shaking specific functions |
+| `date-fns` | 3.6.0 | Date utilities | Tree-shakeable, modern |
+| `node-cron` | 4.2.1 | Job scheduler | Background jobs |
+
+**Key security considerations:**
+- `SUPABASE_SERVICE_ROLE_KEY` bypasses RLS — only use for admin operations
+- `JWT_SECRET` and `ENCRYPTION_KEY` are critical secrets — rotate regularly
+- Outlook tokens encrypted with AES before storage (`src/server/lib/crypto.ts`)
+- CORS restricted to `FRONTEND_URL` origin
+- CSP headers configured in `helmet` middleware
 
 ## Encryption
 
@@ -164,6 +157,10 @@
 - Keys: `ENCRYPTION_KEY` (general), `OUTLOOK_TOKEN_ENCRYPTION_KEY` (Outlook tokens)
 - Implementation: `src/server/lib/crypto.ts`
 
+**In transit:**
+- Webhook payloads signed with HMAC-SHA256
+- SMTP/IMAP TLS support in production (cert/key paths via `MAIL_TLS_CERT_PATH`, `MAIL_TLS_KEY_PATH`)
+
 ---
 
-*Integration audit: 2026-03-30*
+*Integration audit: 2026-03-31*
