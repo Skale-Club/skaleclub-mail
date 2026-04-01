@@ -854,6 +854,8 @@ export const campaignLeads = pgTable('campaign_leads', {
     idxCampaignLeadsLeadId: index('idx_campaign_leads_lead_id').on(table.leadId),
     idxCampaignLeadsAssignedEmailAccountId: index('idx_campaign_leads_assigned_email_account_id').on(table.assignedEmailAccountId),
     idxCampaignLeadsCurrentStepId: index('idx_campaign_leads_current_step_id').on(table.currentStepId),
+    idxCampaignLeadsCampaignStatus: index('idx_campaign_leads_campaign_status').on(table.campaignId, table.status),
+    idxCampaignLeadsNextScheduled: index('idx_campaign_leads_next_scheduled').on(table.nextScheduledAt),
 }))
 
 // Outreach Emails (sent emails from campaigns)
