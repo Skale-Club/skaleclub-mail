@@ -31,12 +31,12 @@
 ### Query Optimization
 
 - [x] **QRY-01**: processQueue.ts N+1 fixed — batch-load messages and orgs before delivery loop (3*N queries → 2 queries)
-- [ ] **QRY-02**: Column filtering on list endpoints — exclude `htmlBody`, `plainBody`, and other large text columns from list responses
-- [ ] **QRY-03**: processOutreachSequences query scoped — lead query includes `WHERE nextScheduledAt <= now()` with index support; no full table scan
+- [x] **QRY-02**: Column filtering on list endpoints — exclude `htmlBody`, `plainBody`, and other large text columns from list responses
+- [x] **QRY-03**: processOutreachSequences query scoped — lead query includes `WHERE nextScheduledAt <= now()` with index support; no full table scan
 
 ### Schema Hardening
 
-- [ ] **SCH-01**: CHECK constraints on `campaignSteps.delayHours >= 0` and `campaignSteps.order >= 1`
+- [ ] **SCH-01**: CHECK constraints on `sequenceSteps.delayHours >= 0` and `sequenceSteps.stepOrder >= 1`
 - [ ] **SCH-02**: Old `013_add_performance_indexes.sql` migration marked as deprecated with comment header
 
 ## v2 Requirements
@@ -77,8 +77,8 @@ Deferred to future release.
 | PAGE-04 | Phase 07 | Complete |
 | PAGE-05 | Phase 07 | Complete |
 | QRY-01 | Phase 08 | Complete |
-| QRY-02 | Phase 08 | Pending |
-| QRY-03 | Phase 08 | Pending |
+| QRY-02 | Phase 08 | Complete |
+| QRY-03 | Phase 08 | Complete |
 | SCH-01 | Phase 09 | Pending |
 | SCH-02 | Phase 09 | Pending |
 

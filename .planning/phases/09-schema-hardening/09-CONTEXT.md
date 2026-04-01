@@ -14,8 +14,8 @@ Database constraints prevent invalid data and the old migration file is properly
 ## Implementation Decisions
 
 ### SCH-01: CHECK Constraints
-- **D-01:** Add CHECK constraint `campaignSteps_delay_hours_positive` on `campaignSteps.delayHours >= 0`
-- **D-02:** Add CHECK constraint `campaignSteps_order_positive` on `campaignSteps.order >= 1`
+- **D-01:** Add CHECK constraint `sequence_steps_delay_hours_positive` on `sequenceSteps.delayHours >= 0`
+- **D-02:** Add CHECK constraint `sequence_steps_order_positive` on `sequenceSteps.stepOrder >= 1`
 - Defined in `src/db/schema.ts` using Drizzle `.check()` API
 - Applied via `sql/` migration file or `db:push`
 
