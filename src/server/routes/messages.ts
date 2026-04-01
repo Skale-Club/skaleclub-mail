@@ -124,6 +124,13 @@ router.get('/', async (req: Request, res: Response) => {
 
         const messagesList = await db.query.messages.findMany({
             where: and(...conditions),
+            columns: {
+                htmlBody: false,
+                plainBody: false,
+                attachments: false,
+                headers: false,
+                spamChecks: false,
+            },
             orderBy: [desc(messages.createdAt)],
             limit,
             offset,

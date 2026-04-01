@@ -229,6 +229,12 @@ router.get('/:mailboxId/messages', async (req: Request, res: Response) => {
         const [messages, countResult] = await Promise.all([
             db.query.mailMessages.findMany({
                 where: and(...conditions),
+                columns: {
+                    htmlBody: false,
+                    plainBody: false,
+                    headers: false,
+                    attachments: false,
+                },
                 orderBy: [desc(mailMessages.receivedAt)],
                 limit,
                 offset,
@@ -840,6 +846,12 @@ router.get('/:mailboxId/search', async (req: Request, res: Response) => {
         const [messages, countResult] = await Promise.all([
             db.query.mailMessages.findMany({
                 where: and(...conditions),
+                columns: {
+                    htmlBody: false,
+                    plainBody: false,
+                    headers: false,
+                    attachments: false,
+                },
                 orderBy: [desc(mailMessages.receivedAt)],
                 limit,
                 offset,
