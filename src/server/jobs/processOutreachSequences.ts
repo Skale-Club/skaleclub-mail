@@ -12,7 +12,7 @@
 import { createHash } from 'crypto'
 import { db } from '../../db'
 import { campaigns, sequenceSteps, campaignLeads, leads, emailAccounts, outreachEmails, suppressions } from '../../db/schema'
-import { eq, and, lte, gt, inArray, notInArray } from 'drizzle-orm'
+import { eq, and, lte, gt, inArray, notInArray, sql } from 'drizzle-orm'
 import {
     sendOutreachEmail,
     recordOutreachEmail,
@@ -76,12 +76,14 @@ function selectAbVariant(step: SequenceStep, leadId: string): 'a' | 'b' {
 export async function processOutreachSequences(): Promise<{ processed: number; sent: number; errors: number }> {
     const now = new Date()
     const result = { processed: 0, sent: 0, errors: 0 }
+    const PENDING_LEADS_LIMIT = 200
 
     const pendingLeads = await db.query.campaignLeads.findMany({
         where: and(
             lte(campaignLeads.nextScheduledAt, now),
             notInArray(campaignLeads.status, ['replied', 'bounced', 'unsubscribed'])
         ),
+        limit: PENDING_LEADS_LIMIT,
         with: {
             campaign: true,
             lead: true,
@@ -119,6 +121,26 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
         stepsBySequence.get(step.sequenceId)!.push(step)
     }
 
+    // Batch-load all suppressed emails for involved organizations
+    const orgIds = [...new Set(pendingLeads.map(cl => cl.campaign.organizationId))]
+    const allSuppressions = await db.query.suppressions.findMany({
+        where: inArray(suppressions.organizationId, orgIds),
+        columns: { organizationId: true, emailAddress: true },
+    })
+    const suppressedSet = new Set(allSuppressions.map(s => `${s.organizationId}:${s.emailAddress}`))
+
+    // Batch-load existing outreach emails for idempotency checks
+    const allExistingEmails = await db.query.outreachEmails.findMany({
+        where: inArray(
+            outreachEmails.campaignLeadId,
+            pendingLeads.map(cl => cl.id)
+        ),
+        columns: { campaignLeadId: true, sequenceStepId: true },
+    })
+    const existingEmailsSet = new Set(
+        allExistingEmails.map(e => `${e.campaignLeadId}:${e.sequenceStepId}`)
+    )
+
     for (const campaignLead of pendingLeads) {
         result.processed++
 
@@ -148,12 +170,7 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
                 continue
             }
 
-            const isSuppressed = await db.query.suppressions.findFirst({
-                where: and(
-                    eq(suppressions.organizationId, campaign.organizationId),
-                    eq(suppressions.emailAddress, lead.email)
-                ),
-            })
+            const isSuppressed = suppressedSet.has(`${campaign.organizationId}:${lead.email}`)
             if (isSuppressed) {
                 await db.update(campaignLeads)
                     .set({ status: 'bounced', nextScheduledAt: null })
@@ -191,14 +208,8 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
             }
 
             // SEND-05: Idempotency guard — skip if this step was already sent to this lead
-            const existingEmail = await db.query.outreachEmails.findFirst({
-                where: and(
-                    eq(outreachEmails.campaignLeadId, campaignLead.id),
-                    eq(outreachEmails.sequenceStepId, currentStep.id)
-                )
-            })
-            if (existingEmail) {
-                console.log(`[processOutreachSequences] Skipping duplicate send for campaignLead ${campaignLead.id} step ${currentStep.id} (already sent: ${existingEmail.id})`)
+            if (existingEmailsSet.has(`${campaignLead.id}:${currentStep.id}`)) {
+                console.log(`[processOutreachSequences] Skipping duplicate send for campaignLead ${campaignLead.id} step ${currentStep.id} (already in batch)`)
                 continue
             }
 
