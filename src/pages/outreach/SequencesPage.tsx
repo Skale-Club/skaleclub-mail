@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation } from 'wouter'
 import { Plus, Mail, ChevronDown, Clock, Trash2 } from 'lucide-react'
 import { OutreachLayout } from '../../components/outreach/OutreachLayout'
+import { PaginationControls } from '../../components/ui/PaginationControls'
 import { apiFetch, apiRequest } from '../../lib/api-client'
 import { useOrganization } from '../../hooks/useOrganization'
 import {
@@ -46,9 +47,19 @@ interface CampaignOption {
     isActive: boolean
 }
 
-async function fetchSequences(organizationId: string): Promise<Sequence[]> {
-    const data = await apiFetch<{ sequences?: Sequence[] }>(`/api/outreach/campaigns/sequences?organizationId=${organizationId}`)
-    return data.sequences || []
+interface SequencesResponse {
+    sequences: Sequence[]
+    pagination: { page: number; limit: number; total: number; totalPages: number }
+}
+
+async function fetchSequences(organizationId: string, page = 1, limit = 25): Promise<SequencesResponse> {
+    const data = await apiFetch<{ sequences?: Sequence[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }>(
+        `/api/outreach/campaigns/sequences?organizationId=${organizationId}&page=${page}&limit=${limit}`
+    )
+    return {
+        sequences: data.sequences || [],
+        pagination: data.pagination || { page: 1, limit: 25, total: 0, totalPages: 0 },
+    }
 }
 
 async function fetchCampaignOptions(organizationId: string): Promise<CampaignOption[]> {
@@ -418,10 +429,11 @@ export function SequencesPage() {
     const [location, setLocation] = useLocation()
     const queryClient = useQueryClient()
     const isCreateOpen = location === '/outreach/sequences/new'
+    const [page, setPage] = React.useState(1)
 
-    const { data: sequences, isLoading } = useQuery({
-        queryKey: ['sequences', currentOrganization?.id],
-        queryFn: () => fetchSequences(currentOrganization!.id),
+    const { data: sequencesData, isLoading } = useQuery({
+        queryKey: ['sequences', currentOrganization?.id, page],
+        queryFn: () => fetchSequences(currentOrganization!.id, page, 25),
         enabled: !!currentOrganization,
     })
     const { data: campaigns = [], isLoading: campaignsLoading } = useQuery({
@@ -493,9 +505,10 @@ export function SequencesPage() {
                             </div>
                         ))}
                     </div>
-                ) : sequences && sequences.length > 0 ? (
+                ) : sequencesData?.sequences && sequencesData.sequences.length > 0 ? (
+                    <>
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                        {sequences.map((sequence) => (
+                        {sequencesData.sequences.map((sequence) => (
                             <SequenceCard
                                 key={sequence.id}
                                 sequence={sequence}
@@ -504,6 +517,16 @@ export function SequencesPage() {
                             />
                         ))}
                     </div>
+                    {sequencesData?.pagination && sequencesData.pagination.totalPages > 1 && (
+                        <PaginationControls
+                            page={sequencesData.pagination.page}
+                            totalPages={sequencesData.pagination.totalPages}
+                            total={sequencesData.pagination.total}
+                            itemName="sequences"
+                            onPageChange={setPage}
+                        />
+                    )}
+                    </>
                 ) : (
                     <div className="rounded-lg border border-border bg-card p-12 text-center">
                         <Mail className="mx-auto mb-4 h-16 w-16 text-gray-300 dark:text-gray-600" />
