@@ -12,7 +12,7 @@
 
 - [x] **Phase 05: RLS & Migration Safety** — Fix broken RLS policies and establish safe index migration workflow (completed 2026-03-31)
 - [x] **Phase 06: Index Foundation** — Add all FK and composite indexes to schema.ts, apply via CONCURRENTLY (completed 2026-04-01)
-- [ ] **Phase 07: Pagination** — Add paginated responses to all list endpoints
+- [x] **Phase 07: Pagination** — Add paginated responses to all list endpoints (completed 2026-04-01)
 - [ ] **Phase 08: Query Optimization** — Fix N+1 patterns, add column filtering, scope unbounded queries
 - [ ] **Phase 09: Schema Hardening** — Add CHECK constraints, deprecate old migration file
 
@@ -59,11 +59,11 @@ Plans:
   4. `GET /api/email-accounts` returns paginated results
   5. `GET /api/outreach/sequences` returns paginated results
   6. List endpoints accept `?page=1&pageSize=25` query parameters and return correct `total` count
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 07-01-PLAN.md — Shared pagination utility + server-side pagination (campaigns, lead-lists, email-accounts, sequences) — PAGE-01, PAGE-03, PAGE-04, PAGE-05
-- [ ] 07-02-PLAN.md — Frontend pagination controls (all outreach list pages) — PAGE-01, PAGE-02, PAGE-03, PAGE-04, PAGE-05
+- [x] 07-01-PLAN.md — Shared pagination utility + server-side pagination (campaigns, lead-lists, email-accounts, sequences) — PAGE-01, PAGE-03, PAGE-04, PAGE-05
+- [x] 07-02-PLAN.md — Frontend pagination controls (all outreach list pages) — PAGE-01, PAGE-02, PAGE-03, PAGE-04, PAGE-05
 
 ### Phase 08: Query Optimization
 **Goal:** Background jobs and list endpoints load data efficiently with no N+1 patterns and no oversized payloads
@@ -93,7 +93,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 05. RLS & Migration Safety | 2/2 | Complete    | 2026-03-31 |
 | 06. Index Foundation | 1/2 | Complete    | 2026-04-01 |
-| 07. Pagination | 0/2 | Not started | — |
+| 07. Pagination | 2/2 | Complete   | 2026-04-01 |
 | 08. Query Optimization | 0/0 | Not started | — |
 | 09. Schema Hardening | 0/0 | Not started | — |
 

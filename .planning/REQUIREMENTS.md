@@ -14,19 +14,19 @@
 ### Index Foundation
 
 - [x] **IDX-01**: All foreign key columns indexed — `organizationId`, `campaignId`, `serverId`, `domainId`, `credentialId`, `routeId`, `webhookId`, `leadListId` across all 17+ org-scoped tables
-- [ ] **IDX-02**: Composite index on `messages(organizationId, status)` — dashboard stats queries return in <100ms
-- [ ] **IDX-03**: Composite index on `campaignLeads(campaignId, status)` — campaign lead status counts return in <100ms
-- [ ] **IDX-04**: Index on `campaignLeads.nextScheduledAt` — send pipeline cron job no longer scans all leads; filtered to pending/scheduled only
-- [ ] **IDX-05**: Index on `messages.token` — open/click tracking lookups return in <10ms
+- [x] **IDX-02**: Composite index on `messages(organizationId, status)` — dashboard stats queries return in <100ms
+- [x] **IDX-03**: Composite index on `campaignLeads(campaignId, status)` — campaign lead status counts return in <100ms
+- [x] **IDX-04**: Index on `campaignLeads.nextScheduledAt` — send pipeline cron job no longer scans all leads; filtered to pending/scheduled only
+- [x] **IDX-05**: Index on `messages.token` — open/click tracking lookups return in <10ms
 - [x] **IDX-06**: Index definitions consolidated in `src/db/schema.ts` using Drizzle `index()` API — single source of truth; old `013_add_performance_indexes.sql` deprecated
 
 ### Pagination
 
-- [ ] **PAGE-01**: Pagination on campaigns list endpoint — `GET /api/outreach/campaigns` returns `{ items, pagination: { page, pageSize, total } }` instead of all rows
+- [x] **PAGE-01**: Pagination on campaigns list endpoint — `GET /api/outreach/campaigns` returns `{ items, pagination: { page, pageSize, total } }` instead of all rows
 - [ ] **PAGE-02**: Pagination on leads list endpoint — `GET /api/outreach/leads` returns paginated results
-- [ ] **PAGE-03**: Pagination on lead lists endpoint — `GET /api/outreach/lead-lists` returns paginated results
-- [ ] **PAGE-04**: Pagination on email accounts endpoint — `GET /api/email-accounts` returns paginated results
-- [ ] **PAGE-05**: Pagination on sequences endpoint — `GET /api/outreach/sequences` returns paginated results
+- [x] **PAGE-03**: Pagination on lead lists endpoint — `GET /api/outreach/lead-lists` returns paginated results
+- [x] **PAGE-04**: Pagination on email accounts endpoint — `GET /api/email-accounts` returns paginated results
+- [x] **PAGE-05**: Pagination on sequences endpoint — `GET /api/outreach/sequences` returns paginated results
 
 ### Query Optimization
 
@@ -66,16 +66,16 @@ Deferred to future release.
 | DBS-02 | Phase 05 | Complete |
 | DBS-03 | Phase 05 | Complete |
 | IDX-01 | Phase 06 | Complete |
-| IDX-02 | Phase 06 | Pending |
-| IDX-03 | Phase 06 | Pending |
-| IDX-04 | Phase 06 | Pending |
-| IDX-05 | Phase 06 | Pending |
+| IDX-02 | Phase 06 | Complete |
+| IDX-03 | Phase 06 | Complete |
+| IDX-04 | Phase 06 | Complete |
+| IDX-05 | Phase 06 | Complete |
 | IDX-06 | Phase 06 | Complete |
-| PAGE-01 | Phase 07 | Pending |
+| PAGE-01 | Phase 07 | Complete |
 | PAGE-02 | Phase 07 | Pending |
-| PAGE-03 | Phase 07 | Pending |
-| PAGE-04 | Phase 07 | Pending |
-| PAGE-05 | Phase 07 | Pending |
+| PAGE-03 | Phase 07 | Complete |
+| PAGE-04 | Phase 07 | Complete |
+| PAGE-05 | Phase 07 | Complete |
 | QRY-01 | Phase 08 | Pending |
 | QRY-02 | Phase 08 | Pending |
 | QRY-03 | Phase 08 | Pending |
