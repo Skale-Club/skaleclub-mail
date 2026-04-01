@@ -16,6 +16,7 @@ import {
     AlertCircle
 } from 'lucide-react'
 import { OutreachLayout } from '../../components/outreach/OutreachLayout'
+import { PaginationControls } from '../../components/ui/PaginationControls'
 import { apiFetch, apiRequest } from '../../lib/api-client'
 import { useOrganization } from '../../hooks/useOrganization'
 
@@ -36,14 +37,16 @@ interface EmailAccount {
 
 interface EmailAccountsResponse {
     accounts: EmailAccount[]
-    total: number
+    pagination: { page: number; limit: number; total: number; totalPages: number }
 }
 
-async function fetchEmailAccounts(organizationId: string): Promise<EmailAccountsResponse> {
-    const data = await apiFetch<{ emailAccounts?: EmailAccount[] }>(`/api/outreach/email-accounts?organizationId=${organizationId}`)
+async function fetchEmailAccounts(organizationId: string, page = 1, limit = 25): Promise<EmailAccountsResponse> {
+    const data = await apiFetch<{ emailAccounts?: EmailAccount[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }>(
+        `/api/outreach/email-accounts?organizationId=${organizationId}&page=${page}&limit=${limit}`
+    )
     return {
         accounts: data.emailAccounts || [],
-        total: (data.emailAccounts || []).length,
+        pagination: data.pagination || { page: 1, limit: 25, total: 0, totalPages: 0 },
     }
 }
 
@@ -202,11 +205,12 @@ function InboxCard({ account, onVerify, onDelete }: {
 
 export function InboxesPage() {
     const { currentOrganization } = useOrganization()
+    const [page, setPage] = React.useState(1)
     const queryClient = useQueryClient()
 
     const { data: accountsData, isLoading } = useQuery({
-        queryKey: ['email-accounts', currentOrganization?.id],
-        queryFn: () => fetchEmailAccounts(currentOrganization!.id),
+        queryKey: ['email-accounts', currentOrganization?.id, page],
+        queryFn: () => fetchEmailAccounts(currentOrganization!.id, page, 25),
         enabled: !!currentOrganization,
     })
 
@@ -234,7 +238,7 @@ export function InboxesPage() {
         }
     }
 
-    const totalAccounts = accountsData?.total || 0
+    const totalAccounts = accountsData?.pagination?.total || 0
     const verifiedAccounts = accountsData?.accounts?.filter(a => a.status === 'verified').length || 0
     const totalSentToday = accountsData?.accounts?.reduce((sum, a) => sum + a.sentToday, 0) || 0
     const totalDailyLimit = accountsData?.accounts?.reduce((sum, a) => sum + a.dailyLimit, 0) || 0
@@ -330,6 +334,7 @@ export function InboxesPage() {
                         ))}
                     </div>
                 ) : accountsData?.accounts && accountsData.accounts.length > 0 ? (
+                    <>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {accountsData.accounts.map((account) => (
                             <InboxCard
@@ -340,6 +345,16 @@ export function InboxesPage() {
                             />
                         ))}
                     </div>
+                    {accountsData?.pagination && accountsData.pagination.totalPages > 1 && (
+                        <PaginationControls
+                            page={accountsData.pagination.page}
+                            totalPages={accountsData.pagination.totalPages}
+                            total={accountsData.pagination.total}
+                            itemName="inboxes"
+                            onPageChange={setPage}
+                        />
+                    )}
+                    </>
                 ) : (
                     <div className="bg-card rounded-lg border border-border p-12 text-center">
                         <Mail className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
