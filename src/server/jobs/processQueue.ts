@@ -1,7 +1,7 @@
 import { createTransport } from 'nodemailer'
 import { db } from '../../db'
 import { deliveries, messages, organizations } from '../../db/schema'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, inArray } from 'drizzle-orm'
 import { incrementStat, fireWebhooks } from '../lib/tracking'
 
 let running = false
@@ -32,8 +32,22 @@ export async function processQueue(): Promise<void> {
             return true
         })
 
+        // Batch-load all unique messages for these deliveries
+        const messageIds = [...new Set(readyDeliveries.map((d) => d.messageId))]
+        const allMessages = await db.query.messages.findMany({
+            where: inArray(messages.id, messageIds),
+        })
+        const messagesMap = new Map(allMessages.map((m) => [m.id, m]))
+
+        // Batch-load all unique organizations from the fetched messages
+        const orgIds = [...new Set(allMessages.map((m) => m.organizationId))]
+        const allOrgs = await db.query.organizations.findMany({
+            where: inArray(organizations.id, orgIds),
+        })
+        const orgsMap = new Map(allOrgs.map((o) => [o.id, o]))
+
         for (const delivery of readyDeliveries) {
-            await processDelivery(delivery)
+            await processDelivery(delivery, messagesMap, orgsMap)
         }
     } catch (err) {
         console.error('[processQueue] Error:', err)
@@ -42,11 +56,13 @@ export async function processQueue(): Promise<void> {
     }
 }
 
-async function processDelivery(delivery: typeof deliveries.$inferSelect): Promise<void> {
+async function processDelivery(
+    delivery: typeof deliveries.$inferSelect,
+    messagesMap: Map<string, typeof messages.$inferSelect>,
+    orgsMap: Map<string, typeof organizations.$inferSelect>,
+): Promise<void> {
     try {
-        const message = await db.query.messages.findFirst({
-            where: eq(messages.id, delivery.messageId),
-        })
+        const message = messagesMap.get(delivery.messageId)
 
         if (!message) {
             await db.update(deliveries)
@@ -57,9 +73,7 @@ async function processDelivery(delivery: typeof deliveries.$inferSelect): Promis
 
         if (message.held) return
 
-        const org = await db.query.organizations.findFirst({
-            where: eq(organizations.id, message.organizationId),
-        })
+        const org = orgsMap.get(message.organizationId)
 
         if (!org) {
             await db.update(deliveries)

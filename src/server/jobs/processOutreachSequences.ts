@@ -318,26 +318,30 @@ export async function resetDailyLimits(): Promise<void> {
 }
 
 export async function markCompletedCampaigns(): Promise<void> {
-    const activeCampaigns = await db.query.campaigns.findMany({
-        where: eq(campaigns.status, 'active')
-    })
+    // Find all active campaigns that have zero incomplete leads
+    // Using a NOT EXISTS subquery — single query instead of N queries
+    const completedCampaigns = await db
+        .select({ id: campaigns.id })
+        .from(campaigns)
+        .where(
+            and(
+                eq(campaigns.status, 'active'),
+                sql`NOT EXISTS (
+                    SELECT 1 FROM campaign_leads
+                    WHERE campaign_leads.campaign_id = ${campaigns.id}
+                    AND campaign_leads.status NOT IN ('replied', 'bounced', 'unsubscribed')
+                )`
+            )
+        )
 
-    for (const campaign of activeCampaigns) {
-        const incompleteLeads = await db.query.campaignLeads.findMany({
-            where: and(
-                eq(campaignLeads.campaignId, campaign.id),
-                notInArray(campaignLeads.status, ['replied', 'bounced', 'unsubscribed']),
-            ),
-            limit: 1
+    if (completedCampaigns.length === 0) return
+
+    await db.update(campaigns)
+        .set({
+            status: 'completed',
+            completedAt: new Date()
         })
+        .where(inArray(campaigns.id, completedCampaigns.map(c => c.id)))
 
-        if (incompleteLeads.length === 0) {
-            await db.update(campaigns)
-                .set({
-                    status: 'completed',
-                    completedAt: new Date()
-                })
-                .where(eq(campaigns.id, campaign.id))
-        }
-    }
+    console.log(`[markCompletedCampaigns] Marked ${completedCampaigns.length} campaigns as completed`)
 }
