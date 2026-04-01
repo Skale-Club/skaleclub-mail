@@ -1,4 +1,4 @@
-import { sql, getTableName, type Table } from 'drizzle-orm'
+import { sql, getTableName, type Table, type InferSelectModel } from 'drizzle-orm'
 import { z } from 'zod'
 import type { db as DbType } from '../../db'
 
@@ -20,9 +20,9 @@ export interface PaginatedResult<T> {
     pagination: PaginationMeta
 }
 
-export async function paginate<T>(
+export async function paginate<T extends Table>(
     database: typeof DbType,
-    table: Table,
+    table: T,
     options: {
         where?: any
         page: number
@@ -31,7 +31,7 @@ export async function paginate<T>(
         with?: Record<string, any>
         columns?: Record<string, boolean>
     }
-): Promise<PaginatedResult<T>> {
+): Promise<PaginatedResult<InferSelectModel<T>>> {
     const { where, page, limit, orderBy, with: withRelations, columns } = options
     const offset = (page - 1) * limit
 
@@ -58,7 +58,7 @@ export async function paginate<T>(
     })
 
     return {
-        data: data as T[],
+        data: data as InferSelectModel<T>[],
         pagination: {
             page,
             limit,
