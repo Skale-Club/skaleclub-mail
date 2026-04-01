@@ -112,7 +112,14 @@ router.get('/', async (req: Request, res: Response) => {
             with: {
                 sequences: {
                     with: {
-                        steps: true,
+                        steps: {
+                            columns: {
+                                htmlBody: false,
+                                plainBody: false,
+                                htmlBodyB: false,
+                                plainBodyB: false,
+                            },
+                        },
                     },
                 },
             },
@@ -850,7 +857,28 @@ router.get('/:campaignId/leads', async (req: Request, res: Response) => {
             with: {
                 lead: true,
                 assignedEmailAccount: true,
-                currentStep: true,
+                currentStep: {
+                    columns: {
+                        id: true,
+                        sequenceId: true,
+                        stepOrder: true,
+                        type: true,
+                        delayHours: true,
+                        subject: true,
+                        abTestEnabled: true,
+                        abTestPercentage: true,
+                        totalSent: true,
+                        totalOpens: true,
+                        totalClicks: true,
+                        totalReplies: true,
+                        createdAt: true,
+                        updatedAt: true,
+                        htmlBody: false,
+                        plainBody: false,
+                        htmlBodyB: false,
+                        plainBodyB: false,
+                    },
+                },
             },
             orderBy: (campaignLeads, { desc }) => [desc(campaignLeads.createdAt)],
         })

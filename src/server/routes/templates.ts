@@ -88,6 +88,10 @@ router.get('/', async (req: Request, res: Response) => {
 
         const templatesList = await db.query.templates.findMany({
             where: and(...conditions),
+            columns: {
+                htmlBody: false,
+                plainBody: false,
+            },
             orderBy: [desc(templates.createdAt)],
         })
 
