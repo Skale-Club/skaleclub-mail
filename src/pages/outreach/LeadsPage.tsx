@@ -15,6 +15,7 @@ import {
     FileText
 } from 'lucide-react'
 import { OutreachLayout } from '../../components/outreach/OutreachLayout'
+import { PaginationControls } from '../../components/ui/PaginationControls'
 import { apiFetch, apiRequest } from '../../lib/api-client'
 import { useOrganization } from '../../hooks/useOrganization'
 
@@ -45,19 +46,21 @@ interface LeadList {
 
 interface LeadsResponse {
     leads: Lead[]
-    total: number
+    pagination: { page: number; limit: number; total: number; totalPages: number }
 }
 
-async function fetchLeads(organizationId: string, params: { status?: string; listId?: string; search?: string }): Promise<LeadsResponse> {
+async function fetchLeads(organizationId: string, params: { status?: string; listId?: string; search?: string; page?: number; limit?: number }): Promise<LeadsResponse> {
     const query = new URLSearchParams({ organizationId })
     if (params.status && params.status !== 'all') query.set('status', params.status)
     if (params.listId && params.listId !== 'all') query.set('leadListId', params.listId)
     if (params.search) query.set('search', params.search)
+    if (params.page) query.set('page', String(params.page))
+    if (params.limit) query.set('limit', String(params.limit))
 
-    const data = await apiFetch<{ leads?: Lead[]; pagination?: { total?: number } }>(`/api/outreach/leads?${query.toString()}`)
+    const data = await apiFetch<{ leads?: Lead[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }>(`/api/outreach/leads?${query.toString()}`)
     return {
         leads: data.leads || [],
-        total: data.pagination?.total || 0,
+        pagination: data.pagination || { page: 1, limit: 25, total: 0, totalPages: 0 },
     }
 }
 
@@ -162,11 +165,12 @@ export function LeadsPage() {
     const [statusFilter, setStatusFilter] = React.useState('all')
     const [listFilter, setListFilter] = React.useState('all')
     const [selectedLeads, setSelectedLeads] = React.useState<string[]>([])
+    const [page, setPage] = React.useState(1)
     const queryClient = useQueryClient()
 
     const { data: leadsData, isLoading: leadsLoading } = useQuery({
-        queryKey: ['leads', currentOrganization?.id, statusFilter, listFilter, search],
-        queryFn: () => fetchLeads(currentOrganization!.id, { status: statusFilter, listId: listFilter, search }),
+        queryKey: ['leads', currentOrganization?.id, statusFilter, listFilter, search, page],
+        queryFn: () => fetchLeads(currentOrganization!.id, { status: statusFilter, listId: listFilter, search, page, limit: 25 }),
         enabled: !!currentOrganization,
     })
 
@@ -243,7 +247,7 @@ export function LeadsPage() {
                             <div>
                                 <p className="text-sm text-muted-foreground">Total Leads</p>
                                 <p className="text-xl font-semibold text-foreground">
-                                    {leadsData?.total || 0}
+                                    {leadsData?.pagination?.total || 0}
                                 </p>
                             </div>
                         </div>
@@ -297,7 +301,7 @@ export function LeadsPage() {
                             type="text"
                             placeholder="Search leads by name or email..."
                             value={search}
-                            onChange={(e) => setSearch(e.target.value)}
+                            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
                             className="w-full pl-10 pr-4 py-2 border border-input rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
                         />
                     </div>
@@ -305,7 +309,7 @@ export function LeadsPage() {
                         <Filter className="w-5 h-5 text-muted-foreground" />
                         <select
                             value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
+                            onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
                             className="px-3 py-2 border border-input rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary"
                         >
                             <option value="all">All Status</option>
@@ -319,7 +323,7 @@ export function LeadsPage() {
                         </select>
                         <select
                             value={listFilter}
-                            onChange={(e) => setListFilter(e.target.value)}
+                            onChange={(e) => { setListFilter(e.target.value); setPage(1) }}
                             className="px-3 py-2 border border-input rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary"
                         >
                             <option value="all">All Lists</option>
@@ -365,6 +369,7 @@ export function LeadsPage() {
                             ))}
                         </div>
                     ) : leadsData?.leads && leadsData.leads.length > 0 ? (
+                        <>
                         <div className="overflow-x-auto">
                             <table className="w-full">
                                 <thead>
@@ -393,6 +398,16 @@ export function LeadsPage() {
                                 </tbody>
                             </table>
                         </div>
+                        {leadsData?.pagination && leadsData.pagination.totalPages > 1 && (
+                            <PaginationControls
+                                page={leadsData.pagination.page}
+                                totalPages={leadsData.pagination.totalPages}
+                                total={leadsData.pagination.total}
+                                itemName="leads"
+                                onPageChange={setPage}
+                            />
+                        )}
+                        </>
                     ) : (
                         <div className="p-12 text-center">
                             <Users className="w-16 h-16 text-muted-foreground/50 mx-auto mb-4" />
