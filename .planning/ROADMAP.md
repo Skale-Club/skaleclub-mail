@@ -11,7 +11,7 @@
 ## Phases
 
 - [x] **Phase 05: RLS & Migration Safety** — Fix broken RLS policies and establish safe index migration workflow (completed 2026-03-31)
-- [ ] **Phase 06: Index Foundation** — Add all FK and composite indexes to schema.ts, apply via CONCURRENTLY
+- [x] **Phase 06: Index Foundation** — Add all FK and composite indexes to schema.ts, apply via CONCURRENTLY (completed 2026-04-01)
 - [ ] **Phase 07: Pagination** — Add paginated responses to all list endpoints
 - [ ] **Phase 08: Query Optimization** — Fix N+1 patterns, add column filtering, scope unbounded queries
 - [ ] **Phase 09: Schema Hardening** — Add CHECK constraints, deprecate old migration file
@@ -46,7 +46,7 @@ Plans:
   4. Send pipeline cron query filters on `nextScheduledAt` without scanning all leads — verified with EXPLAIN ANALYZE
   5. Open/click tracking lookup by `messages.token` returns in under 10ms
   6. All index definitions exist in `src/db/schema.ts` using Drizzle `index()` API — `013_add_performance_indexes.sql` is superseded
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 ### Phase 07: Pagination
 **Goal:** All list endpoints return paginated results so that page loads don't degrade as data grows
@@ -59,7 +59,11 @@ Plans:
   4. `GET /api/email-accounts` returns paginated results
   5. `GET /api/outreach/sequences` returns paginated results
   6. List endpoints accept `?page=1&pageSize=25` query parameters and return correct `total` count
-**Plans:** TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 07-01-PLAN.md — Shared pagination utility + server-side pagination (campaigns, lead-lists, email-accounts, sequences) — PAGE-01, PAGE-03, PAGE-04, PAGE-05
+- [ ] 07-02-PLAN.md — Frontend pagination controls (all outreach list pages) — PAGE-01, PAGE-02, PAGE-03, PAGE-04, PAGE-05
 
 ### Phase 08: Query Optimization
 **Goal:** Background jobs and list endpoints load data efficiently with no N+1 patterns and no oversized payloads
@@ -88,8 +92,8 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 05. RLS & Migration Safety | 2/2 | Complete    | 2026-03-31 |
-| 06. Index Foundation | 1/2 | In Progress|  |
-| 07. Pagination | 0/0 | Not started | — |
+| 06. Index Foundation | 1/2 | Complete    | 2026-04-01 |
+| 07. Pagination | 0/2 | Not started | — |
 | 08. Query Optimization | 0/0 | Not started | — |
 | 09. Schema Hardening | 0/0 | Not started | — |
 
