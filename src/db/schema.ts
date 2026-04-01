@@ -8,6 +8,7 @@ import {
     jsonb,
     pgEnum,
     uniqueIndex,
+    index,
     bigint,
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
@@ -103,7 +104,9 @@ export const domains = pgTable('domains', {
     returnPathError: text('return_path_error'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+}, (table) => ({
+    idxDomainsOrganizationId: index('idx_domains_organization_id').on(table.organizationId),
+}))
 
 // Credentials table
 export const credentials = pgTable('credentials', {
@@ -117,7 +120,9 @@ export const credentials = pgTable('credentials', {
     expiresAt: timestamp('expires_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+}, (table) => ({
+    idxCredentialsOrganizationId: index('idx_credentials_organization_id').on(table.organizationId),
+}))
 
 // Outlook mailboxes
 export const outlookMailboxes = pgTable('outlook_mailboxes', {
@@ -139,6 +144,7 @@ export const outlookMailboxes = pgTable('outlook_mailboxes', {
 }, (table) => ({
     orgEmailUnique: uniqueIndex('outlook_mailboxes_org_email_unique').on(table.organizationId, table.email),
     microsoftUserUnique: uniqueIndex('outlook_mailboxes_microsoft_user_unique').on(table.microsoftUserId),
+    idxOutlookMailboxesOrganizationId: index('idx_outlook_mailboxes_organization_id').on(table.organizationId),
 }))
 
 // Routes table
@@ -157,7 +163,9 @@ export const routes = pgTable('routes', {
     spamThreshold: integer('spam_threshold').default(5),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+}, (table) => ({
+    idxRoutesOrganizationId: index('idx_routes_organization_id').on(table.organizationId),
+}))
 
 // SMTP Endpoints
 export const smtpEndpoints = pgTable('smtp_endpoints', {
@@ -171,7 +179,9 @@ export const smtpEndpoints = pgTable('smtp_endpoints', {
     password: text('password'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+}, (table) => ({
+    idxSmtpEndpointsOrganizationId: index('idx_smtp_endpoints_organization_id').on(table.organizationId),
+}))
 
 // HTTP Endpoints
 export const httpEndpoints = pgTable('http_endpoints', {
@@ -184,7 +194,9 @@ export const httpEndpoints = pgTable('http_endpoints', {
     includeOriginal: boolean('include_original').default(true).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+}, (table) => ({
+    idxHttpEndpointsOrganizationId: index('idx_http_endpoints_organization_id').on(table.organizationId),
+}))
 
 // Address Endpoints
 export const addressEndpoints = pgTable('address_endpoints', {
@@ -194,7 +206,9 @@ export const addressEndpoints = pgTable('address_endpoints', {
     emailAddress: text('email_address').notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+}, (table) => ({
+    idxAddressEndpointsOrganizationId: index('idx_address_endpoints_organization_id').on(table.organizationId),
+}))
 
 // Messages table
 export const messages = pgTable('messages', {
@@ -232,7 +246,11 @@ export const messages = pgTable('messages', {
     openedAt: timestamp('opened_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+}, (table) => ({
+    idxMessagesOrganizationId: index('idx_messages_organization_id').on(table.organizationId),
+    idxMessagesOrgStatus: index('idx_messages_org_status').on(table.organizationId, table.status),
+    idxMessagesToken: index('idx_messages_token').on(table.token),
+}))
 
 // Message deliveries
 export const deliveries = pgTable('deliveries', {
@@ -252,7 +270,10 @@ export const deliveries = pgTable('deliveries', {
     deliveredAt: timestamp('delivered_at'),
     bouncedAt: timestamp('bounced_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
-})
+}, (table) => ({
+    idxDeliveriesMessageId: index('idx_deliveries_message_id').on(table.messageId),
+    idxDeliveriesOrganizationId: index('idx_deliveries_organization_id').on(table.organizationId),
+}))
 
 // Webhooks table
 export const webhooks = pgTable('webhooks', {
@@ -265,7 +286,9 @@ export const webhooks = pgTable('webhooks', {
     events: jsonb('events').notNull().default([]),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+}, (table) => ({
+    idxWebhooksOrganizationId: index('idx_webhooks_organization_id').on(table.organizationId),
+}))
 
 // Webhook requests log
 export const webhookRequests = pgTable('webhook_requests', {
@@ -279,7 +302,9 @@ export const webhookRequests = pgTable('webhook_requests', {
     attempts: integer('attempts').default(1).notNull(),
     error: text('error'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
-})
+}, (table) => ({
+    idxWebhookRequestsWebhookId: index('idx_webhook_requests_webhook_id').on(table.webhookId),
+}))
 
 // Email templates
 export const templates = pgTable('templates', {
@@ -295,6 +320,7 @@ export const templates = pgTable('templates', {
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
     orgSlugUnique: uniqueIndex('template_org_slug_unique').on(table.organizationId, table.slug),
+    idxTemplatesOrganizationId: index('idx_templates_organization_id').on(table.organizationId),
 }))
 
 // Track domains (for open/click tracking)
@@ -307,7 +333,9 @@ export const trackDomains = pgTable('track_domains', {
     verifiedAt: timestamp('verified_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+}, (table) => ({
+    idxTrackDomainsOrganizationId: index('idx_track_domains_organization_id').on(table.organizationId),
+}))
 
 // Suppression list
 export const suppressions = pgTable('suppressions', {
@@ -318,6 +346,7 @@ export const suppressions = pgTable('suppressions', {
     createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
     orgEmailUnique: uniqueIndex('suppression_org_email_unique').on(table.organizationId, table.emailAddress),
+    idxSuppressionsOrganizationId: index('idx_suppressions_organization_id').on(table.organizationId),
 }))
 
 // Statistics (aggregated)
@@ -337,6 +366,7 @@ export const statistics = pgTable('statistics', {
     createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
     orgDateUnique: uniqueIndex('stats_org_date_unique').on(table.organizationId, table.date),
+    idxStatisticsOrganizationId: index('idx_statistics_organization_id').on(table.organizationId),
 }))
 
 export const systemBranding = pgTable('system_branding', {
@@ -650,6 +680,8 @@ export const emailAccounts = pgTable('email_accounts', {
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
     orgEmailUnique: uniqueIndex('email_account_org_email_unique').on(table.organizationId, table.email),
+    idxEmailAccountsOrganizationId: index('idx_email_accounts_organization_id').on(table.organizationId),
+    idxEmailAccountsOutlookMailboxId: index('idx_email_accounts_outlook_mailbox_id').on(table.outlookMailboxId),
 }))
 
 // Lead Lists (groups of leads)
@@ -662,7 +694,9 @@ export const leadLists = pgTable('lead_lists', {
     leadCount: integer('lead_count').default(0).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+}, (table) => ({
+    idxLeadListsOrganizationId: index('idx_lead_lists_organization_id').on(table.organizationId),
+}))
 
 // Leads (Prospects)
 export const leads = pgTable('leads', {
@@ -702,6 +736,8 @@ export const leads = pgTable('leads', {
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
     orgEmailUnique: uniqueIndex('lead_org_email_unique').on(table.organizationId, table.email),
+    idxLeadsOrganizationId: index('idx_leads_organization_id').on(table.organizationId),
+    idxLeadsLeadListId: index('idx_leads_lead_list_id').on(table.leadListId),
 }))
 
 // Campaigns
@@ -737,7 +773,9 @@ export const campaigns = pgTable('campaigns', {
     completedAt: timestamp('completed_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+}, (table) => ({
+    idxCampaignsOrganizationId: index('idx_campaigns_organization_id').on(table.organizationId),
+}))
 
 // Sequences (email sequences for campaigns)
 export const sequences = pgTable('sequences', {
@@ -748,7 +786,9 @@ export const sequences = pgTable('sequences', {
     isActive: boolean('is_active').default(true).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+}, (table) => ({
+    idxSequencesCampaignId: index('idx_sequences_campaign_id').on(table.campaignId),
+}))
 
 // Sequence Steps (individual emails in a sequence)
 export const sequenceSteps = pgTable('sequence_steps', {
@@ -780,6 +820,7 @@ export const sequenceSteps = pgTable('sequence_steps', {
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
     sequenceOrderUnique: uniqueIndex('sequence_step_order_unique').on(table.sequenceId, table.stepOrder),
+    idxSequenceStepsSequenceId: index('idx_sequence_steps_sequence_id').on(table.sequenceId),
 }))
 
 // Campaign Leads (junction table - leads assigned to campaigns)
@@ -809,6 +850,10 @@ export const campaignLeads = pgTable('campaign_leads', {
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
     campaignLeadUnique: uniqueIndex('campaign_lead_unique').on(table.campaignId, table.leadId),
+    idxCampaignLeadsCampaignId: index('idx_campaign_leads_campaign_id').on(table.campaignId),
+    idxCampaignLeadsLeadId: index('idx_campaign_leads_lead_id').on(table.leadId),
+    idxCampaignLeadsAssignedEmailAccountId: index('idx_campaign_leads_assigned_email_account_id').on(table.assignedEmailAccountId),
+    idxCampaignLeadsCurrentStepId: index('idx_campaign_leads_current_step_id').on(table.currentStepId),
 }))
 
 // Outreach Emails (sent emails from campaigns)
@@ -844,6 +889,11 @@ export const outreachEmails = pgTable('outreach_emails', {
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
     campaignLeadStepUnique: uniqueIndex('outreach_emails_campaign_lead_step_unique').on(table.campaignLeadId, table.sequenceStepId),
+    idxOutreachEmailsOrganizationId: index('idx_outreach_emails_organization_id').on(table.organizationId),
+    idxOutreachEmailsCampaignId: index('idx_outreach_emails_campaign_id').on(table.campaignId),
+    idxOutreachEmailsCampaignLeadId: index('idx_outreach_emails_campaign_lead_id').on(table.campaignLeadId),
+    idxOutreachEmailsSequenceStepId: index('idx_outreach_emails_sequence_step_id').on(table.sequenceStepId),
+    idxOutreachEmailsEmailAccountId: index('idx_outreach_emails_email_account_id').on(table.emailAccountId),
 }))
 
 // Outreach Analytics (daily aggregated stats)
@@ -865,6 +915,9 @@ export const outreachAnalytics = pgTable('outreach_analytics', {
     createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
     orgDateUnique: uniqueIndex('outreach_analytics_org_date_unique').on(table.organizationId, table.date, table.campaignId, table.emailAccountId),
+    idxOutreachAnalyticsOrganizationId: index('idx_outreach_analytics_organization_id').on(table.organizationId),
+    idxOutreachAnalyticsCampaignId: index('idx_outreach_analytics_campaign_id').on(table.campaignId),
+    idxOutreachAnalyticsEmailAccountId: index('idx_outreach_analytics_email_account_id').on(table.emailAccountId),
 }))
 
 // Outreach Relations
@@ -1069,7 +1122,9 @@ export const mailboxes = pgTable('mailboxes', {
     syncError: text('sync_error'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+}, (table) => ({
+    idxMailboxesUserId: index('idx_mailboxes_user_id').on(table.userId),
+}))
 
 // Mail Folders (INBOX, SENT, DRAFTS, etc.)
 export const mailFolders = pgTable('mail_folders', {
@@ -1084,6 +1139,7 @@ export const mailFolders = pgTable('mail_folders', {
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
     mailboxRemoteUnique: uniqueIndex('mail_folder_mailbox_remote_unique').on(table.mailboxId, table.remoteId),
+    idxMailFoldersMailboxId: index('idx_mail_folders_mailbox_id').on(table.mailboxId),
 }))
 
 // Mail Messages (emails)
@@ -1124,6 +1180,8 @@ export const mailMessages = pgTable('mail_messages', {
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
     mailboxUidUnique: uniqueIndex('mail_message_mailbox_uid_unique').on(table.mailboxId, table.remoteUid),
+    idxMailMessagesMailboxId: index('idx_mail_messages_mailbox_id').on(table.mailboxId),
+    idxMailMessagesFolderId: index('idx_mail_messages_folder_id').on(table.folderId),
 }))
 
 // Email Filters
@@ -1139,7 +1197,9 @@ export const mailFilters = pgTable('mail_filters', {
     priority: integer('priority').default(0).notNull(), // Higher = runs first
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+}, (table) => ({
+    idxMailFiltersMailboxId: index('idx_mail_filters_mailbox_id').on(table.mailboxId),
+}))
 
 // Email Signatures
 export const signatures = pgTable('signatures', {
@@ -1150,7 +1210,9 @@ export const signatures = pgTable('signatures', {
     isDefault: boolean('is_default').default(false).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+}, (table) => ({
+    idxSignaturesMailboxId: index('idx_signatures_mailbox_id').on(table.mailboxId),
+}))
 
 // Mailbox Relations
 export const mailboxesRelations = relations(mailboxes, ({ one, many }) => ({
@@ -1209,6 +1271,7 @@ export const contacts = pgTable('contacts', {
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
     userEmailUnique: uniqueIndex('contact_user_email_unique').on(table.userId, table.email),
+    idxContactsUserId: index('idx_contacts_user_id').on(table.userId),
 }))
 
 export const contactsRelations = relations(contacts, ({ one }) => ({
@@ -1250,7 +1313,9 @@ export const userNotifications = pgTable('user_notifications', {
     metadata: jsonb('metadata').default({}),
     read: boolean('read').default(false).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
-})
+}, (table) => ({
+    idxUserNotificationsUserId: index('idx_user_notifications_user_id').on(table.userId),
+}))
 
 export const userNotificationsRelations = relations(userNotifications, ({ one }) => ({
     user: one(users, {
