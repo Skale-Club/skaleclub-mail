@@ -75,10 +75,10 @@ Plans:
   3. `processOutreachSequences` lead query includes `WHERE nextScheduledAt <= now()` and uses the index from Phase 06 — no full table scan (verified with EXPLAIN ANALYZE)
   4. Suppression and idempotency checks batch-loaded before lead loop (2 queries instead of 2*N)
   5. Cascade.ts, messages.ts POST, and processHeld.ts use batch queries instead of per-item loops
-**Plans:** 4 plans (all Wave 1, parallel)
+**Plans:** 1/4 plans executed
 
 Plans:
-- [ ] 08-01-PLAN.md — processQueue.ts N+1 fix (batch-load messages + orgs) — QRY-01
+- [x] 08-01-PLAN.md — processQueue.ts N+1 fix (batch-load messages + orgs) — QRY-01
 - [ ] 08-02-PLAN.md — Column filtering on list endpoints (exclude large text columns) — QRY-02
 - [ ] 08-03-PLAN.md — Outreach sequences N+1 fixes (suppression, idempotency, limit, markCompleted) — QRY-03
 - [ ] 08-04-PLAN.md — Other N+1 fixes (cascade, delivery inserts, held updates) — QRY-01, QRY-03
@@ -102,7 +102,7 @@ Plans:
 | 05. RLS & Migration Safety | 2/2 | Complete    | 2026-03-31 |
 | 06. Index Foundation | 1/2 | Complete    | 2026-04-01 |
 | 07. Pagination | 2/2 | Complete    | 2026-04-01 |
-| 08. Query Optimization | 0/4 | Not started | — |
+| 08. Query Optimization | 1/4 | In Progress|  |
 | 09. Schema Hardening | 0/0 | Not started | — |
 
 ---

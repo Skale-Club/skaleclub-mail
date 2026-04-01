@@ -23,14 +23,14 @@
 ### Pagination
 
 - [x] **PAGE-01**: Pagination on campaigns list endpoint — `GET /api/outreach/campaigns` returns `{ items, pagination: { page, pageSize, total } }` instead of all rows
-- [ ] **PAGE-02**: Pagination on leads list endpoint — `GET /api/outreach/leads` returns paginated results
+- [x] **PAGE-02**: Pagination on leads list endpoint — `GET /api/outreach/leads` returns paginated results
 - [x] **PAGE-03**: Pagination on lead lists endpoint — `GET /api/outreach/lead-lists` returns paginated results
 - [x] **PAGE-04**: Pagination on email accounts endpoint — `GET /api/email-accounts` returns paginated results
 - [x] **PAGE-05**: Pagination on sequences endpoint — `GET /api/outreach/sequences` returns paginated results
 
 ### Query Optimization
 
-- [ ] **QRY-01**: processQueue.ts N+1 fixed — batch-load messages and orgs before delivery loop (3*N queries → 2 queries)
+- [x] **QRY-01**: processQueue.ts N+1 fixed — batch-load messages and orgs before delivery loop (3*N queries → 2 queries)
 - [ ] **QRY-02**: Column filtering on list endpoints — exclude `htmlBody`, `plainBody`, and other large text columns from list responses
 - [ ] **QRY-03**: processOutreachSequences query scoped — lead query includes `WHERE nextScheduledAt <= now()` with index support; no full table scan
 
@@ -72,11 +72,11 @@ Deferred to future release.
 | IDX-05 | Phase 06 | Complete |
 | IDX-06 | Phase 06 | Complete |
 | PAGE-01 | Phase 07 | Complete |
-| PAGE-02 | Phase 07 | Pending |
+| PAGE-02 | Phase 07 | Complete |
 | PAGE-03 | Phase 07 | Complete |
 | PAGE-04 | Phase 07 | Complete |
 | PAGE-05 | Phase 07 | Complete |
-| QRY-01 | Phase 08 | Pending |
+| QRY-01 | Phase 08 | Complete |
 | QRY-02 | Phase 08 | Pending |
 | QRY-03 | Phase 08 | Pending |
 | SCH-01 | Phase 09 | Pending |
