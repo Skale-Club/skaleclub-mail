@@ -1,6 +1,6 @@
 import { db } from '../../db'
 import { messages } from '../../db/schema'
-import { eq, and, lt, isNotNull } from 'drizzle-orm'
+import { eq, and, lt, isNotNull, inArray } from 'drizzle-orm'
 
 let running = false
 
@@ -20,7 +20,7 @@ export async function processHeldMessages(): Promise<void> {
             limit: 100,
         })
 
-        for (const msg of heldMessages) {
+        if (heldMessages.length > 0) {
             await db.update(messages)
                 .set({
                     held: false,
@@ -29,7 +29,7 @@ export async function processHeldMessages(): Promise<void> {
                     status: 'queued',
                     updatedAt: now,
                 })
-                .where(eq(messages.id, msg.id))
+                .where(inArray(messages.id, heldMessages.map(m => m.id)))
         }
 
         if (heldMessages.length > 0) {

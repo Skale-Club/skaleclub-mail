@@ -5,7 +5,7 @@ import {
     addressEndpoints, domains, templates, trackDomains,
     suppressions, statistics, organizationUsers, organizations, users,
 } from '../../db/schema'
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { deleteUserMailbox } from './native-mail'
 
 export async function deleteOrganizationCascade(organizationId: string): Promise<void> {
@@ -16,8 +16,10 @@ export async function deleteOrganizationCascade(organizationId: string): Promise
     const orgWebhooks = await db.select({ id: webhooks.id })
         .from(webhooks)
         .where(eq(webhooks.organizationId, organizationId))
-    for (const wh of orgWebhooks) {
-        await db.delete(webhookRequests).where(eq(webhookRequests.webhookId, wh.id))
+
+    if (orgWebhooks.length > 0) {
+        await db.delete(webhookRequests)
+            .where(inArray(webhookRequests.webhookId, orgWebhooks.map(wh => wh.id)))
     }
 
     await db.delete(webhooks).where(eq(webhooks.organizationId, organizationId))

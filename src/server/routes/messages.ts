@@ -289,13 +289,15 @@ router.post('/', async (req: Request, res: Response) => {
 
         const allRecipients = [...data.to, ...(data.cc || []), ...(data.bcc || [])]
 
-        for (const recipient of allRecipients) {
-            await db.insert(deliveries).values({
-                messageId: message.id,
-                organizationId: data.organizationId,
-                rcptTo: recipient,
-                status: 'pending',
-            })
+        if (allRecipients.length > 0) {
+            await db.insert(deliveries).values(
+                allRecipients.map(recipient => ({
+                    messageId: message.id,
+                    organizationId: data.organizationId,
+                    rcptTo: recipient,
+                    status: 'pending' as const,
+                }))
+            )
         }
 
         if (sendMode === 'outlook' && outlookMailbox) {
