@@ -2,8 +2,9 @@ import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { db } from '../../../db'
 import { leads, leadLists, organizationUsers } from '../../../db/schema'
-import { eq, and, or, like, sql, inArray } from 'drizzle-orm'
+import { eq, and, or, like, sql, inArray, desc } from 'drizzle-orm'
 import { isPlatformAdmin } from '../../lib/admin'
+import { paginate, paginationQuerySchema } from '../../lib/pagination'
 
 const router = Router()
 
@@ -86,12 +87,16 @@ router.get('/lists', async (req: Request, res: Response) => {
             return res.status(403).json({ error: 'Access denied' })
         }
 
-        const lists = await db.query.leadLists.findMany({
+        const { page, limit } = paginationQuerySchema.parse(req.query)
+
+        const result = await paginate(db, leadLists, {
             where: eq(leadLists.organizationId, organizationId),
-            orderBy: (lists, { desc }) => [desc(lists.createdAt)],
+            page,
+            limit,
+            orderBy: desc(leadLists.createdAt),
         })
 
-        res.json({ leadLists: lists })
+        res.json({ leadLists: result.data, pagination: result.pagination })
     } catch (error) {
         console.error('Error fetching lead lists:', error)
         res.status(500).json({ error: 'Internal server error' })

@@ -2,9 +2,10 @@ import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { db } from '../../../db'
 import { emailAccounts, organizationUsers } from '../../../db/schema'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, desc } from 'drizzle-orm'
 import { isPlatformAdmin } from '../../lib/admin'
 import { encryptSecret, decryptSecret } from '../../lib/crypto'
+import { paginate, paginationQuerySchema } from '../../lib/pagination'
 import nodemailer from 'nodemailer'
 import { ImapFlow } from 'imapflow'
 
@@ -92,19 +93,23 @@ router.get('/', async (req: Request, res: Response) => {
             return res.status(403).json({ error: 'Access denied' })
         }
 
-        const accounts = await db.query.emailAccounts.findMany({
+        const { page, limit } = paginationQuerySchema.parse(req.query)
+
+        const result = await paginate(db, emailAccounts, {
             where: eq(emailAccounts.organizationId, organizationId),
-            orderBy: (accounts, { desc }) => [desc(accounts.createdAt)],
+            page,
+            limit,
+            orderBy: desc(emailAccounts.createdAt),
         })
 
         // Remove sensitive data
-        const safeAccounts = accounts.map((account) => ({
+        const safeAccounts = result.data.map((account) => ({
             ...account,
             smtpPassword: undefined,
             imapPassword: undefined,
         }))
 
-        res.json({ emailAccounts: safeAccounts })
+        res.json({ emailAccounts: safeAccounts, pagination: result.pagination })
     } catch (error) {
         console.error('Error fetching email accounts:', error)
         res.status(500).json({ error: 'Internal server error' })
