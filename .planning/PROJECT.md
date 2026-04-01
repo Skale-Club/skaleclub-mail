@@ -39,11 +39,12 @@ A user can create a campaign, build a sequence, add leads, and have emails actua
 - ✓ Composite performance indexes (org+status, campaign+status, token, nextScheduledAt) — v1.1 Phase 06
 - ✓ Shared pagination utility + all list endpoints paginated — v1.1 Phase 07
 - ✓ PaginationControls component on all outreach list pages — v1.1 Phase 07
+- ✓ processQueue.ts batch-loads messages/orgs (3N→3 queries) — v1.1 Phase 08
+- ✓ List endpoints exclude htmlBody/plainBody from SELECT — v1.1 Phase 08
+- ✓ Outreach sequences batch-load suppressions/idempotency — v1.1 Phase 08
 
 ### Active
 
-- [ ] **QRY-01 through QRY-03** — N+1 fixes, column filtering, scoped queries
-- [ ] **SCH-01 through SCH-02** — CHECK constraints, deprecate old migration
 - [ ] **SCH-01 through SCH-02** — CHECK constraints, deprecate old migration
 
 ### Out of Scope
