@@ -144,7 +144,9 @@ export function createSnippet(parsed: ParsedEmail, maxLength = 150): { snippet: 
     }
 }
 
-export function mailMessageToListItem(msg: MailMessage): EmailListItem {
+type MailMessageListItemInput = Omit<MailMessage, 'plainBody' | 'htmlBody' | 'headers' | 'attachments'> & Partial<Pick<MailMessage, 'plainBody' | 'htmlBody'>>
+
+export function mailMessageToListItem(msg: MailMessageListItemInput): EmailListItem {
     const toAddresses = (msg.toAddresses as Array<{ name?: string; address?: string }>) || []
     const { snippet, snippetPlain } = {
         snippet: msg.plainBody?.slice(0, 150) || msg.htmlBody?.slice(0, 150) || '',
