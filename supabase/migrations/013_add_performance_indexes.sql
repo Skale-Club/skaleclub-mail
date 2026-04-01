@@ -1,3 +1,9 @@
+-- DEPRECATED — This migration is superseded.
+-- All indexes are now defined in src/db/schema.ts using Drizzle's index() API.
+-- This file is kept for historical reference only. Do NOT run this migration.
+-- See Phase 06: Index Foundation for details.
+--
+
 -- Performance indexes for frequently queried columns
 -- These indexes target the most common query patterns in the application
 
