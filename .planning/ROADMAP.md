@@ -46,7 +46,7 @@ Plans:
   4. Send pipeline cron query filters on `nextScheduledAt` without scanning all leads — verified with EXPLAIN ANALYZE
   5. Open/click tracking lookup by `messages.token` returns in under 10ms
   6. All index definitions exist in `src/db/schema.ts` using Drizzle `index()` API — `013_add_performance_indexes.sql` is superseded
-**Plans:** TBD
+**Plans:** 1/2 plans executed
 
 ### Phase 07: Pagination
 **Goal:** All list endpoints return paginated results so that page loads don't degrade as data grows
@@ -88,7 +88,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 05. RLS & Migration Safety | 2/2 | Complete    | 2026-03-31 |
-| 06. Index Foundation | 0/0 | Not started | — |
+| 06. Index Foundation | 1/2 | In Progress|  |
 | 07. Pagination | 0/0 | Not started | — |
 | 08. Query Optimization | 0/0 | Not started | — |
 | 09. Schema Hardening | 0/0 | Not started | — |

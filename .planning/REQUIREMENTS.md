@@ -13,12 +13,12 @@
 
 ### Index Foundation
 
-- [ ] **IDX-01**: All foreign key columns indexed — `organizationId`, `campaignId`, `serverId`, `domainId`, `credentialId`, `routeId`, `webhookId`, `leadListId` across all 17+ org-scoped tables
+- [x] **IDX-01**: All foreign key columns indexed — `organizationId`, `campaignId`, `serverId`, `domainId`, `credentialId`, `routeId`, `webhookId`, `leadListId` across all 17+ org-scoped tables
 - [ ] **IDX-02**: Composite index on `messages(organizationId, status)` — dashboard stats queries return in <100ms
 - [ ] **IDX-03**: Composite index on `campaignLeads(campaignId, status)` — campaign lead status counts return in <100ms
 - [ ] **IDX-04**: Index on `campaignLeads.nextScheduledAt` — send pipeline cron job no longer scans all leads; filtered to pending/scheduled only
 - [ ] **IDX-05**: Index on `messages.token` — open/click tracking lookups return in <10ms
-- [ ] **IDX-06**: Index definitions consolidated in `src/db/schema.ts` using Drizzle `index()` API — single source of truth; old `013_add_performance_indexes.sql` deprecated
+- [x] **IDX-06**: Index definitions consolidated in `src/db/schema.ts` using Drizzle `index()` API — single source of truth; old `013_add_performance_indexes.sql` deprecated
 
 ### Pagination
 
@@ -65,12 +65,12 @@ Deferred to future release.
 | DBS-01 | Phase 05 | Complete |
 | DBS-02 | Phase 05 | Complete |
 | DBS-03 | Phase 05 | Complete |
-| IDX-01 | Phase 06 | Pending |
+| IDX-01 | Phase 06 | Complete |
 | IDX-02 | Phase 06 | Pending |
 | IDX-03 | Phase 06 | Pending |
 | IDX-04 | Phase 06 | Pending |
 | IDX-05 | Phase 06 | Pending |
-| IDX-06 | Phase 06 | Pending |
+| IDX-06 | Phase 06 | Complete |
 | PAGE-01 | Phase 07 | Pending |
 | PAGE-02 | Phase 07 | Pending |
 | PAGE-03 | Phase 07 | Pending |
