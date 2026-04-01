@@ -35,10 +35,11 @@ A user can create a campaign, build a sequence, add leads, and have emails actua
 - ✓ RLS policies fixed — org-scoped with is_org_member, no server references — v1.1 Phase 05
 - ✓ Safe index migration workflow (CREATE INDEX CONCURRENTLY) — v1.1 Phase 05
 - ✓ Index health verification script — v1.1 Phase 05
+- ✓ All FK columns indexed (48 indexes across 28 tables) — v1.1 Phase 06
+- ✓ Composite performance indexes (org+status, campaign+status, token, nextScheduledAt) — v1.1 Phase 06
 
 ### Active
 
-- [ ] **IDX-01 through IDX-06** — Index all FK/composite columns, consolidate in schema.ts
 - [ ] **PAGE-01 through PAGE-05** — Pagination on all list endpoints
 - [ ] **QRY-01 through QRY-03** — N+1 fixes, column filtering, scoped queries
 - [ ] **SCH-01 through SCH-02** — CHECK constraints, deprecate old migration
