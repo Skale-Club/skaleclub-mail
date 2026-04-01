@@ -42,10 +42,12 @@ A user can create a campaign, build a sequence, add leads, and have emails actua
 - ✓ processQueue.ts batch-loads messages/orgs (3N→3 queries) — v1.1 Phase 08
 - ✓ List endpoints exclude htmlBody/plainBody from SELECT — v1.1 Phase 08
 - ✓ Outreach sequences batch-load suppressions/idempotency — v1.1 Phase 08
+- ✓ CHECK constraints on sequenceSteps (delayHours >= 0, stepOrder >= 1) — v1.1 Phase 09
+- ✓ Old migration file deprecated with comment header — v1.1 Phase 09
 
 ### Active
 
-- [ ] **SCH-01 through SCH-02** — CHECK constraints, deprecate old migration
+All v1.1 requirements complete. ✓
 
 ### Out of Scope
 
