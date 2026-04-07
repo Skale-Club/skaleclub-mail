@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
-import { Switch } from '../../components/ui/switch'
 import {
     User,
     Bell,
@@ -18,7 +17,6 @@ import {
     AlertCircle,
     CheckCircle,
     ExternalLink,
-    Server,
     Filter,
     Trash,
     PenTool
@@ -95,7 +93,6 @@ export default function MailSettingsPage() {
     const [isLoadingFilters, setIsLoadingFilters] = React.useState(false)
     const [mailboxes, setMailboxes] = React.useState<Mailbox[]>([])
     const [filters, setFilters] = React.useState<MailFilter[]>([])
-    const [isTesting, setIsTesting] = React.useState(false)
     const [isSavingAccount, setIsSavingAccount] = React.useState(false)
     const [isSavingFilter, setIsSavingFilter] = React.useState(false)
     const [signatures, setSignatures] = React.useState<Signature[]>([])
@@ -104,21 +101,7 @@ export default function MailSettingsPage() {
     const [isSavingSignature, setIsSavingSignature] = React.useState(false)
     const [editingSignature, setEditingSignature] = React.useState<Signature | null>(null)
 
-    const [newAccount, setNewAccount] = React.useState({
-        email: '',
-        displayName: '',
-        smtpHost: '',
-        smtpPort: '587',
-        smtpUsername: '',
-        smtpPassword: '',
-        smtpSecure: true,
-        imapHost: '',
-        imapPort: '993',
-        imapUsername: '',
-        imapPassword: '',
-        imapSecure: true,
-        isDefault: false,
-    })
+    const [newAccount, setNewAccount] = React.useState({ email: '', password: '' })
 
     const [newFilter, setNewFilter] = React.useState({
         name: '',
@@ -184,74 +167,20 @@ export default function MailSettingsPage() {
         }
     }, [selectedMailboxId, activeTab, fetchSignatures])
 
-    const handleTestConnection = async () => {
-        setIsTesting(true)
-        try {
-            const data = await apiFetch<{ data: { smtp: boolean; imap: boolean; errors?: string[] } }>('/api/mail/mailboxes/test-connection', {
-                method: 'POST',
-                body: JSON.stringify({
-                    smtpHost: newAccount.smtpHost,
-                    smtpPort: parseInt(newAccount.smtpPort),
-                    smtpSecure: newAccount.smtpSecure,
-                    smtpUsername: newAccount.smtpUsername || newAccount.email,
-                    smtpPassword: newAccount.smtpPassword,
-                    imapHost: newAccount.imapHost,
-                    imapPort: parseInt(newAccount.imapPort),
-                    imapSecure: newAccount.imapSecure,
-                    imapUsername: newAccount.imapUsername || newAccount.email,
-                    imapPassword: newAccount.imapPassword,
-                }),
-            })
-            if (data.data?.smtp && data.data?.imap) {
-                toast({ title: 'Connection successful!', variant: 'success' })
-            } else {
-                toast({ 
-                    title: 'Connection failed', 
-                    description: data.data?.errors?.join(', '),
-                    variant: 'destructive' 
-                })
-            }
-        } catch (error) {
-            toast({ title: 'Connection test failed', variant: 'destructive' })
-        } finally {
-            setIsTesting(false)
-        }
-    }
-
     const handleAddAccount = async () => {
         setIsSavingAccount(true)
         try {
-            await apiFetch('/api/mail/mailboxes', {
+            await apiFetch('/api/mail/mailboxes/connect', {
                 method: 'POST',
-                body: JSON.stringify({
-                    ...newAccount,
-                    smtpPort: parseInt(newAccount.smtpPort),
-                    imapPort: parseInt(newAccount.imapPort),
-                    smtpUsername: newAccount.smtpUsername || newAccount.email,
-                    imapUsername: newAccount.imapUsername || newAccount.email,
-                }),
+                body: JSON.stringify(newAccount),
             })
             setShowAddAccount(false)
-            setNewAccount({
-                email: '',
-                displayName: '',
-                smtpHost: '',
-                smtpPort: '587',
-                smtpUsername: '',
-                smtpPassword: '',
-                smtpSecure: true,
-                imapHost: '',
-                imapPort: '993',
-                imapUsername: '',
-                imapPassword: '',
-                imapSecure: true,
-                isDefault: false,
-            })
+            setNewAccount({ email: '', password: '' })
             fetchMailboxes()
-            toast({ title: 'Account added successfully', variant: 'success' })
+            toast({ title: 'Account connected successfully', variant: 'success' })
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Failed to add account'
-            toast({ title: 'Failed to add account', description: message, variant: 'destructive' })
+            const message = error instanceof Error ? error.message : 'Failed to connect account'
+            toast({ title: 'Failed to connect account', description: message, variant: 'destructive' })
         } finally {
             setIsSavingAccount(false)
         }
@@ -467,161 +396,38 @@ export default function MailSettingsPage() {
                                     {showAddAccount && (
                                         <Card>
                                             <CardHeader>
-                                                <CardTitle>Add New Email Account</CardTitle>
+                                                <CardTitle>Connect Email Account</CardTitle>
                                                 <CardDescription>
-                                                    Enter your email account details
+                                                    Enter the credentials of an account registered on this server
                                                 </CardDescription>
                                             </CardHeader>
-                                            <CardContent className="space-y-6">
+                                            <CardContent className="space-y-4">
                                                 <div>
-                                                    <h4 className="font-medium mb-4">Account Information</h4>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                        <div>
-                                                            <Label>Email Address</Label>
-                                                            <Input
-                                                                type="email"
-                                                                value={newAccount.email}
-                                                                onChange={(e) => setNewAccount({ ...newAccount, email: e.target.value })}
-                                                                placeholder="your@email.com"
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <Label>Display Name</Label>
-                                                            <Input
-                                                                value={newAccount.displayName}
-                                                                onChange={(e) => setNewAccount({ ...newAccount, displayName: e.target.value })}
-                                                                placeholder="Your Name"
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <div className="mt-4">
-                                                        <div className="flex items-center gap-2">
-                                                            <Switch
-                                                                checked={newAccount.isDefault}
-                                                                onCheckedChange={(checked) => setNewAccount({ ...newAccount, isDefault: checked })}
-                                                            />
-                                                            <Label>Set as default account</Label>
-                                                        </div>
-                                                    </div>
+                                                    <Label>Email Address</Label>
+                                                    <Input
+                                                        type="email"
+                                                        value={newAccount.email}
+                                                        onChange={(e) => setNewAccount({ ...newAccount, email: e.target.value })}
+                                                        placeholder="your@email.com"
+                                                        className="mt-1"
+                                                    />
                                                 </div>
-
                                                 <div>
-                                                    <h4 className="font-medium mb-4 flex items-center gap-2">
-                                                        <Server className="w-4 h-4" />
-                                                        SMTP Settings (Sending)
-                                                    </h4>
-                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                        <div>
-                                                            <Label>SMTP Host</Label>
-                                                            <Input
-                                                                value={newAccount.smtpHost}
-                                                                onChange={(e) => setNewAccount({ ...newAccount, smtpHost: e.target.value })}
-                                                                placeholder="smtp.gmail.com"
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <Label>Port</Label>
-                                                            <Input
-                                                                type="number"
-                                                                value={newAccount.smtpPort}
-                                                                onChange={(e) => setNewAccount({ ...newAccount, smtpPort: e.target.value })}
-                                                                placeholder="587"
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <Label>Username (usually same as email)</Label>
-                                                            <Input
-                                                                value={newAccount.smtpUsername}
-                                                                onChange={(e) => setNewAccount({ ...newAccount, smtpUsername: e.target.value })}
-                                                                placeholder="your@email.com"
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                                                        <div>
-                                                            <Label>Password / App Password</Label>
-                                                            <Input
-                                                                type="password"
-                                                                value={newAccount.smtpPassword}
-                                                                onChange={(e) => setNewAccount({ ...newAccount, smtpPassword: e.target.value })}
-                                                                placeholder="••••••••"
-                                                            />
-                                                        </div>
-                                                        <div className="flex items-center gap-2 mt-6">
-                                                            <Switch
-                                                                checked={newAccount.smtpSecure}
-                                                                onCheckedChange={(checked) => setNewAccount({ ...newAccount, smtpSecure: checked })}
-                                                            />
-                                                            <Label>Use SSL/TLS (Port 993/465)</Label>
-                                                        </div>
-                                                    </div>
+                                                    <Label>Password</Label>
+                                                    <Input
+                                                        type="password"
+                                                        value={newAccount.password}
+                                                        onChange={(e) => setNewAccount({ ...newAccount, password: e.target.value })}
+                                                        placeholder="••••••••"
+                                                        className="mt-1"
+                                                    />
                                                 </div>
-
-                                                <div>
-                                                    <h4 className="font-medium mb-4 flex items-center gap-2">
-                                                        <Server className="w-4 h-4" />
-                                                        IMAP Settings (Receiving)
-                                                    </h4>
-                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                        <div>
-                                                            <Label>IMAP Host</Label>
-                                                            <Input
-                                                                value={newAccount.imapHost}
-                                                                onChange={(e) => setNewAccount({ ...newAccount, imapHost: e.target.value })}
-                                                                placeholder="imap.gmail.com"
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <Label>Port</Label>
-                                                            <Input
-                                                                type="number"
-                                                                value={newAccount.imapPort}
-                                                                onChange={(e) => setNewAccount({ ...newAccount, imapPort: e.target.value })}
-                                                                placeholder="993"
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <Label>Username (usually same as email)</Label>
-                                                            <Input
-                                                                value={newAccount.imapUsername}
-                                                                onChange={(e) => setNewAccount({ ...newAccount, imapUsername: e.target.value })}
-                                                                placeholder="your@email.com"
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                                                        <div>
-                                                            <Label>Password / App Password</Label>
-                                                            <Input
-                                                                type="password"
-                                                                value={newAccount.imapPassword}
-                                                                onChange={(e) => setNewAccount({ ...newAccount, imapPassword: e.target.value })}
-                                                                placeholder="••••••••"
-                                                            />
-                                                        </div>
-                                                        <div className="flex items-center gap-2 mt-6">
-                                                            <Switch
-                                                                checked={newAccount.imapSecure}
-                                                                onCheckedChange={(checked) => setNewAccount({ ...newAccount, imapSecure: checked })}
-                                                            />
-                                                            <Label>Use SSL/TLS (Port 993)</Label>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <div className="flex gap-3">
-                                                    <Button 
-                                                        variant="outline" 
-                                                        onClick={handleTestConnection}
-                                                        disabled={isTesting || !newAccount.email || !newAccount.smtpHost || !newAccount.imapHost}
-                                                    >
-                                                        {isTesting ? 'Testing...' : 'Test Connection'}
-                                                    </Button>
-                                                    <Button 
+                                                <div className="flex gap-3 pt-2">
+                                                    <Button
                                                         onClick={handleAddAccount}
-                                                        disabled={isSavingAccount || !newAccount.email || !newAccount.smtpHost || !newAccount.imapHost}
+                                                        disabled={isSavingAccount || !newAccount.email || !newAccount.password}
                                                     >
-                                                        {isSavingAccount ? 'Adding...' : 'Add Account'}
+                                                        {isSavingAccount ? 'Connecting...' : 'Connect Account'}
                                                     </Button>
                                                     <Button variant="ghost" onClick={() => setShowAddAccount(false)}>
                                                         Cancel

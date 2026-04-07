@@ -4,7 +4,7 @@ import { eq, and, desc } from 'drizzle-orm'
 import { db } from '../../../db'
 import { mailboxes, mailFolders, mailMessages, users } from '../../../db/schema'
 import { encryptSecret } from '../../lib/crypto'
-import { createUserMailbox } from '../../lib/native-mail'
+import { authenticateNativeUser, createUserMailbox } from '../../lib/native-mail'
 
 const router = Router()
 
@@ -96,6 +96,82 @@ router.get('/:id', async (req: Request, res: Response) => {
         })
     } catch (error) {
         console.error('Error fetching mailbox:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+})
+
+router.post('/connect', async (req: Request, res: Response) => {
+    try {
+        const userId = req.headers['x-user-id'] as string
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+        const schema = z.object({
+            email: z.string().email(),
+            password: z.string().min(1),
+        })
+
+        const { email, password } = schema.parse(req.body)
+
+        const targetUser = await authenticateNativeUser(email, password)
+        if (!targetUser) {
+            return res.status(401).json({ error: 'Invalid email or password' })
+        }
+
+        const existing = await db.query.mailboxes.findFirst({
+            where: and(eq(mailboxes.userId, userId), eq(mailboxes.email, email.toLowerCase())),
+        })
+        if (existing) {
+            return res.status(409).json({ error: 'This account is already connected' })
+        }
+
+        const mailHost = process.env.MAIL_HOST || 'localhost'
+        const smtpPort = parseInt(process.env.SMTP_SUBMISSION_PORT || '2587')
+        const imapPort = parseInt(process.env.IMAP_PORT || '2993')
+        const encryptedPassword = encryptSecret(password)
+
+        const hasDefault = await db.query.mailboxes.findFirst({
+            where: and(eq(mailboxes.userId, userId), eq(mailboxes.isDefault, true)),
+        })
+
+        const [inserted] = await db.insert(mailboxes).values({
+            userId,
+            email: email.toLowerCase(),
+            displayName: targetUser.email,
+            smtpHost: mailHost,
+            smtpPort,
+            smtpUsername: email.toLowerCase(),
+            smtpPasswordEncrypted: encryptedPassword,
+            smtpSecure: false,
+            imapHost: mailHost,
+            imapPort,
+            imapUsername: email.toLowerCase(),
+            imapPasswordEncrypted: encryptedPassword,
+            imapSecure: false,
+            isDefault: !hasDefault,
+            isNative: true,
+        }).returning()
+
+        await db.insert(mailFolders).values([
+            { mailboxId: inserted.id, remoteId: 'INBOX',   name: 'Inbox',   type: 'inbox' },
+            { mailboxId: inserted.id, remoteId: 'Sent',    name: 'Sent',    type: 'sent' },
+            { mailboxId: inserted.id, remoteId: 'Drafts',  name: 'Drafts',  type: 'drafts' },
+            { mailboxId: inserted.id, remoteId: 'Archive', name: 'Archive', type: 'archive' },
+            { mailboxId: inserted.id, remoteId: 'Trash',   name: 'Trash',   type: 'trash' },
+            { mailboxId: inserted.id, remoteId: 'Spam',    name: 'Spam',    type: 'spam' },
+        ])
+
+        res.status(201).json({
+            mailbox: {
+                id: inserted.id,
+                email: inserted.email,
+                displayName: inserted.displayName,
+                isDefault: inserted.isDefault,
+                isActive: inserted.isActive,
+            },
+        })
+    } catch (error) {
+        if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors })
+        console.error('Error connecting mailbox:', error)
         res.status(500).json({ error: 'Internal server error' })
     }
 })
