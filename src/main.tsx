@@ -111,11 +111,6 @@ function MailCheck({ children }: { children: React.ReactNode }) {
 
     if (isAdmin === null) return <Spinner />
 
-    if (isAdmin) {
-        navigate('/admin')
-        return null
-    }
-
     return <>{children}</>
 }
 

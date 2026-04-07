@@ -9,6 +9,7 @@ import { DeployFooter } from '../DeployFooter'
 import { supabase } from '../../lib/supabase'
 import { AccountSwitcher } from './AccountSwitcher'
 import { KeyboardShortcutsHelp, KeyboardShortcutsButton } from './KeyboardShortcutsHelp'
+import { useAuth } from '../../hooks/useAuth'
 import {
     Inbox,
     Send,
@@ -22,7 +23,8 @@ import {
     Plus,
     Archive,
     ShieldAlert,
-    Users
+    Users,
+    ArrowLeft
 } from 'lucide-react'
 import { useFolders } from '../../hooks/useMail'
 import { NotificationBell } from './NotificationBell'
@@ -222,6 +224,7 @@ function MobileBottomNav({ location, onOpenSidebar, openCompose }: MobileBottomN
 
 function MailLayoutFrame({ children }: MailLayoutProps) {
     const { branding } = useBranding()
+    const { isAdmin } = useAuth()
     const isMobile = useIsMobile()
     const { isOpen: shortcutsOpen, openHelp: openShortcuts, closeHelp: closeShortcuts } = useKeyboardShortcutHelp()
     const [location] = useLocation()
@@ -324,6 +327,16 @@ function MailLayoutFrame({ children }: MailLayoutProps) {
                         </div>
 
                         <div className="flex items-center gap-1 sm:gap-3">
+                            {isAdmin && (
+                                <Link
+                                    href="/admin"
+                                    className="hidden sm:flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg border border-border hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                    <ArrowLeft className="w-4 h-4" />
+                                    <span>Exit to Admin</span>
+                                </Link>
+                            )}
+
                             {isMobile && !searchOpen && (
                                 <button
                                     onClick={() => setSearchOpen(true)}
@@ -348,7 +361,7 @@ function MailLayoutFrame({ children }: MailLayoutProps) {
                 </div>
             </div>
 
-            {isMobile && <MobileBottomNav location={location} onOpenSidebar={openSidebar} />}
+            {isMobile && <MobileBottomNav location={location} onOpenSidebar={openSidebar} openCompose={openCompose} />}
             
             <KeyboardShortcutsHelp isOpen={shortcutsOpen} onClose={closeShortcuts} />
         </div>
