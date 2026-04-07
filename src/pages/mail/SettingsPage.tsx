@@ -6,6 +6,13 @@ import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
 import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+} from '../../components/ui/Dialog'
+import {
     User,
     Bell,
     Shield,
@@ -19,9 +26,13 @@ import {
     ExternalLink,
     Filter,
     Trash,
-    PenTool
+    PenTool,
+    Eye,
+    EyeOff,
+    Lock,
 } from 'lucide-react'
 import { apiFetch } from '../../lib/api-client'
+import { useMailbox } from '../../hooks/useMailbox'
 
 type TabId = 'profile' | 'notifications' | 'security' | 'appearance' | 'accounts' | 'filters' | 'signatures'
 
@@ -84,9 +95,11 @@ interface Signature {
 }
 
 export default function MailSettingsPage() {
+    const { refreshMailboxes } = useMailbox()
     const [activeTab, setActiveTab] = React.useState<TabId>('accounts')
     const [isSaving, setIsSaving] = React.useState(false)
-    const [showAddAccount, setShowAddAccount] = React.useState(false)
+    const [showAddAccountDialog, setShowAddAccountDialog] = React.useState(false)
+    const [showPassword, setShowPassword] = React.useState(false)
     const [showAddFilter, setShowAddFilter] = React.useState(false)
     const [selectedMailboxId, setSelectedMailboxId] = React.useState<string | null>(null)
     const [isLoadingMailboxes, setIsLoadingMailboxes] = React.useState(false)
@@ -174,9 +187,11 @@ export default function MailSettingsPage() {
                 method: 'POST',
                 body: JSON.stringify(newAccount),
             })
-            setShowAddAccount(false)
+            setShowAddAccountDialog(false)
+            setShowPassword(false)
             setNewAccount({ email: '', password: '' })
             fetchMailboxes()
+            refreshMailboxes()
             toast({ title: 'Account connected successfully', variant: 'success' })
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Failed to connect account'
@@ -323,14 +338,22 @@ export default function MailSettingsPage() {
                             {activeTab === 'accounts' && (
                                 <div className="space-y-6">
                                     <Card>
-                                        <CardHeader>
-                                            <CardTitle className="flex items-center gap-2">
-                                                <Mail className="w-5 h-5" />
-                                                Email Accounts
-                                            </CardTitle>
-                                            <CardDescription>
-                                                Manage your email accounts
-                                            </CardDescription>
+                                        <CardHeader className="flex flex-row items-start justify-between">
+                                            <div>
+                                                <CardTitle className="flex items-center gap-2">
+                                                    <Mail className="w-5 h-5" />
+                                                    Email Accounts
+                                                </CardTitle>
+                                                <CardDescription>
+                                                    Manage your email accounts
+                                                </CardDescription>
+                                            </div>
+                                            {mailboxes.length > 0 && !isLoadingMailboxes && (
+                                                <Button size="sm" onClick={() => setShowAddAccountDialog(true)}>
+                                                    <Plus className="w-4 h-4 mr-2" />
+                                                    Add Account
+                                                </Button>
+                                            )}
                                         </CardHeader>
                                         <CardContent className="space-y-4">
                                             {isLoadingMailboxes ? (
@@ -340,7 +363,7 @@ export default function MailSettingsPage() {
                                                     <Mail className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                                                     <p className="text-muted-foreground mb-2">No email account available</p>
                                                     <p className="text-sm text-muted-foreground mb-4">You can add external email accounts to read and reply here.</p>
-                                                    <Button onClick={() => setShowAddAccount(true)}>
+                                                    <Button onClick={() => setShowAddAccountDialog(true)}>
                                                         <Plus className="w-4 h-4 mr-2" />
                                                         Add Account
                                                     </Button>
@@ -393,49 +416,79 @@ export default function MailSettingsPage() {
                                     </Card>
 
 
-                                    {showAddAccount && (
-                                        <Card>
-                                            <CardHeader>
-                                                <CardTitle>Connect Email Account</CardTitle>
-                                                <CardDescription>
+                                    <Dialog
+                                        open={showAddAccountDialog}
+                                        onOpenChange={(open) => {
+                                            if (!open) {
+                                                setNewAccount({ email: '', password: '' })
+                                                setShowPassword(false)
+                                            }
+                                            setShowAddAccountDialog(open)
+                                        }}
+                                    >
+                                        <DialogContent className="sm:max-w-md">
+                                            <DialogHeader>
+                                                <DialogTitle>Connect Email Account</DialogTitle>
+                                                <DialogDescription>
                                                     Enter the credentials of an account registered on this server
-                                                </CardDescription>
-                                            </CardHeader>
-                                            <CardContent className="space-y-4">
-                                                <div>
+                                                </DialogDescription>
+                                            </DialogHeader>
+                                            <div className="space-y-4 mt-2">
+                                                <div className="space-y-2">
                                                     <Label>Email Address</Label>
-                                                    <Input
-                                                        type="email"
-                                                        value={newAccount.email}
-                                                        onChange={(e) => setNewAccount({ ...newAccount, email: e.target.value })}
-                                                        placeholder="your@email.com"
-                                                        className="mt-1"
-                                                    />
+                                                    <div className="relative">
+                                                        <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                                        <Input
+                                                            type="email"
+                                                            value={newAccount.email}
+                                                            onChange={(e) => setNewAccount({ ...newAccount, email: e.target.value })}
+                                                            placeholder="your@email.com"
+                                                            className="h-11 pl-10 bg-background"
+                                                            autoComplete="email"
+                                                        />
+                                                    </div>
                                                 </div>
-                                                <div>
+                                                <div className="space-y-2">
                                                     <Label>Password</Label>
-                                                    <Input
-                                                        type="password"
-                                                        value={newAccount.password}
-                                                        onChange={(e) => setNewAccount({ ...newAccount, password: e.target.value })}
-                                                        placeholder="••••••••"
-                                                        className="mt-1"
-                                                    />
+                                                    <div className="relative">
+                                                        <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                                        <Input
+                                                            type={showPassword ? 'text' : 'password'}
+                                                            value={newAccount.password}
+                                                            onChange={(e) => setNewAccount({ ...newAccount, password: e.target.value })}
+                                                            placeholder="••••••••"
+                                                            className="h-11 pl-10 pr-10 bg-background"
+                                                            autoComplete="current-password"
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setShowPassword(!showPassword)}
+                                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+                                                        >
+                                                            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                        </button>
+                                                    </div>
                                                 </div>
                                                 <div className="flex gap-3 pt-2">
                                                     <Button
+                                                        variant="outline"
+                                                        className="flex-1"
+                                                        onClick={() => setShowAddAccountDialog(false)}
+                                                        disabled={isSavingAccount}
+                                                    >
+                                                        Cancel
+                                                    </Button>
+                                                    <Button
+                                                        className="flex-1"
                                                         onClick={handleAddAccount}
                                                         disabled={isSavingAccount || !newAccount.email || !newAccount.password}
                                                     >
                                                         {isSavingAccount ? 'Connecting...' : 'Connect Account'}
                                                     </Button>
-                                                    <Button variant="ghost" onClick={() => setShowAddAccount(false)}>
-                                                        Cancel
-                                                    </Button>
                                                 </div>
-                                            </CardContent>
-                                        </Card>
-                                    )}
+                                            </div>
+                                        </DialogContent>
+                                    </Dialog>
                                 </div>
                             )}
 
