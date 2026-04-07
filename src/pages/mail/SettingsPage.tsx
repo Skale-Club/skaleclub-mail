@@ -410,7 +410,11 @@ export default function MailSettingsPage() {
                                                 <div className="text-center py-8">
                                                     <Mail className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                                                     <p className="text-muted-foreground mb-2">No email account available</p>
-                                                    <p className="text-sm text-muted-foreground">Contact your administrator to set up your email account.</p>
+                                                    <p className="text-sm text-muted-foreground mb-4">You can add external email accounts to read and reply here.</p>
+                                                    <Button onClick={() => setShowAddAccount(true)}>
+                                                        <Plus className="w-4 h-4 mr-2" />
+                                                        Add Account
+                                                    </Button>
                                                 </div>
                                             ) : (
                                                 <div className="space-y-3">
