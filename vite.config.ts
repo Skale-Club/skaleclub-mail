@@ -1,11 +1,14 @@
 import { defineConfig, loadEnv, Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
 
 function appConfigPlugin(config: {
     supabaseUrl: string
     supabaseAnonKey: string
     appName: string
+    faviconUrl: string
+    appleTouchIconUrl: string
 }): Plugin {
     return {
         name: 'app-config-dev-endpoint',
@@ -20,6 +23,17 @@ function appConfigPlugin(config: {
                 })};`)
             })
         },
+        transformIndexHtml(html) {
+            return html
+                .replace(
+                    '<link rel="icon" href="/brand-mark.svg" type="image/svg+xml" />',
+                    `<link rel="icon" href="${config.faviconUrl}" type="image/svg+xml" />`
+                )
+                .replace(
+                    '<link rel="apple-touch-icon" href="/apple-touch-icon.png" />',
+                    `<link rel="apple-touch-icon" href="${config.appleTouchIconUrl}" />`
+                )
+        },
     }
 }
 
@@ -30,10 +44,66 @@ export default defineConfig(({ mode }) => {
     const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || ''
     const appName = env.VITE_APP_NAME || 'Skale Club Mail'
 
+    const storageBase = `${supabaseUrl}/storage/v1/object/public/branding-assets`
+    const faviconUrl     = `${storageBase}/favicon.svg`
+    const appleTouchIcon = `${storageBase}/apple-touch-icon.png`
+    const pwaIcon192     = `${storageBase}/pwa-icon-192.png`
+    const pwaIcon512     = `${storageBase}/pwa-icon-512.png`
+    const pwaIconMask    = `${storageBase}/pwa-icon-maskable.png`
+
     return {
         plugins: [
             react(),
-            appConfigPlugin({ supabaseUrl, supabaseAnonKey, appName }),
+            appConfigPlugin({ supabaseUrl, supabaseAnonKey, appName, faviconUrl, appleTouchIconUrl: appleTouchIcon }),
+            VitePWA({
+                registerType: 'autoUpdate',
+                includeAssets: [],
+                manifest: {
+                    name: appName,
+                    short_name: 'Mail',
+                    description: 'Multi-tenant email server management platform',
+                    theme_color: '#6366f1',
+                    background_color: '#09090b',
+                    display: 'standalone',
+                    orientation: 'portrait-primary',
+                    scope: '/',
+                    start_url: '/',
+                    icons: [
+                        {
+                            src: pwaIcon192,
+                            sizes: '192x192',
+                            type: 'image/png',
+                            purpose: 'any',
+                        },
+                        {
+                            src: pwaIcon512,
+                            sizes: '512x512',
+                            type: 'image/png',
+                            purpose: 'any',
+                        },
+                        {
+                            src: pwaIconMask,
+                            sizes: '512x512',
+                            type: 'image/png',
+                            purpose: 'maskable',
+                        },
+                    ],
+                },
+                workbox: {
+                    globPatterns: ['**/*.{js,css,html,svg,woff2}'],
+                    runtimeCaching: [
+                        {
+                            urlPattern: ({ url }: { url: URL }) => url.pathname.startsWith('/api/'),
+                            handler: 'NetworkFirst',
+                            options: {
+                                cacheName: 'api-cache',
+                                networkTimeoutSeconds: 10,
+                                cacheableResponse: { statuses: [0, 200] },
+                            },
+                        },
+                    ],
+                },
+            }),
         ],
         resolve: {
             alias: {

@@ -45,9 +45,11 @@ async function readBranding() {
     }
 }
 
+const DEFAULT_LOGO_URL = `${process.env.SUPABASE_URL}/storage/v1/object/public/branding-assets/brand-mark.svg`
+
 function getPublicUrl(storage: string | null): string {
     if (!storage) {
-        return '/brand-mark.svg'
+        return DEFAULT_LOGO_URL
     }
 
     const [bucket, path] = storage.split('/')

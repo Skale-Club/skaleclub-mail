@@ -9,11 +9,14 @@ export interface BrandingSettings {
     mailHost: string
 }
 
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
+const defaultLogoUrl = `${supabaseUrl}/storage/v1/object/public/branding-assets/brand-mark.svg`
+
 export const defaultBranding: BrandingSettings = {
     companyName: '',
     applicationName: 'Skale Club Mail',
-    logoUrl: '/brand-mark.svg',
-    faviconUrl: '/brand-mark.svg',
+    logoUrl: defaultLogoUrl,
+    faviconUrl: defaultLogoUrl,
     mailHost: 'mx.skaleclub.com',
 }
 
