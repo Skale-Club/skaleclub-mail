@@ -229,11 +229,15 @@ export const mailApi = {
 
     getMessages(
         mailboxId: string,
-        folderId: string,
-        params?: { page?: number; limit?: number; search?: string }
+        folderIdOrType: string,
+        params?: { page?: number; limit?: number; search?: string; isType?: boolean }
     ): Promise<MessageListResponse> {
         const searchParams = new URLSearchParams()
-        searchParams.set('folderId', folderId)
+        if (params?.isType) {
+            searchParams.set('folderType', folderIdOrType)
+        } else {
+            searchParams.set('folderId', folderIdOrType)
+        }
         if (params?.page !== undefined) searchParams.set('page', String(params.page))
         if (params?.limit !== undefined) searchParams.set('limit', String(params.limit))
         if (params?.search) searchParams.set('search', params.search)

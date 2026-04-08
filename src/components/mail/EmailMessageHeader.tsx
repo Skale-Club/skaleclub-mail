@@ -81,17 +81,6 @@ export function EmailMessageHeader({
                             {read ? <Mail className="h-4 w-4" /> : <MailOpen className="h-4 w-4" />}
                         </button>
                     )}
-                    {onToggleEmailDarkMode && (
-                        <button
-                            type="button"
-                            onClick={onToggleEmailDarkMode}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                            title={emailDarkMode ? 'Light mode' : 'Dark mode'}
-                            aria-label={emailDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-                        >
-                            {emailDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                        </button>
-                    )}
                     {onArchive && (
                         <button
                             type="button"
@@ -142,6 +131,17 @@ export function EmailMessageHeader({
                             aria-label={starred ? 'Remove from favorites' : 'Add to favorites'}
                         >
                             <Star className={`h-4 w-4 ${starred ? 'fill-current' : ''}`} />
+                        </button>
+                    )}
+                    {onToggleEmailDarkMode && (
+                        <button
+                            type="button"
+                            onClick={onToggleEmailDarkMode}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                            title={emailDarkMode ? 'Light mode' : 'Dark mode'}
+                            aria-label={emailDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+                        >
+                            {emailDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                         </button>
                     )}
                 </div>

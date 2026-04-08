@@ -9,7 +9,6 @@ import {
     Trash2,
     Edit2,
     X,
-    Download,
     Users,
     Mail,
     Building,

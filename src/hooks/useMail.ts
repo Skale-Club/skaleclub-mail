@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery, InfiniteData } from '@tanstack/react-query'
 import React from 'react'
-import { mailApi, Message, SendEmailPayload, SaveDraftPayload, ContactItem, MessageListResponse } from '../lib/mail-api'
+import { mailApi, Message, SendEmailPayload, SaveDraftPayload, MessageListResponse } from '../lib/mail-api'
 import { useMailbox } from './useMailbox'
 
 type MessageQuerySnapshot = Array<[readonly unknown[], unknown]>
@@ -86,6 +86,7 @@ export function useMessages(folderType: string, page = 1, limit = 50, search?: s
     const { selectedMailbox } = useMailbox()
     const foldersQuery = useFolders()
 
+    // Prefer resolved folderId from cache; fall back to folderType for server-side resolution
     const folderId = React.useMemo(() => {
         if (!foldersQuery.data?.folders) return undefined
         const folder = foldersQuery.data.folders.find(
@@ -99,10 +100,13 @@ export function useMessages(folderType: string, page = 1, limit = 50, search?: s
         queryKey: ['messages', selectedMailbox?.id, folderType, folderId, page, limit, search],
         queryFn: () => {
             if (!selectedMailbox) throw new Error('No mailbox selected')
-            if (!folderId) return { messages: [], total: 0, hasMore: false }
-            return mailApi.getMessages(selectedMailbox.id, folderId, { page, limit, search })
+            // If folderId resolved from cache, use it; otherwise let server resolve by type
+            if (folderId) {
+                return mailApi.getMessages(selectedMailbox.id, folderId, { page, limit, search })
+            }
+            return mailApi.getMessages(selectedMailbox.id, folderType, { page, limit, search, isType: true })
         },
-        enabled: !!selectedMailbox && !!folderId,
+        enabled: !!selectedMailbox,
         staleTime: 30000,
     })
 
@@ -129,15 +133,17 @@ export function useInfiniteMessages(folderType: string, limit = 30) {
         queryKey: ['messages', 'infinite', selectedMailbox?.id, folderType, folderId],
         queryFn: async ({ pageParam = 1 }) => {
             if (!selectedMailbox) throw new Error('No mailbox selected')
-            if (!folderId) return { messages: [], total: 0, hasMore: false }
-            return mailApi.getMessages(selectedMailbox.id, folderId, { page: pageParam, limit })
+            if (folderId) {
+                return mailApi.getMessages(selectedMailbox.id, folderId, { page: pageParam, limit })
+            }
+            return mailApi.getMessages(selectedMailbox.id, folderType, { page: pageParam, limit, isType: true })
         },
         getNextPageParam: (lastPage, allPages) => {
             if (!lastPage.hasMore) return undefined
             return allPages.length + 1
         },
         initialPageParam: 1,
-        enabled: !!selectedMailbox && !!folderId,
+        enabled: !!selectedMailbox,
         staleTime: 30000,
     })
 

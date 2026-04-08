@@ -751,7 +751,7 @@ function EmailDetail({
     onDelete?: (id: string) => void
     onStar?: (id: string) => void
 }) {
-    const { data: messageData } = useMessage(email.id)
+    const { data: messageData, isLoading: isMessageLoading } = useMessage(email.id)
     const { openCompose } = useCompose()
     const fullMessage = messageData?.message
     const [emailDarkMode, setEmailDarkMode] = useState(false)
@@ -781,6 +781,7 @@ function EmailDetail({
                             html={fullMessage?.bodyHtml || fullMessage?.htmlBody}
                             plainText={fullMessage?.bodyText || fullMessage?.plainBody || email.snippet}
                             emailDarkMode={emailDarkMode}
+                            isLoading={isMessageLoading}
                         />
                     </div>
 

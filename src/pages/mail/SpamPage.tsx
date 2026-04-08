@@ -68,21 +68,10 @@ export default function SpamPage() {
     }
 
     const handleDelete = (id: string) => {
-        setConfirmDialog({
-            open: true,
-            title: 'Delete permanently?',
-            description: 'This spam message will be permanently deleted. This action cannot be undone.',
-            confirmLabel: 'Delete forever',
-            variant: 'danger',
-            onConfirm: () => {
-                setConfirmDialog(prev => ({ ...prev, open: false }))
-                if (selectedMailbox) {
-                    deleteMessage.mutate(id)
-                }
-                if (selectedEmail === id) setSelectedEmail(null)
-                toast({ title: 'Message permanently deleted', variant: 'success' })
-            },
-        })
+        if (selectedEmail === id) setSelectedEmail(null)
+        if (selectedMailbox) deleteMessage.mutate(id)
+        setSelectedEmails(prev => { const next = new Set(prev); next.delete(id); return next })
+        toast({ title: 'Email moved to trash', variant: 'success' })
     }
 
     const handleNotSpam = (id: string) => {
@@ -123,21 +112,10 @@ export default function SpamPage() {
 
     const handleBulkDelete = () => {
         if (selectedEmails.size === 0) return
-        setConfirmDialog({
-            open: true,
-            title: `Permanently delete ${selectedEmails.size} message${selectedEmails.size > 1 ? 's' : ''}?`,
-            description: 'These messages will be permanently deleted. This action cannot be undone.',
-            confirmLabel: 'Delete forever',
-            variant: 'danger',
-            onConfirm: () => {
-                setConfirmDialog(prev => ({ ...prev, open: false }))
-                if (selectedMailbox) {
-                    batchUpdate.mutate({ messageIds: Array.from(selectedEmails), action: 'delete' })
-                }
-                setSelectedEmails(new Set())
-                toast({ title: `${selectedEmails.size} messages permanently deleted`, variant: 'success' })
-            },
-        })
+        const count = selectedEmails.size
+        if (selectedMailbox) batchUpdate.mutate({ messageIds: Array.from(selectedEmails), action: 'delete' })
+        setSelectedEmails(new Set())
+        toast({ title: `${count} email${count > 1 ? 's' : ''} moved to trash`, variant: 'success' })
     }
 
     if (mailboxesLoading || isLoading) {
@@ -364,7 +342,7 @@ function EmailDetail({
     onNotSpam: (id: string) => void
     onDelete: (id: string) => void
 }) {
-    const { data: messageData } = useMessage(email.id)
+    const { data: messageData, isLoading: isMessageLoading } = useMessage(email.id)
     const fullMessage = messageData?.message
     const [emailDarkMode, setEmailDarkMode] = useState(false)
 
@@ -391,6 +369,7 @@ function EmailDetail({
                             html={fullMessage?.bodyHtml || fullMessage?.htmlBody}
                             plainText={fullMessage?.bodyText || fullMessage?.plainBody || email.snippet}
                             emailDarkMode={emailDarkMode}
+                            isLoading={isMessageLoading}
                         />
                     </div>
 

@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { Maximize2 } from 'lucide-react'
 import { Dialog, DialogContent } from '../ui/Dialog'
 
@@ -7,6 +7,7 @@ interface EmailHtmlViewerProps {
     plainText?: string | null
     emailDarkMode?: boolean
     expandable?: boolean
+    isLoading?: boolean
 }
 
 /**
@@ -14,7 +15,7 @@ interface EmailHtmlViewerProps {
  * Falls back to plain text if no HTML is available.
  * The iframe auto-resizes to fit its content.
  */
-export function EmailHtmlViewer({ html, plainText, emailDarkMode, expandable = true }: EmailHtmlViewerProps) {
+export function EmailHtmlViewer({ html, plainText, emailDarkMode, expandable = true, isLoading = false }: EmailHtmlViewerProps) {
     const iframeRef = useRef<HTMLIFrameElement>(null)
     const [height, setHeight] = useState(200)
     const [isExpanded, setIsExpanded] = useState(false)
@@ -111,6 +112,24 @@ export function EmailHtmlViewer({ html, plainText, emailDarkMode, expandable = t
             }
         })
     }, [html])
+
+    if (isLoading) {
+        return (
+            <div className="rounded-2xl border border-border/70 bg-muted/20 px-5 py-6">
+                <div className="mb-5 flex items-center gap-3 text-sm text-muted-foreground">
+                    <div className="h-4 w-4 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+                    <span>Loading message content...</span>
+                </div>
+                <div className="space-y-3 animate-pulse">
+                    <div className="h-3.5 w-11/12 rounded-full bg-muted" />
+                    <div className="h-3.5 w-10/12 rounded-full bg-muted" />
+                    <div className="h-3.5 w-9/12 rounded-full bg-muted" />
+                    <div className="h-3.5 w-7/12 rounded-full bg-muted" />
+                    <div className="h-20 w-full rounded-2xl bg-muted/80" />
+                </div>
+            </div>
+        )
+    }
 
     // Plain text fallback
     if (!html) {

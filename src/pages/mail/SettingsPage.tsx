@@ -1,4 +1,5 @@
 import React from 'react'
+import { useLocation } from 'wouter'
 import { MailLayout } from '../../components/mail/MailLayout'
 import { toast } from '../../components/ui/toaster'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
@@ -23,7 +24,6 @@ import {
     RefreshCw,
     AlertCircle,
     CheckCircle,
-    ExternalLink,
     Filter,
     Trash,
     PenTool,
@@ -31,6 +31,7 @@ import {
     EyeOff,
     Lock,
 } from 'lucide-react'
+import { Switch } from '../../components/ui/switch'
 import { apiFetch } from '../../lib/api-client'
 import { useMailbox } from '../../hooks/useMailbox'
 
@@ -95,7 +96,8 @@ interface Signature {
 }
 
 export default function MailSettingsPage() {
-    const { refreshMailboxes } = useMailbox()
+    const { refreshMailboxes, setSelectedMailbox } = useMailbox()
+    const [, navigate] = useLocation()
     const [activeTab, setActiveTab] = React.useState<TabId>('accounts')
     const [isSaving, setIsSaving] = React.useState(false)
     const [showAddAccountDialog, setShowAddAccountDialog] = React.useState(false)
@@ -183,15 +185,26 @@ export default function MailSettingsPage() {
     const handleAddAccount = async () => {
         setIsSavingAccount(true)
         try {
-            await apiFetch('/api/mail/mailboxes/connect', {
+            const data = await apiFetch<{ mailbox: { id: string; email: string; displayName: string | null; isDefault: boolean; isActive: boolean } }>('/api/mail/mailboxes/connect', {
                 method: 'POST',
                 body: JSON.stringify(newAccount),
             })
             setShowAddAccountDialog(false)
             setShowPassword(false)
             setNewAccount({ email: '', password: '' })
-            fetchMailboxes()
-            refreshMailboxes()
+            await refreshMailboxes()
+            if (data.mailbox) {
+                setSelectedMailbox({
+                    id: data.mailbox.id,
+                    email: data.mailbox.email,
+                    displayName: data.mailbox.displayName,
+                    isDefault: data.mailbox.isDefault,
+                    isActive: data.mailbox.isActive,
+                    lastSyncAt: null,
+                    syncError: null,
+                })
+                navigate('/mail/inbox')
+            }
             toast({ title: 'Account connected successfully', variant: 'success' })
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Failed to connect account'

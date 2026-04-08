@@ -203,7 +203,8 @@ router.get('/:mailboxId/messages', async (req: Request, res: Response) => {
     try {
         const userId = req.headers['x-user-id'] as string
         const mailboxId = req.params.mailboxId
-        const folderId = req.query.folderId as string | undefined
+        let folderId = req.query.folderId as string | undefined
+        const folderType = req.query.folderType as string | undefined
         const page = parseInt(req.query.page as string) || 1
         const limit = Math.min(parseInt(req.query.limit as string) || 50, 100)
         const offset = (page - 1) * limit
@@ -215,6 +216,33 @@ router.get('/:mailboxId/messages', async (req: Request, res: Response) => {
         const mailbox = await checkUserMailboxAccess(userId, mailboxId)
         if (!mailbox) {
             return res.status(404).json({ error: 'Mailbox not found' })
+        }
+
+        // Resolve folder by type if no folderId provided
+        if (!folderId && folderType) {
+            const folder = await db.query.mailFolders.findFirst({
+                where: and(
+                    eq(mailFolders.mailboxId, mailboxId),
+                    eq(mailFolders.type, folderType)
+                ),
+            })
+            if (!folder) {
+                // Try by remoteId (case-insensitive)
+                const allFolders = await db.query.mailFolders.findMany({
+                    where: eq(mailFolders.mailboxId, mailboxId),
+                })
+                const matched = allFolders.find(f =>
+                    f.remoteId?.toLowerCase() === folderType.toLowerCase() ||
+                    f.name?.toLowerCase() === folderType.toLowerCase()
+                )
+                if (matched) {
+                    // Backfill the type so future lookups are fast
+                    await db.update(mailFolders).set({ type: folderType, updatedAt: new Date() }).where(eq(mailFolders.id, matched.id))
+                    folderId = matched.id
+                }
+            } else {
+                folderId = folder.id
+            }
         }
 
         const conditions = [

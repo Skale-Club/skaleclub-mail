@@ -32,7 +32,7 @@ export function EmailDetailView({
     archiveIcon,
 }: EmailDetailViewProps) {
     const { openCompose } = useCompose()
-    const { data: messageData } = useMessage(email.id)
+    const { data: messageData, isLoading: isMessageLoading } = useMessage(email.id)
     const fullMessage = messageData?.message
     const [emailDarkMode, setEmailDarkMode] = useState(false)
 
@@ -85,6 +85,7 @@ export function EmailDetailView({
                             html={fullMessage?.bodyHtml || fullMessage?.htmlBody}
                             plainText={fullMessage?.bodyText || fullMessage?.plainBody || email.snippet}
                             emailDarkMode={emailDarkMode}
+                            isLoading={isMessageLoading}
                         />
                     </div>
 

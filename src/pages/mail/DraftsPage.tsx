@@ -315,7 +315,7 @@ function EmailDetail({
     onDelete?: (id: string) => void
     onStar?: (id: string) => void
 }) {
-    const { data: messageData } = useMessage(email.id)
+    const { data: messageData, isLoading: isMessageLoading } = useMessage(email.id)
     const { openCompose } = useCompose()
     const fullMessage = messageData?.message
 
@@ -340,6 +340,7 @@ function EmailDetail({
                         <EmailHtmlViewer
                             html={fullMessage?.bodyHtml || fullMessage?.htmlBody}
                             plainText={fullMessage?.bodyText || fullMessage?.plainBody || email.snippet}
+                            isLoading={isMessageLoading}
                         />
                     </div>
 

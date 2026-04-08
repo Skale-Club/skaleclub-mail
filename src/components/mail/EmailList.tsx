@@ -19,7 +19,7 @@ import {
     ShieldAlert
 } from 'lucide-react'
 import { useIsMobile } from '../../hooks/useIsMobile'
-import { formatEmailDate } from '../../lib/utils'
+import { formatEmailDate, getAvatarColor, getInitials } from '../../lib/utils'
 
 export interface EmailItem {
     id: string
@@ -142,6 +142,8 @@ export function EmailList({
                         </button>
                     )}
 
+                    <SenderAvatar name={email.from.name} email={email.from.email} />
+
                     <button
                         onClick={(e) => {
                             e.stopPropagation()
@@ -175,9 +177,6 @@ export function EmailList({
                                     {email.threadCount}
                                 </span>
                             )}
-                            {email.hasAttachments && (
-                                <Paperclip className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                            )}
                         </div>
 
                         <p className="text-xs text-muted-foreground truncate mt-0.5 hidden sm:block">
@@ -198,20 +197,51 @@ export function EmailList({
                         )}
                     </div>
 
-                    <span className={`flex-shrink-0 text-xs ${!email.read ? 'text-foreground/90' : 'text-muted-foreground'}`}>
-                        {formatEmailDate(email.date)}
-                    </span>
+                    <div className="flex-shrink-0 flex items-center gap-1">
+                        <span className={`text-xs ${!email.read ? 'text-foreground/90' : 'text-muted-foreground'}`}>
+                            {formatEmailDate(email.date)}
+                        </span>
 
-                    <div className="relative opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation()
-                                setMenuOpenId(menuOpenId === email.id ? null : email.id)
-                            }}
-                            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-all"
-                        >
-                            <MoreVertical className="w-4 h-4" />
-                        </button>
+                        {/* Paperclip: visible when not hovering */}
+                        {email.hasAttachments && (
+                            <Paperclip className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 group-hover:hidden" />
+                        )}
+
+                        {/* Quick actions: visible on hover */}
+                        <div className="hidden group-hover:flex items-center gap-0.5">
+                            {onToggleRead && (
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onToggleRead(email.id) }}
+                                    className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-all"
+                                    title={email.read ? 'Mark as unread' : 'Mark as read'}
+                                >
+                                    {email.read ? <Mail className="w-4 h-4" /> : <MailOpen className="w-4 h-4" />}
+                                </button>
+                            )}
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onDelete?.(email.id) }}
+                                className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-all"
+                                title="Delete"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onArchive?.(email.id) }}
+                                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-all"
+                                title="Archive"
+                            >
+                                <Archive className="w-4 h-4" />
+                            </button>
+                            <div className="relative">
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        setMenuOpenId(menuOpenId === email.id ? null : email.id)
+                                    }}
+                                    className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-all"
+                                >
+                                    <MoreVertical className="w-4 h-4" />
+                                </button>
 
                         {menuOpenId === email.id && (
                             <>
@@ -308,6 +338,8 @@ export function EmailList({
                                 </div>
                             </>
                         )}
+                            </div>
+                        </div>
                     </div>
                 </div>
             ))}
@@ -325,6 +357,33 @@ export function EmailList({
                     )}
                 </div>
             )}
+        </div>
+    )
+}
+
+function SenderAvatar({ name, email }: { name: string; email: string }) {
+    const [imgError, setImgError] = React.useState(false)
+    const domain = email.split('@')[1]
+    const color = getAvatarColor(email)
+    const initials = getInitials(name || email)
+    const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=64` : null
+
+    if (faviconUrl && !imgError) {
+        return (
+            <div className="w-8 h-8 rounded-full flex-shrink-0 overflow-hidden bg-muted flex items-center justify-center">
+                <img
+                    src={faviconUrl}
+                    alt={initials}
+                    className="w-5 h-5 object-contain"
+                    onError={() => setImgError(true)}
+                />
+            </div>
+        )
+    }
+
+    return (
+        <div className={`w-8 h-8 rounded-full flex-shrink-0 ${color} flex items-center justify-center text-white text-xs font-semibold select-none`}>
+            {initials}
         </div>
     )
 }
