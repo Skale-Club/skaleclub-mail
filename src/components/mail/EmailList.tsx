@@ -142,8 +142,6 @@ export function EmailList({
                         </button>
                     )}
 
-                    <SenderAvatar name={email.from.name} email={email.from.email} />
-
                     <button
                         onClick={(e) => {
                             e.stopPropagation()
@@ -196,6 +194,8 @@ export function EmailList({
                             </div>
                         )}
                     </div>
+
+                    <SenderAvatar name={email.from.name} email={email.from.email} />
 
                     <div className="flex-shrink-0 flex items-center gap-1">
                         <span className={`text-xs ${!email.read ? 'text-foreground/90' : 'text-muted-foreground'}`}>

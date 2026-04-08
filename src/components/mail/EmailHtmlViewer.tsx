@@ -10,26 +10,8 @@ interface EmailHtmlViewerProps {
     isLoading?: boolean
 }
 
-/**
- * Renders email HTML content in a sandboxed iframe.
- * Falls back to plain text if no HTML is available.
- * The iframe auto-resizes to fit its content.
- */
-export function EmailHtmlViewer({ html, plainText, emailDarkMode, expandable = true, isLoading = false }: EmailHtmlViewerProps) {
-    const iframeRef = useRef<HTMLIFrameElement>(null)
-    const [height, setHeight] = useState(200)
-    const [isExpanded, setIsExpanded] = useState(false)
-
-    useEffect(() => {
-        const iframe = iframeRef.current
-        if (!iframe || !html) return
-
-        const doc = iframe.contentDocument || iframe.contentWindow?.document
-        if (!doc) return
-
-        // Wrap HTML with styles that adapt to dark/light mode
-        const wrappedHtml = `
-<!DOCTYPE html>
+function buildEmailDoc(html: string) {
+    return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -61,57 +43,84 @@ export function EmailHtmlViewer({ html, plainText, emailDarkMode, expandable = t
 </head>
 <body>${html}</body>
 </html>`
+}
 
-        doc.open()
-        doc.write(wrappedHtml)
-        doc.close()
+/**
+ * Renders email HTML content in a sandboxed iframe.
+ * Falls back to plain text if no HTML is available.
+ * The iframe auto-resizes to fit its content.
+ */
+export function EmailHtmlViewer({ html, plainText, emailDarkMode, expandable = true, isLoading = false }: EmailHtmlViewerProps) {
+    const iframeRef = useRef<HTMLIFrameElement>(null)
+    const [height, setHeight] = useState(200)
+    const [isExpanded, setIsExpanded] = useState(false)
+    const [srcdoc, setSrcdoc] = useState<string | undefined>(undefined)
 
-        // Auto-resize iframe to fit content
-        const resize = () => {
-            if (doc.body) {
-                const newHeight = Math.max(doc.body.scrollHeight, doc.documentElement.scrollHeight, 100)
-                setHeight(newHeight + 20)
-            }
-        }
+    useEffect(() => {
+        if (!html) return
+        setSrcdoc(buildEmailDoc(html))
+    }, [html])
 
-        // Resize after images load
-        const images = doc.querySelectorAll('img')
-        let loadedCount = 0
-        const totalImages = images.length
+    useEffect(() => {
+        const iframe = iframeRef.current
+        if (!iframe || !srcdoc) return
 
-        if (totalImages === 0) {
-            setTimeout(resize, 50)
-        } else {
-            images.forEach(img => {
-                img.addEventListener('load', () => {
-                    loadedCount++
-                    if (loadedCount >= totalImages) resize()
-                })
-                img.addEventListener('error', () => {
-                    loadedCount++
-                    if (loadedCount >= totalImages) resize()
-                })
-            })
-            // Fallback resize
-            setTimeout(resize, 500)
-        }
+        const handleLoad = () => {
+            const doc = iframe.contentDocument || iframe.contentWindow?.document
+            if (!doc) return
 
-        // Initial resize
-        setTimeout(resize, 100)
-
-        // Open links in new tab
-        doc.addEventListener('click', (e: MouseEvent) => {
-            const target = e.target as HTMLElement
-            const anchor = target.closest('a')
-            if (anchor) {
-                e.preventDefault()
-                const href = anchor.getAttribute('href')
-                if (href && !href.startsWith('javascript:')) {
-                    window.open(href, '_blank', 'noopener,noreferrer')
+            const resize = () => {
+                if (doc.body) {
+                    const newHeight = Math.max(doc.body.scrollHeight, doc.documentElement.scrollHeight, 100)
+                    setHeight(newHeight + 20)
                 }
             }
-        })
-    }, [html])
+
+            // Resize after images load
+            const images = doc.querySelectorAll('img')
+            let loadedCount = 0
+            const totalImages = images.length
+
+            if (totalImages === 0) {
+                setTimeout(resize, 50)
+            } else {
+                images.forEach(img => {
+                    if (img.complete) {
+                        loadedCount++
+                        if (loadedCount >= totalImages) resize()
+                    } else {
+                        img.addEventListener('load', () => {
+                            loadedCount++
+                            if (loadedCount >= totalImages) resize()
+                        })
+                        img.addEventListener('error', () => {
+                            loadedCount++
+                            if (loadedCount >= totalImages) resize()
+                        })
+                    }
+                })
+                setTimeout(resize, 500)
+            }
+
+            setTimeout(resize, 100)
+
+            // Open links in new tab
+            doc.addEventListener('click', (e: MouseEvent) => {
+                const target = e.target as HTMLElement
+                const anchor = target.closest('a')
+                if (anchor) {
+                    e.preventDefault()
+                    const href = anchor.getAttribute('href')
+                    if (href && !href.startsWith('javascript:')) {
+                        window.open(href, '_blank', 'noopener,noreferrer')
+                    }
+                }
+            })
+        }
+
+        iframe.addEventListener('load', handleLoad)
+        return () => iframe.removeEventListener('load', handleLoad)
+    }, [srcdoc])
 
     if (isLoading) {
         return (
@@ -155,7 +164,8 @@ export function EmailHtmlViewer({ html, plainText, emailDarkMode, expandable = t
                 )}
                 <iframe
                     ref={iframeRef}
-                    sandbox="allow-same-origin"
+                    srcDoc={srcdoc}
+                    sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
                     title="Email content"
                     style={{
                         width: '100%',

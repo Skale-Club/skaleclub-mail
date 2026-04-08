@@ -39,7 +39,7 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-            'img-src': ["'self'", 'data:', supabaseOrigin].filter(Boolean) as string[],
+            'img-src': ["'self'", 'data:', 'https:', 'http:', supabaseOrigin].filter(Boolean) as string[],
             'connect-src': ["'self'", supabaseOrigin].filter(Boolean) as string[],
         },
     },
