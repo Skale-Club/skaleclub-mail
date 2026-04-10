@@ -127,7 +127,11 @@ export default function InboxPage() {
     }
 
     const handleDelete = (id: string) => {
-        if (selectedEmail === id) setSelectedEmail(null)
+        if (selectedEmail === id) {
+            const idx = emails.findIndex(e => e.id === id)
+            const next = emails[idx + 1] ?? emails[idx - 1] ?? null
+            setSelectedEmail(next?.id ?? null)
+        }
         if (selectedMailbox) deleteMessage.mutate(id)
         setSelectedEmails(prev => {
             const newSet = new Set(prev)
