@@ -31,6 +31,18 @@ router.get('/', async (req: Request, res: Response) => {
             await createUserMailbox(userId, user.email)
         }
 
+        // Clean up stale native mailboxes for admin users (admins don't have native mailboxes)
+        if (user?.isAdmin) {
+            const staleNative = await db.query.mailboxes.findMany({
+                where: and(eq(mailboxes.userId, userId), eq(mailboxes.isNative, true)),
+            })
+            for (const mb of staleNative) {
+                await db.delete(mailMessages).where(eq(mailMessages.mailboxId, mb.id))
+                await db.delete(mailFolders).where(eq(mailFolders.mailboxId, mb.id))
+                await db.delete(mailboxes).where(eq(mailboxes.id, mb.id))
+            }
+        }
+
         const userMailboxes = await db.query.mailboxes.findMany({
             where: eq(mailboxes.userId, userId),
             orderBy: [desc(mailboxes.createdAt)],

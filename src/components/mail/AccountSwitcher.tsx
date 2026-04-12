@@ -141,9 +141,9 @@ export function AccountSwitcher({ compact = false, showSignOut = false, onSignOu
                             {hasMultipleSessions && (
                                 <>
                                     <div className="px-3 pt-3 pb-1">
-                                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Accounts</span>
+                                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Sessions</span>
                                     </div>
-                                    <div className="max-h-48 overflow-y-auto">
+                                    <div className="max-h-32 overflow-y-auto">
                                         {sessions.map((session) => (
                                             <SessionItem
                                                 key={session.userId}
@@ -160,26 +160,22 @@ export function AccountSwitcher({ compact = false, showSignOut = false, onSignOu
                                 </>
                             )}
 
-                            {!hasMultipleSessions && (
-                                <>
-                                    <div className="px-3 pt-2 pb-1">
-                                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Accounts</span>
-                                    </div>
-                                    <div className="max-h-48 overflow-y-auto">
-                                        {mailboxes.map((mailbox) => (
-                                            <AccountItem
-                                                key={mailbox.id}
-                                                mailbox={mailbox}
-                                                isSelected={selectedMailbox?.id === mailbox.id}
-                                                onSelect={() => {
-                                                    setSelectedMailbox(mailbox)
-                                                    setIsOpen(false)
-                                                }}
-                                            />
-                                        ))}
-                                    </div>
-                                </>
-                            )}
+                            <div className="px-3 pt-2 pb-1">
+                                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Accounts</span>
+                            </div>
+                            <div className="max-h-48 overflow-y-auto">
+                                {mailboxes.map((mailbox) => (
+                                    <AccountItem
+                                        key={mailbox.id}
+                                        mailbox={mailbox}
+                                        isSelected={selectedMailbox?.id === mailbox.id}
+                                        onSelect={() => {
+                                            setSelectedMailbox(mailbox)
+                                            setIsOpen(false)
+                                        }}
+                                    />
+                                ))}
+                            </div>
 
                             <div className="border-t border-border pt-2 px-2 space-y-1">
                                 <button

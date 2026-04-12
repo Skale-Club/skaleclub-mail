@@ -21,7 +21,7 @@ import {
 } from '../../hooks/useMail'
 import { EmailHtmlViewer } from '../../components/mail/EmailHtmlViewer'
 import { EmailMessageHeader } from '../../components/mail/EmailMessageHeader'
-import { Inbox as InboxIcon, Mail, MailOpen, AlertCircle } from 'lucide-react'
+import { Inbox as InboxIcon, Mail, MailOpen, AlertCircle, Search, X } from 'lucide-react'
 import { ResizablePanels } from '../../components/mail/ResizablePanels'
 
 export default function InboxPage() {
@@ -33,6 +33,7 @@ export default function InboxPage() {
     const [selectedEmail, setSelectedEmail] = React.useState<string | null>(null)
     const [selectedEmails, setSelectedEmails] = React.useState<Set<string>>(new Set())
     const [filter, setFilter] = React.useState<'all' | 'unread' | 'starred' | 'attachments'>('all')
+    const [searchQuery, setSearchQuery] = React.useState('')
     const { data, isLoading, isFetching, refetch } = useMessages('inbox', 1, 50)
     const updateMessage = useUpdateMessage()
     const deleteMessage = useDeleteMessage()
@@ -43,16 +44,26 @@ export default function InboxPage() {
 
     const { emails, unreadCount } = React.useMemo(() => {
         const baseEmails = data?.messages ? data.messages.map(mapMessageToEmailItem) : []
-        
+
         const totalUnread = baseEmails.filter(e => !e.read).length
 
         let filtered = baseEmails
         if (filter === 'unread') filtered = filtered.filter(e => !e.read)
         if (filter === 'starred') filtered = filtered.filter(e => e.starred)
         if (filter === 'attachments') filtered = filtered.filter(e => e.hasAttachments)
-        
+
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase()
+            filtered = filtered.filter(e =>
+                e.subject.toLowerCase().includes(q) ||
+                e.from.name.toLowerCase().includes(q) ||
+                e.from.email.toLowerCase().includes(q) ||
+                e.snippet.toLowerCase().includes(q)
+            )
+        }
+
         return { emails: filtered, unreadCount: totalUnread }
-    }, [data, filter])
+    }, [data, filter, searchQuery])
 
     const currentIndex = React.useMemo(() => {
         if (!selectedEmail) return -1
@@ -324,6 +335,21 @@ export default function InboxPage() {
                                 <button onClick={() => setFilter('attachments')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === 'attachments' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Attachments</button>
                             </div>
                         </div>
+                        <div className="relative mt-2">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <input
+                                type="text"
+                                placeholder="Search emails..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full pl-8 pr-8 py-1.5 text-sm bg-muted border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                            />
+                            {searchQuery && (
+                                <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                                    <X className="w-4 h-4" />
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     <EmailToolbar
@@ -378,6 +404,21 @@ export default function InboxPage() {
                                         <button onClick={() => setFilter('starred')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === 'starred' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Starred</button>
                                         <button onClick={() => setFilter('attachments')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${filter === 'attachments' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>Attachments</button>
                                     </div>
+                                </div>
+                                <div className="relative mt-2">
+                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search emails..."
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        className="w-full pl-8 pr-8 py-1.5 text-sm bg-muted border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                                    />
+                                    {searchQuery && (
+                                        <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    )}
                                 </div>
                             </div>
 
