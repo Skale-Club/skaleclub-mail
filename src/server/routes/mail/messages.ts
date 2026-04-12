@@ -797,7 +797,7 @@ router.post('/:mailboxId/messages/batch', async (req: Request, res: Response) =>
         }
 
         // Capture source folder mapping BEFORE DB update (needed for background IMAP move)
-        let sourceFolderMap: Map<string, { remoteUid: number | null; sourceRemoteId: string }> | null = null
+        let sourceFolderMap: Map<string, { remoteUid: number; sourceRemoteId: string }> | null = null
         if (!mailbox.isNative && remoteTargetFolder?.remoteId && ['archive', 'spam', 'unspam', 'restore'].includes(data.action)) {
             const msgs = await db.query.mailMessages.findMany({
                 where: and(
