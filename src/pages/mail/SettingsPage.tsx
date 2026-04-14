@@ -7,13 +7,6 @@ import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
 import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogDescription,
-} from '../../components/ui/Dialog'
-import {
     User,
     Bell,
     Shield,
@@ -27,13 +20,10 @@ import {
     Filter,
     Trash,
     PenTool,
-    Eye,
-    EyeOff,
-    Lock,
 } from 'lucide-react'
 import { Switch } from '../../components/ui/switch'
 import { apiFetch } from '../../lib/api-client'
-import { useMailbox } from '../../hooks/useMailbox'
+import { ConnectMailboxDialog } from '../../components/mail/ConnectMailboxDialog'
 
 type TabId = 'profile' | 'notifications' | 'security' | 'appearance' | 'accounts' | 'filters' | 'signatures'
 
@@ -96,27 +86,22 @@ interface Signature {
 }
 
 export default function MailSettingsPage() {
-    const { refreshMailboxes, setSelectedMailbox } = useMailbox()
     const [, navigate] = useLocation()
     const [activeTab, setActiveTab] = React.useState<TabId>('accounts')
     const [isSaving, setIsSaving] = React.useState(false)
     const [showAddAccountDialog, setShowAddAccountDialog] = React.useState(false)
-    const [showPassword, setShowPassword] = React.useState(false)
     const [showAddFilter, setShowAddFilter] = React.useState(false)
     const [selectedMailboxId, setSelectedMailboxId] = React.useState<string | null>(null)
     const [isLoadingMailboxes, setIsLoadingMailboxes] = React.useState(false)
     const [isLoadingFilters, setIsLoadingFilters] = React.useState(false)
     const [mailboxes, setMailboxes] = React.useState<Mailbox[]>([])
     const [filters, setFilters] = React.useState<MailFilter[]>([])
-    const [isSavingAccount, setIsSavingAccount] = React.useState(false)
     const [isSavingFilter, setIsSavingFilter] = React.useState(false)
     const [signatures, setSignatures] = React.useState<Signature[]>([])
     const [isLoadingSignatures, setIsLoadingSignatures] = React.useState(false)
     const [showAddSignature, setShowAddSignature] = React.useState(false)
     const [isSavingSignature, setIsSavingSignature] = React.useState(false)
     const [editingSignature, setEditingSignature] = React.useState<Signature | null>(null)
-
-    const [newAccount, setNewAccount] = React.useState({ email: '', password: '' })
 
     const [newFilter, setNewFilter] = React.useState({
         name: '',
@@ -181,38 +166,6 @@ export default function MailSettingsPage() {
             fetchSignatures()
         }
     }, [selectedMailboxId, activeTab, fetchSignatures])
-
-    const handleAddAccount = async () => {
-        setIsSavingAccount(true)
-        try {
-            const data = await apiFetch<{ mailbox: { id: string; email: string; displayName: string | null; isDefault: boolean; isActive: boolean } }>('/api/mail/mailboxes/connect', {
-                method: 'POST',
-                body: JSON.stringify(newAccount),
-            })
-            setShowAddAccountDialog(false)
-            setShowPassword(false)
-            setNewAccount({ email: '', password: '' })
-            await refreshMailboxes()
-            if (data.mailbox) {
-                setSelectedMailbox({
-                    id: data.mailbox.id,
-                    email: data.mailbox.email,
-                    displayName: data.mailbox.displayName,
-                    isDefault: data.mailbox.isDefault,
-                    isActive: data.mailbox.isActive,
-                    lastSyncAt: null,
-                    syncError: null,
-                })
-                navigate('/mail/inbox')
-            }
-            toast({ title: 'Account connected successfully', variant: 'success' })
-        } catch (error) {
-            const message = error instanceof Error ? error.message : 'Failed to connect account'
-            toast({ title: 'Failed to connect account', description: message, variant: 'destructive' })
-        } finally {
-            setIsSavingAccount(false)
-        }
-    }
 
     const handleDeleteMailbox = async (id: string) => {
         try {
@@ -429,79 +382,14 @@ export default function MailSettingsPage() {
                                     </Card>
 
 
-                                    <Dialog
+                                    <ConnectMailboxDialog
                                         open={showAddAccountDialog}
-                                        onOpenChange={(open) => {
-                                            if (!open) {
-                                                setNewAccount({ email: '', password: '' })
-                                                setShowPassword(false)
-                                            }
-                                            setShowAddAccountDialog(open)
+                                        onOpenChange={setShowAddAccountDialog}
+                                        onConnected={() => {
+                                            fetchMailboxes()
+                                            navigate('/mail/inbox')
                                         }}
-                                    >
-                                        <DialogContent className="sm:max-w-md">
-                                            <DialogHeader>
-                                                <DialogTitle>Connect Email Account</DialogTitle>
-                                                <DialogDescription>
-                                                    Enter the credentials of an account registered on this server
-                                                </DialogDescription>
-                                            </DialogHeader>
-                                            <div className="space-y-4 mt-2">
-                                                <div className="space-y-2">
-                                                    <Label>Email Address</Label>
-                                                    <div className="relative">
-                                                        <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                                        <Input
-                                                            type="email"
-                                                            value={newAccount.email}
-                                                            onChange={(e) => setNewAccount({ ...newAccount, email: e.target.value })}
-                                                            placeholder="your@email.com"
-                                                            className="h-11 pl-10 bg-background"
-                                                            autoComplete="email"
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <Label>Password</Label>
-                                                    <div className="relative">
-                                                        <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                                        <Input
-                                                            type={showPassword ? 'text' : 'password'}
-                                                            value={newAccount.password}
-                                                            onChange={(e) => setNewAccount({ ...newAccount, password: e.target.value })}
-                                                            placeholder="••••••••"
-                                                            className="h-11 pl-10 pr-10 bg-background"
-                                                            autoComplete="current-password"
-                                                        />
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setShowPassword(!showPassword)}
-                                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
-                                                        >
-                                                            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                                <div className="flex gap-3 pt-2">
-                                                    <Button
-                                                        variant="outline"
-                                                        className="flex-1"
-                                                        onClick={() => setShowAddAccountDialog(false)}
-                                                        disabled={isSavingAccount}
-                                                    >
-                                                        Cancel
-                                                    </Button>
-                                                    <Button
-                                                        className="flex-1"
-                                                        onClick={handleAddAccount}
-                                                        disabled={isSavingAccount || !newAccount.email || !newAccount.password}
-                                                    >
-                                                        {isSavingAccount ? 'Connecting...' : 'Connect Account'}
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        </DialogContent>
-                                    </Dialog>
+                                    />
                                 </div>
                             )}
 

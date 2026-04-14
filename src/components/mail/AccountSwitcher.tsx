@@ -4,6 +4,7 @@ import { useMailbox, getProviderColor, getProviderIcon, type Mailbox } from '../
 import { useMultiSession } from '../../hooks/useMultiSession'
 import { useAuth } from '../../hooks/useAuth'
 import { AddAccountDialog } from './AddAccountDialog'
+import { ConnectMailboxDialog } from './ConnectMailboxDialog'
 import { Plus, Check, AlertCircle, ChevronDown, Mail, RefreshCw, Settings, LogOut, Copy, Trash2 } from 'lucide-react'
 import { toast } from '../../components/ui/toaster'
 
@@ -19,6 +20,7 @@ export function AccountSwitcher({ compact = false, showSignOut = false, onSignOu
     const { sessions, activeSessionId, switchSession, removeAccount } = useMultiSession()
     const [isOpen, setIsOpen] = React.useState(false)
     const [showAddDialog, setShowAddDialog] = React.useState(false)
+    const [showConnectDialog, setShowConnectDialog] = React.useState(false)
     const [switchingId, setSwitchingId] = React.useState<string | null>(null)
 
     if (isLoading) {
@@ -32,13 +34,19 @@ export function AccountSwitcher({ compact = false, showSignOut = false, onSignOu
 
     if (mailboxes.length === 0) {
         return (
-            <button
-                onClick={() => setShowAddDialog(true)}
-                className="flex items-center gap-2 px-3 py-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
-            >
-                <Plus className="w-5 h-5" />
-                <span className="text-sm font-medium">Add Account</span>
-            </button>
+            <>
+                <button
+                    onClick={() => setShowConnectDialog(true)}
+                    className="flex items-center gap-2 px-3 py-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
+                >
+                    <Plus className="w-5 h-5" />
+                    <span className="text-sm font-medium">Add Account</span>
+                </button>
+                <ConnectMailboxDialog
+                    open={showConnectDialog}
+                    onOpenChange={setShowConnectDialog}
+                />
+            </>
         )
     }
 

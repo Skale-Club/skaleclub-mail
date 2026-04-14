@@ -1,8 +1,9 @@
 import React, { useState } from 'react'
-import { Link, useLocation } from 'wouter'
+import { useLocation } from 'wouter'
 import { MailLayout } from '../../components/mail/MailLayout'
 import { EmailList, EmailItem, EmailToolbar } from '../../components/mail/EmailList'
 import { LoadingState } from '../../components/mail/EmailParts'
+import { ConnectMailboxDialog } from '../../components/mail/ConnectMailboxDialog'
 import { toast } from '../../components/ui/toaster'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useMailbox } from '../../hooks/useMailbox'
@@ -34,6 +35,7 @@ export default function InboxPage() {
     const [selectedEmails, setSelectedEmails] = React.useState<Set<string>>(new Set())
     const [filter, setFilter] = React.useState<'all' | 'unread' | 'starred' | 'attachments'>('all')
     const [searchQuery, setSearchQuery] = React.useState('')
+    const [showConnectDialog, setShowConnectDialog] = React.useState(false)
     const { data, isLoading, isFetching, refetch } = useMessages('inbox', 1, 50)
     const updateMessage = useUpdateMessage()
     const deleteMessage = useDeleteMessage()
@@ -306,14 +308,20 @@ export default function InboxPage() {
                         <p className="text-muted-foreground mb-6">
                             Add an email account to start sending and receiving emails.
                         </p>
-                        <Link
-                            href="/mail/settings"
+                        <button
+                            type="button"
+                            onClick={() => setShowConnectDialog(true)}
                             className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors"
                         >
                             Add Email Account
-                        </Link>
+                        </button>
                     </div>
                 </div>
+                <ConnectMailboxDialog
+                    open={showConnectDialog}
+                    onOpenChange={setShowConnectDialog}
+                    onConnected={() => navigate('/mail/inbox')}
+                />
             </MailLayout>
         )
     }
