@@ -2,16 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Mail Server Production Readiness (Thunderbird-Ready)
-status: planned
-stopped_at: Roadmap + CONTEXT + PLANs for phases 10-13 created
-last_updated: "2026-04-15T23:00:00.000Z"
+status: code_complete_ops_pending
+stopped_at: Phases 10-13 code merged in commit 3b2cc41; operator checklist awaits manual ops
+last_updated: "2026-04-15T23:45:00.000Z"
 last_activity: 2026-04-15
 progress:
   total_phases: 4
   completed_phases: 0
+  in_progress_phases: 4
   total_plans: 4
   completed_plans: 0
-  percent: 0
+  percent: 75
+  code_complete: true
+  ops_complete: false
 previous_milestone:
   milestone: v1.1
   name: Database Health
@@ -27,8 +30,6 @@ See: .planning/PROJECT.md (updated 2026-04-15)
 
 **Core value (v1.2):** An end-user can configure `user@skale.club` in Thunderbird / Outlook / Apple Mail and send/receive email reliably from/to the public internet.
 
-**Current focus:** Phase 11 — DNS + Autodiscovery (unblocks everything else)
-
 ## Deploy target
 
 **Hetzner VPS** — Docker container via GitHub Actions `.github/workflows/deploy-hetzner.yml`. Caddy reverse-proxies HTTP only; mail ports (25/587/993) are direct TCP from container. **Not Vercel, not Railway.**
@@ -36,79 +37,71 @@ See: .planning/PROJECT.md (updated 2026-04-15)
 ## Current Position
 
 Milestone: v1.2
-Phase: 11 (DNS + Autodiscovery) — next to start
-Status: Planning complete, execution pending
+All 4 phase codebases merged (commit `3b2cc41`).
+Status: **code complete; operator checklist awaits manual ops tasks**.
 
-Progress: [░░░░░░░░░░] 0% of v1.2
+**Resume point:** See `.planning/HANDOFF.md` and `.planning/OPERATOR-CHECKLIST.md`.
 
-### v1.2 Phase List
+Progress: [███████░░░] 75% (code done, ops pending)
 
-- [ ] **Phase 10:** TLS Certificates for Mail Ports (TLS-01, TLS-02, TLS-03)
-- [ ] **Phase 11:** DNS + Autodiscovery (DNS-01, DNS-02, DISCO-01) ← START HERE
-- [ ] **Phase 12:** DKIM Signing + Mail-Auth (DKIM-01, AUTH-01, AUTH-02)
-- [ ] **Phase 13:** MX Hardening + Port 25 Unblock (OPS-01, MX-01, MX-02)
+### v1.2 Phase Status
 
-### Dependency graph
-
-```
-Phase 11 (DNS) ──┬──► Phase 10 (TLS: Let's Encrypt needs A record)
-                 │
-                 └──► Phase 12 (DKIM needs public key in DNS)
-                                    │
-                                    └──► Phase 13 (hardening on working stack)
-```
+| Phase | Code | Ops | Notes |
+|---|---|---|---|
+| 10 TLS certs | ✅ merged | ⏳ certbot install on host + docker restart | Deploy wiring in `.github/workflows/deploy-hetzner.yml` ready |
+| 11 DNS + autoconfig | ✅ merged | ✅ **DNS records already published** | Verified: `skale.club` is `verification_status=verified` in DB with spf/dkim/dmarc/mx all verified |
+| 12 DKIM + mailauth | ✅ merged | — (no ops) | Active on next deploy; `src/server/lib/dkim.ts`, `mail-auth.ts`; wired into `smtp-server.ts` and `mx-server.ts` |
+| 13 MX hardening | ✅ merged | ⏳ Hetzner ticket for port 25 unblock | `src/server/lib/mx-guard.ts` with rate-limit/DNSBL/greylist wired into `mx-server.ts` |
 
 ## Completed milestones
 
 ### v1.1 — Database Health (2026-04-01)
-- [x] **Phase 05:** RLS & Migration Safety
-- [x] **Phase 06:** Index Foundation
-- [x] **Phase 07:** Pagination
-- [x] **Phase 08:** Query Optimization
-- [x] **Phase 09:** Schema Hardening
+- [x] Phase 05: RLS & Migration Safety
+- [x] Phase 06: Index Foundation
+- [x] Phase 07: Pagination
+- [x] Phase 08: Query Optimization
+- [x] Phase 09: Schema Hardening
 
-### v1.1 mid-cycle work — Mail Server Core (2026-04-15, commit `8316a86`)
-Merged outside GSD phase structure; effectively Phase 9.5:
-- Full IMAP server rewrite (RFC 3501 + STARTTLS + IDLE + LITERAL+)
-- SASL PLAIN/LOGIN
-- UID operations correctness (FETCH/STORE/COPY/SEARCH)
-- Atomic UID allocation (`allocateNextUid`)
-- Folder count maintenance (`recomputeFolderCounts`)
-- SMTP submission with TLS/rate-limit/events
-- MX receiver (`mx-server.ts`) on port 25
-- Autodiscovery routes (Thunderbird XML, Outlook XML, Apple mobileconfig)
-- Settings UI dynamic connection-info card
-- Migration 018 (`uid_validity`, `uid_next` columns)
-- Graceful shutdown for all mail servers
+### v1.1 mid-cycle — Mail Server Core (2026-04-15, commit `8316a86`)
+Full IMAP/SMTP/MX stack, SASL PLAIN/LOGIN, UID ops, autodiscovery routes, UI card, migration 018.
+
+### v1.2 code (2026-04-15, commit `3b2cc41`)
+- TLS deploy wiring (volume mount + env vars)
+- DKIM signing in relayMessage via nodemailer `dkim` option
+- mailauth SPF/DKIM/DMARC verification in MX receiver
+- MX hardening (rate-limit, DNSBL, greylist, header validators)
+- `scripts/dns-checklist.ts` helper
+- `.planning/OPERATOR-CHECKLIST.md` for remaining manual ops
+
+## Pending next actions (in order)
+
+1. **Install certbot on Hetzner host** (one-time, ~5 min). See `.planning/OPERATOR-CHECKLIST.md` §2.
+2. **Open Hetzner ticket** requesting port 25 unblock. See `.planning/OPERATOR-CHECKLIST.md` §3. Wait 24-48h.
+3. **End-to-end Thunderbird test** with `user@skale.club`. See `.planning/OPERATOR-CHECKLIST.md` §4.
+4. **48h observability** of MX logs for false positives (`.planning/OPERATOR-CHECKLIST.md` §5).
+5. **Optional — promote DMARC policy** from `p=none` to `p=quarantine` after 1-2 weeks clean (`.planning/OPERATOR-CHECKLIST.md` §6).
 
 ## Accumulated Context
 
 ### Decisions (v1.2)
 
 - **Hetzner over Vercel for mail**: Vercel Functions are HTTP-only serverless; mail servers need long-lived TCP. Hetzner VPS + Docker + GitHub Actions already in place.
-- **mx-server.ts kept, smtp-inbound.ts removed during merge**: mine has TLS + UID allocation + folder-count recompute that the upstream `smtp-inbound.ts` lacked.
-- **Phase 11 first**: DNS records are prerequisite for both Let's Encrypt HTTP-01 (Phase 10) and DKIM public key publishing (Phase 12). Sequential dependency.
-- **Let's Encrypt via certbot, not Caddy**: Caddy already has its own certs but in a Caddy-specific layout. Dedicated certbot keeps standard path `/etc/letsencrypt/live/...` and clear renewal hook.
-- **mailauth over custom SPF/DKIM/DMARC code**: one-call verification; actively maintained; used by Postal itself.
-- **DKIM key not rotated automatically**: admin-managed; one key per domain lives in `domains.dkim_private_key`.
-
-### Pending Todos
-
-- Phase 11 execution (DNS records at registrar, autoconfig CNAME, verify endpoint)
-- Phase 10 execution (certbot install, volume mount, deploy workflow update)
-- Phase 12 execution (nodemailer DKIM wiring, mailauth inbound, port25 tester)
-- Phase 13 execution (Hetzner ticket, mx-guard.ts implementation)
+- **mx-server.ts kept, smtp-inbound.ts removed during merge**: mine has TLS + UID allocation + folder-count recompute.
+- **Let's Encrypt via certbot, not Caddy**: Caddy has its own certs but in Caddy-specific layout. Dedicated certbot keeps standard path `/etc/letsencrypt/live/...` and clear renewal hook via `docker restart`.
+- **mailauth over custom verification code**: one-call SPF/DKIM/DMARC/ARC verification; actively maintained; used by Postal itself.
+- **DKIM signing ONLY in relayMessage (not outreach-sender)**: outreach-sender uses user's own SMTP (Gmail/Outlook) which signs with their own DKIM — re-signing with ours would invalidate.
+- **DMARC reject downgraded to quarantine in dev**: `hasMailTLS()=false` → `verdict: 'reject' → 'quarantine'` so local testing with spoofed From isn't blocked.
+- **Greylist in-memory Map, not DB**: acceptable for single-container deploy; resets on restart re-greylists everyone for 5min (acceptable trade-off).
 
 ### Blockers/Concerns
 
-- **DNS provider unknown** — need to confirm where `skale.club` is managed before Phase 11 can start
-- **Hetzner port 25 approval timing** — 24-48h; don't block Phase 10-12 on this
-- **Supabase migration history drift** (015-017 local/remote mismatch) — carried from v1.1; unrelated to v1.2
-- **ESLint config missing** — carried from pre-v1.1; unrelated
+- **Hetzner port 25 approval timing** — 24-48h SLA; don't block parallel work
+- **Supabase migration history drift** (015-017 local/remote mismatch) — carried from v1.1
+- **ESLint config missing** — pre-existing; not blocking
 
 ## Session Continuity
 
-Last session: 2026-04-15T23:00:00Z
-Stopped at: v1.2 roadmap + phase plans authored; ready for execution
-Resume file: None
-Next action: Start Phase 11 (DNS + Autodiscovery) — see `.planning/phases/11-dns-autodiscovery/11-01-PLAN.md`
+Last session: 2026-04-15T23:45:00Z
+Stopped at: v1.2 code merged and pushed (commit `3b2cc41`); operator checklist authored at `.planning/OPERATOR-CHECKLIST.md`
+Resume file: `.planning/HANDOFF.md`
+Next action: execute `.planning/OPERATOR-CHECKLIST.md` section 2 (install certbot on Hetzner) — unblocks Thunderbird TLS connection
