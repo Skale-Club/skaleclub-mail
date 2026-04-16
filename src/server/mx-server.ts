@@ -24,19 +24,29 @@ import { getMailTLSOptions } from './lib/mail-tls'
 import { emitFolderChange } from './lib/mail-events'
 import { allocateNextUid, recomputeFolderCounts } from './lib/folder-counts'
 import { incrementStat } from './lib/tracking'
+import { verifyInbound, sealWithAuthHeader } from './lib/mail-auth'
+import {
+    checkConnectRate,
+    isSpamhausListed,
+    shouldGreylist,
+    hasValidFromHeader,
+    isDateTooOld,
+} from './lib/mx-guard'
 
 async function storeInbound(
     mailboxId: string,
     parsed: Awaited<ReturnType<typeof parseRawEmail>>,
+    opts: { isSpam?: boolean } = {},
 ) {
+    const targetType = opts.isSpam ? 'spam' : 'inbox'
     const folder = await db.query.mailFolders.findFirst({
         where: and(
             eq(mailFolders.mailboxId, mailboxId),
-            eq(mailFolders.type, 'inbox'),
+            eq(mailFolders.type, targetType),
         ),
     })
     if (!folder) {
-        console.error(`[MX] INBOX folder not found for mailbox ${mailboxId}`)
+        console.error(`[MX] ${targetType.toUpperCase()} folder not found for mailbox ${mailboxId}`)
         return
     }
 
@@ -123,32 +133,62 @@ export function createMXServer() {
         name: process.env.MAIL_DOMAIN || 'skaleclub.mail',
         banner: `${process.env.MAIL_DOMAIN || 'skaleclub.mail'} ESMTP`,
         authOptional: true,
-        // Reject AUTH attempts — MX receives from anyone, not authenticated users.
         hidePIPELINING: false,
         hideSTARTTLS: !tlsOpts,
         key: tlsOpts?.key,
         cert: tlsOpts?.cert,
         size: 25 * 1024 * 1024,
+        maxClients: 200,
         disableReverseLookup: false,
 
-        async onRcptTo(address, _session, callback) {
+        async onConnect(session, callback) {
+            const ip = session.remoteAddress || 'unknown'
+
+            if (!checkConnectRate(ip)) {
+                console.log(`[MX] Rate-limited: ${ip}`)
+                return callback(new Error('421 4.7.0 Too many connections from your IP'))
+            }
+
+            if (await isSpamhausListed(ip)) {
+                console.log(`[MX] Spamhaus-listed IP rejected: ${ip}`)
+                return callback(new Error('554 5.7.1 Blacklisted by Spamhaus'))
+            }
+
+            callback()
+        },
+
+        async onRcptTo(address, session, callback) {
             const rcpt = address.address
+            const ip = session.remoteAddress || 'unknown'
+            const from = session.envelope.mailFrom ? session.envelope.mailFrom.address : ''
+
             try {
                 const localUser = await findLocalUser(rcpt)
-                if (localUser) return callback()
+                const hasRoute = localUser
+                    ? true
+                    : await (async () => {
+                        const r = await processInboundEmail(rcpt)
+                        if (r.action === 'reject') return 'reject' as const
+                        return r.action !== 'none' && r.routes.length > 0
+                    })()
 
-                const routing = await processInboundEmail(rcpt)
-                if (routing.action === 'reject') {
+                if (hasRoute === 'reject') {
                     return callback(new Error('550 5.1.1 Recipient rejected by policy'))
                 }
-                if (routing.action !== 'none' && routing.routes.length > 0) {
-                    return callback()
+                if (!hasRoute) {
+                    return callback(new Error('550 5.1.1 User unknown in virtual mailbox table'))
                 }
 
-                return callback(new Error('550 5.1.1 User unknown in virtual mailbox table'))
+                // Greylist new (ip, from, to) triples. Legit MTAs retry; most bots don't.
+                if (shouldGreylist(ip, from, rcpt)) {
+                    console.log(`[MX] Greylisted: ${ip} ${from} -> ${rcpt}`)
+                    return callback(new Error('451 4.7.1 Greylisted; please retry in 5 minutes'))
+                }
+
+                callback()
             } catch (err) {
                 console.error('[MX] onRcptTo error:', err)
-                return callback(new Error('451 4.3.0 Temporary failure'))
+                callback(new Error('451 4.3.0 Temporary failure'))
             }
         },
 
@@ -162,8 +202,31 @@ export function createMXServer() {
             stream.on('end', async () => {
                 const raw = Buffer.concat(chunks)
                 try {
-                    const parsed = await parseRawEmail(raw)
+                    // Authenticate (SPF/DKIM/DMARC) before any header parsing
+                    const ip = session.remoteAddress || '0.0.0.0'
+                    const helo = session.hostNameAppearsAs || 'unknown'
+                    const sender = session.envelope.mailFrom ? session.envelope.mailFrom.address : ''
                     const rcpts = session.envelope.rcptTo.map(r => r.address)
+
+                    const auth = await verifyInbound(raw, { ip, helo, sender, recipients: rcpts })
+
+                    if (auth?.verdict === 'reject') {
+                        console.log(`[MX] AUTH REJECT ${sender} -> ${rcpts.join(',')}: ${auth.reason}`)
+                        return callback(new Error('550 5.7.1 DMARC policy violation'))
+                    }
+
+                    const sealed = auth ? sealWithAuthHeader(raw, auth.headers) : raw
+                    const isSpam = auth?.verdict === 'quarantine'
+
+                    const parsed = await parseRawEmail(sealed)
+
+                    // Basic header sanity
+                    if (!hasValidFromHeader(parsed)) {
+                        return callback(new Error('550 5.6.0 Missing or invalid From header'))
+                    }
+                    if (isDateTooOld(parsed)) {
+                        return callback(new Error('550 5.6.0 Message Date header older than 30 days'))
+                    }
 
                     for (const rcpt of rcpts) {
                         const localUser = await findLocalUser(rcpt)
@@ -175,15 +238,16 @@ export function createMXServer() {
                                 ),
                             })
                             if (companion) {
-                                await storeInbound(companion.id, parsed)
-                                console.log(`[MX] Delivered to local: ${rcpt} (${totalSize}B)`)
+                                await storeInbound(companion.id, parsed, { isSpam })
+                                const tag = isSpam ? 'SPAM' : 'INBOX'
+                                console.log(`[MX] Delivered to ${tag}: ${rcpt} (${totalSize}B) spf=${auth?.spfPass} dkim=${auth?.dkimPass} dmarc=${auth?.dmarcPass}`)
                             }
                             continue
                         }
 
                         const routing = await processInboundEmail(rcpt)
                         if (routing.action !== 'none' && routing.routes.length > 0 && routing.organizationId) {
-                            await deliverViaRoutes(rcpt, raw, routing.routes, routing.organizationId)
+                            await deliverViaRoutes(rcpt, sealed, routing.routes, routing.organizationId)
                             console.log(`[MX] Routed: ${rcpt}`)
                         }
                     }

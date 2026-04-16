@@ -20,6 +20,7 @@ import { getMailTLSOptions } from './lib/mail-tls'
 import { isIpLocked, recordAuthFailure, clearAuthFailures } from './lib/auth-throttle'
 import { emitFolderChange } from './lib/mail-events'
 import { allocateNextUid, recomputeFolderCounts } from './lib/folder-counts'
+import { getDkimConfigForEmail, toNodemailerDkim } from './lib/dkim'
 
 // Find the companion mailboxes entry (for folder/message storage)
 async function getCompanionMailbox(email: string, userId: string) {
@@ -91,6 +92,16 @@ async function relayMessage(
     toAddresses: string[],
     rawEmail: Buffer
 ): Promise<void> {
+    // DKIM signing config (per-sender-domain). Falls through to unsigned if
+    // the domain has no key or isn't registered.
+    const dkimConfig = await getDkimConfigForEmail(fromAddress)
+    const dkim = dkimConfig ? toNodemailerDkim(dkimConfig) : undefined
+    if (dkim) {
+        console.log(`[SMTP:Relay] DKIM enabled: selector=${dkim.keySelector} domain=${dkim.domainName}`)
+    } else {
+        console.warn(`[SMTP:Relay] ⚠️  No DKIM key for ${fromAddress} — message will be unsigned`)
+    }
+
     // Use system SMTP relay if configured, otherwise try direct delivery
     if (process.env.SMTP_HOST && process.env.SMTP_USER) {
         console.log(`[SMTP:Relay] Using SMTP relay: host=${process.env.SMTP_HOST} port=${process.env.SMTP_PORT || '587'} user=${process.env.SMTP_USER}`)
@@ -102,6 +113,7 @@ async function relayMessage(
                 user: process.env.SMTP_USER,
                 pass: process.env.SMTP_PASS,
             },
+            dkim,
         })
 
         const info = await transporter.sendMail({
@@ -115,6 +127,7 @@ async function relayMessage(
         const transporter = nodemailer.createTransport({
             direct: true,
             name: process.env.MAIL_DOMAIN || 'localhost',
+            dkim,
         } as nodemailer.TransportOptions)
 
         try {

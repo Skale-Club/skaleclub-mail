@@ -118,6 +118,7 @@ jobs:
               -p 25:25 \
               -p 587:587 \
               -p 993:993 \
+              -v /etc/letsencrypt:/etc/letsencrypt:ro \
               -e NODE_ENV=production \
               -e PORT=9001 \
               -e DEPLOY_VERSION=$DEPLOY_VERSION \
@@ -131,6 +132,8 @@ jobs:
               -e OUTLOOK_TOKEN_ENCRYPTION_KEY="${{ secrets.OUTLOOK_TOKEN_ENCRYPTION_KEY }}" \
               -e MAIL_DOMAIN="${{ secrets.MAIL_DOMAIN }}" \
               -e MAIL_HOST="${{ secrets.MAIL_HOST }}" \
+              -e MAIL_TLS_CERT_PATH="/etc/letsencrypt/live/${{ secrets.MAIL_HOST }}/fullchain.pem" \
+              -e MAIL_TLS_KEY_PATH="/etc/letsencrypt/live/${{ secrets.MAIL_HOST }}/privkey.pem" \
               -e APP_COMPANY_NAME="${{ secrets.APP_COMPANY_NAME }}" \
               -e APP_APPLICATION_NAME="${{ secrets.APP_APPLICATION_NAME }}" \
               -e SMTP_HOST="${{ secrets.SMTP_HOST }}" \
@@ -210,6 +213,7 @@ jobs:
                   -p 25:25 \
                   -p 587:587 \
                   -p 993:993 \
+                  -v /etc/letsencrypt:/etc/letsencrypt:ro \
                   -e NODE_ENV=production \
                   -e PORT=9001 \
                   -e SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
@@ -221,6 +225,8 @@ jobs:
                   -e OUTLOOK_TOKEN_ENCRYPTION_KEY="${{ secrets.OUTLOOK_TOKEN_ENCRYPTION_KEY }}" \
                   -e MAIL_DOMAIN="${{ secrets.MAIL_DOMAIN }}" \
                   -e MAIL_HOST="${{ secrets.MAIL_HOST }}" \
+                  -e MAIL_TLS_CERT_PATH="/etc/letsencrypt/live/${{ secrets.MAIL_HOST }}/fullchain.pem" \
+                  -e MAIL_TLS_KEY_PATH="/etc/letsencrypt/live/${{ secrets.MAIL_HOST }}/privkey.pem" \
                   -e APP_COMPANY_NAME="${{ secrets.APP_COMPANY_NAME }}" \
                   -e APP_APPLICATION_NAME="${{ secrets.APP_APPLICATION_NAME }}" \
                   -e SMTP_HOST="${{ secrets.SMTP_HOST }}" \
