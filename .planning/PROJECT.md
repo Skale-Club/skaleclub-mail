@@ -45,9 +45,37 @@ A user can create a campaign, build a sequence, add leads, and have emails actua
 - ✓ CHECK constraints on sequenceSteps (delayHours >= 0, stepOrder >= 1) — v1.1 Phase 09
 - ✓ Old migration file deprecated with comment header — v1.1 Phase 09
 
-### Active
+### Active (v1.2 — Mail Server Production Readiness)
 
-All v1.1 requirements complete. ✓
+**Milestone goal:** end-users can configure `user@skale.club` in Thunderbird / Outlook / Apple Mail and send/receive email with DKIM-signed outbound and SPF/DMARC-verified inbound.
+
+- TLS-01, TLS-02, TLS-03: Let's Encrypt certificates for mail ports (Phase 10)
+- DNS-01, DNS-02, DISCO-01: DNS records + autoconfig CNAME (Phase 11) ← **next**
+- DKIM-01, AUTH-01, AUTH-02: outbound DKIM signing + inbound mailauth (Phase 12)
+- OPS-01, MX-01, MX-02: Hetzner port 25 unblock + rate-limit/greylist/DNSBL (Phase 13)
+
+See `.planning/milestones/v1.2-REQUIREMENTS.md` and `v1.2-ROADMAP.md` for details.
+
+## Deployment
+
+**Hetzner VPS** (NOT Vercel) via `.github/workflows/deploy-hetzner.yml`:
+- Single Docker container (`Dockerfile`)
+- Exposed: 9001 (HTTP via Caddy), 25 (MX), 587 (SMTP submission), 993 (IMAP)
+- Caddy reverse-proxy for `mail.skale.club:443` only
+- Mail ports are raw TCP direct from container
+- Auto-rollback on health-check failure
+
+## Key Decisions (running log)
+
+| Date | Decision | Reason |
+|---|---|---|
+| 2026-03-31 | Phase ordering: RLS → indexes → pagination → query opt → schema hardening | Research-recommended dependency order |
+| 2026-03-31 | Indexes via Drizzle `index()` in schema.ts | Single source of truth |
+| 2026-03-31 | `CREATE INDEX CONCURRENTLY` via `sql/indexes.sql`, not `db:push` | `db:push` wraps in transaction, blocks writes |
+| 2026-04-15 | Hetzner over Vercel for mail server | Vercel Functions are HTTP-only; mail needs long-lived TCP |
+| 2026-04-15 | `mx-server.ts` replaces `smtp-inbound.ts` | More complete (TLS, UID alloc, count recompute) |
+| 2026-04-15 | DKIM/SPF/DMARC via `mailauth` (inbound) + nodemailer `dkim` (outbound) | Off-the-shelf, RFC-compliant |
+| 2026-04-15 | Let's Encrypt via dedicated certbot, not Caddy's internal certs | Standard path, clear renewal hook |
 
 ### Out of Scope
 

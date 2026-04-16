@@ -1,109 +1,114 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: milestone
-status: completed
-stopped_at: Completed 09-01-PLAN.md (schema hardening - CHECK constraints)
-last_updated: "2026-04-01T21:00:58.765Z"
-last_activity: 2026-04-01
+milestone: v1.2
+milestone_name: Mail Server Production Readiness (Thunderbird-Ready)
+status: planned
+stopped_at: Roadmap + CONTEXT + PLANs for phases 10-13 created
+last_updated: "2026-04-15T23:00:00.000Z"
+last_activity: 2026-04-15
 progress:
-  total_phases: 5
+  total_phases: 4
+  completed_phases: 0
+  total_plans: 4
+  completed_plans: 0
+  percent: 0
+previous_milestone:
+  milestone: v1.1
+  name: Database Health
+  status: completed
   completed_phases: 5
-  total_plans: 11
-  completed_plans: 11
-  percent: 100
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-31)
+See: .planning/PROJECT.md (updated 2026-04-15)
 
-**Core value:** A user can create a campaign, build a sequence, add leads, and have emails actually sent and tracked — with replies and bounces correctly detected and handled.
-**Current focus:** Phase 05 — rls-migration-safety
+**Core value (v1.2):** An end-user can configure `user@skale.club` in Thunderbird / Outlook / Apple Mail and send/receive email reliably from/to the public internet.
+
+**Current focus:** Phase 11 — DNS + Autodiscovery (unblocks everything else)
+
+## Deploy target
+
+**Hetzner VPS** — Docker container via GitHub Actions `.github/workflows/deploy-hetzner.yml`. Caddy reverse-proxies HTTP only; mail ports (25/587/993) are direct TCP from container. **Not Vercel, not Railway.**
 
 ## Current Position
 
-Phase: 09
-Plan: Not started
-Status: Completed
-Last activity: 2026-04-01
+Milestone: v1.2
+Phase: 11 (DNS + Autodiscovery) — next to start
+Status: Planning complete, execution pending
 
-Progress: [██████████] 100%
+Progress: [░░░░░░░░░░] 0% of v1.2
 
-### Phase List
+### v1.2 Phase List
 
-- [ ] **Phase 05:** RLS & Migration Safety (DBS-01, DBS-02, DBS-03)
-- [ ] **Phase 06:** Index Foundation (IDX-01 through IDX-06)
-- [ ] **Phase 07:** Pagination (PAGE-01 through PAGE-05)
-- [ ] **Phase 08:** Query Optimization (QRY-01, QRY-02, QRY-03)
-- [x] **Phase 09:** Schema Hardening (SCH-01, SCH-02)
+- [ ] **Phase 10:** TLS Certificates for Mail Ports (TLS-01, TLS-02, TLS-03)
+- [ ] **Phase 11:** DNS + Autodiscovery (DNS-01, DNS-02, DISCO-01) ← START HERE
+- [ ] **Phase 12:** DKIM Signing + Mail-Auth (DKIM-01, AUTH-01, AUTH-02)
+- [ ] **Phase 13:** MX Hardening + Port 25 Unblock (OPS-01, MX-01, MX-02)
 
-## Performance Metrics
+### Dependency graph
 
-**Velocity:**
+```
+Phase 11 (DNS) ──┬──► Phase 10 (TLS: Let's Encrypt needs A record)
+                 │
+                 └──► Phase 12 (DKIM needs public key in DNS)
+                                    │
+                                    └──► Phase 13 (hardening on working stack)
+```
 
-- Total plans completed: 6 (from v1.0)
-- Average duration: -
-- Total execution time: -
+## Completed milestones
 
-**By Phase (v1.0):**
+### v1.1 — Database Health (2026-04-01)
+- [x] **Phase 05:** RLS & Migration Safety
+- [x] **Phase 06:** Index Foundation
+- [x] **Phase 07:** Pagination
+- [x] **Phase 08:** Query Optimization
+- [x] **Phase 09:** Schema Hardening
 
-| Phase | Plans | Files |
-|-------|-------|-------|
-| 01-sending-correctness | 2 | 1 |
-| 03-sequence-builder-ui | 1 | 2 |
-| 04-code-quality | 3 | 5 |
-
-**v1.1 Progress:**
-
-| Phase | Plans | Status |
-|-------|-------|--------|
-| 05-rls-migration-safety | 2 | Planned |
-| 06-index-foundation | 2 | Executing |
-| 07-pagination | 2 | Executing |
-| 08-query-optimization | 4 | 2 completed |
-| 09-schema-hardening | 1 | Completed |
-| Phase 05-rls-migration-safety P02 | 0h:1m | 2 tasks | 3 files |
-| Phase 06-index-foundation P01 | 5m | 3 tasks | 2 files |
-| Phase 06-index-foundation P02 | 2 | 2 tasks | 2 files |
-| Phase 07-pagination P01 | 9min | 3 tasks | 4 files |
-| Phase 07-pagination P02 | 8min | 4 tasks | 5 files |
-| Phase 08-query-optimization P01 | 120 | 1 tasks | 1 files |
-| Phase 08-query-optimization P02 | 5min | 2 tasks | 5 files |
-| Phase 08-query-optimization P03 | 3min | 2 tasks | 1 files |
-| Phase 09-schema-hardening P01 | <1min | 2 tasks | 2 files |
+### v1.1 mid-cycle work — Mail Server Core (2026-04-15, commit `8316a86`)
+Merged outside GSD phase structure; effectively Phase 9.5:
+- Full IMAP server rewrite (RFC 3501 + STARTTLS + IDLE + LITERAL+)
+- SASL PLAIN/LOGIN
+- UID operations correctness (FETCH/STORE/COPY/SEARCH)
+- Atomic UID allocation (`allocateNextUid`)
+- Folder count maintenance (`recomputeFolderCounts`)
+- SMTP submission with TLS/rate-limit/events
+- MX receiver (`mx-server.ts`) on port 25
+- Autodiscovery routes (Thunderbird XML, Outlook XML, Apple mobileconfig)
+- Settings UI dynamic connection-info card
+- Migration 018 (`uid_validity`, `uid_next` columns)
+- Graceful shutdown for all mail servers
 
 ## Accumulated Context
 
-### Decisions
+### Decisions (v1.2)
 
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
-- **Phase ordering follows research recommendation** — RLS first (security), indexes second (foundation), pagination third (depends on indexes), query optimization fourth (depends on both), schema hardening last (independent)
-- **Indexes managed via Drizzle `index()` API in schema.ts** — single source of truth; deprecate hand-written `013_add_performance_indexes.sql`
-- **`CREATE INDEX CONCURRENTLY` via separate `sql/indexes.sql`** — not through `db:push` (which wraps transactions and blocks writes)
-- **Phase numbering continues from v1.0** — last phase was 04, new phases start at 05
-- [Phase 05-rls-migration-safety]: CONCURRENTLY via separate SQL file: db:push wraps transactions which blocks CONCURRENTLY; psql executes directly
-- [Phase 05-rls-migration-safety]: Minimal indexes.sql scaffold with example index; actual index population deferred to Phase 06
-- [Phase 07-pagination]: Used Drizzle's InferSelectModel<T> generic for type-safe return from paginate()
-- [Phase 08-query-optimization]: Used Map for O(1) lookup of messages/orgs instead of per-delivery findFirst queries
+- **Hetzner over Vercel for mail**: Vercel Functions are HTTP-only serverless; mail servers need long-lived TCP. Hetzner VPS + Docker + GitHub Actions already in place.
+- **mx-server.ts kept, smtp-inbound.ts removed during merge**: mine has TLS + UID allocation + folder-count recompute that the upstream `smtp-inbound.ts` lacked.
+- **Phase 11 first**: DNS records are prerequisite for both Let's Encrypt HTTP-01 (Phase 10) and DKIM public key publishing (Phase 12). Sequential dependency.
+- **Let's Encrypt via certbot, not Caddy**: Caddy already has its own certs but in a Caddy-specific layout. Dedicated certbot keeps standard path `/etc/letsencrypt/live/...` and clear renewal hook.
+- **mailauth over custom SPF/DKIM/DMARC code**: one-call verification; actively maintained; used by Postal itself.
+- **DKIM key not rotated automatically**: admin-managed; one key per domain lives in `domains.dkim_private_key`.
 
 ### Pending Todos
 
-- Execute Phase 05 Plan 01: Fix RLS policies (migration 016 + verification)
-- Execute Phase 05 Plan 02: Index migration workflow (sql/indexes.sql + verify)
+- Phase 11 execution (DNS records at registrar, autoconfig CNAME, verify endpoint)
+- Phase 10 execution (certbot install, volume mount, deploy workflow update)
+- Phase 12 execution (nodemailer DKIM wiring, mailauth inbound, port25 tester)
+- Phase 13 execution (Hetzner ticket, mx-guard.ts implementation)
 
 ### Blockers/Concerns
 
-- RLS policy fix complexity — needs audit of current policies; may reveal that RLS is bypassed entirely by the service role key in Express middleware
-- `canSendFromAccount` reads daily counter as fetched at job start (carried over from v1.0 — low priority)
+- **DNS provider unknown** — need to confirm where `skale.club` is managed before Phase 11 can start
+- **Hetzner port 25 approval timing** — 24-48h; don't block Phase 10-12 on this
+- **Supabase migration history drift** (015-017 local/remote mismatch) — carried from v1.1; unrelated to v1.2
+- **ESLint config missing** — carried from pre-v1.1; unrelated
 
 ## Session Continuity
 
-Last session: 2026-04-01T20:00:00.000Z
-Stopped at: Completed 09-01-PLAN.md (schema hardening - CHECK constraints)
+Last session: 2026-04-15T23:00:00Z
+Stopped at: v1.2 roadmap + phase plans authored; ready for execution
 Resume file: None
-Next action: All planned phases complete (Phase 09 Schema Hardening done)
+Next action: Start Phase 11 (DNS + Autodiscovery) — see `.planning/phases/11-dns-autodiscovery/11-01-PLAN.md`

@@ -258,42 +258,40 @@ if (existsSync(clientDist)) {
     })
 }
 
-if (!process.env.VERCEL) {
-    app.listen(PORT, async () => {
-        console.log(`Server running on port ${PORT}`)
+app.listen(PORT, async () => {
+    console.log(`Server running on port ${PORT}`)
 
-        // Warn if no platform admin exists
-        try {
-            const adminUser = await db.query.users.findFirst({ where: eq(users.isAdmin, true) })
-            if (!adminUser) {
-                console.warn('⚠️  No platform admin found. Run: npx tsx scripts/set-admin.ts <email>')
-            }
-        } catch { /* ignore */ }
-
-        import('./jobs/index').then((jobs) => jobs.startJobs())
-
-        // Start native SMTP + IMAP servers
-        const enableMailServer = process.env.ENABLE_MAIL_SERVER === 'true'
-        if (enableMailServer || !process.env.RAILWAY_ENVIRONMENT) {
-            try {
-                runningSmtpServer = createSMTPServer()
-                runningImapServer = createIMAPServer()
-                runningMxServer = createMXServer()
-                runningSmtpServer.start()
-                runningMxServer.start()
-                loadImapBranding()
-                    .then(() => runningImapServer!.start())
-                    .catch((err) => {
-                        console.warn('⚠️  IMAP branding load failed, starting IMAP server anyway:', (err as Error).message)
-                        runningImapServer!.start()
-                    })
-            } catch (err) {
-                console.warn('⚠️  SMTP/IMAP/MX servers failed to start:', (err as Error).message)
-            }
-        } else {
-            console.log('ℹ️  SMTP/IMAP/MX servers disabled on Railway (set ENABLE_MAIL_SERVER=true to enable)')
+    // Warn if no platform admin exists
+    try {
+        const adminUser = await db.query.users.findFirst({ where: eq(users.isAdmin, true) })
+        if (!adminUser) {
+            console.warn('⚠️  No platform admin found. Run: npx tsx scripts/set-admin.ts <email>')
         }
-    })
-}
+    } catch { /* ignore */ }
+
+    import('./jobs/index').then((jobs) => jobs.startJobs())
+
+    // Start native SMTP + IMAP + MX servers (always on in production; set
+    // ENABLE_MAIL_SERVER=false to disable for dev/CI runs).
+    if (process.env.ENABLE_MAIL_SERVER !== 'false') {
+        try {
+            runningSmtpServer = createSMTPServer()
+            runningImapServer = createIMAPServer()
+            runningMxServer = createMXServer()
+            runningSmtpServer.start()
+            runningMxServer.start()
+            loadImapBranding()
+                .then(() => runningImapServer!.start())
+                .catch((err) => {
+                    console.warn('⚠️  IMAP branding load failed, starting IMAP server anyway:', (err as Error).message)
+                    runningImapServer!.start()
+                })
+        } catch (err) {
+            console.warn('⚠️  SMTP/IMAP/MX servers failed to start:', (err as Error).message)
+        }
+    } else {
+        console.log('ℹ️  SMTP/IMAP/MX servers disabled (ENABLE_MAIL_SERVER=false)')
+    }
+})
 
 export default app
