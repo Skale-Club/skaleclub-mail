@@ -39,6 +39,11 @@ Itens que ficaram para outra iteração. Priorizados por impacto em "Thunderbird
 
 ---
 
+### 3.1. ~~Missing @types/html-to-text~~ (FEITO em 2026-04-15)
+Resolvido: `npm install -D @types/html-to-text@9.0.4`. Type-check passa limpo agora.
+
+---
+
 ## Média prioridade
 
 ### 4. DKIM signing no SMTP submission outbound
