@@ -73,13 +73,14 @@ export async function createUserMailbox(userId: string, email: string): Promise<
         isNative: true,
     }).returning()
 
+    const uidValidity = Math.floor(Date.now() / 1000)
     await db.insert(mailFolders).values([
-        { mailboxId: companion.id, remoteId: 'INBOX',  name: 'Inbox',  type: 'inbox' },
-        { mailboxId: companion.id, remoteId: 'Sent',   name: 'Sent',   type: 'sent' },
-        { mailboxId: companion.id, remoteId: 'Drafts', name: 'Drafts', type: 'drafts' },
-        { mailboxId: companion.id, remoteId: 'Archive', name: 'Archive', type: 'archive' },
-        { mailboxId: companion.id, remoteId: 'Trash',  name: 'Trash',  type: 'trash' },
-        { mailboxId: companion.id, remoteId: 'Spam',   name: 'Spam',   type: 'spam' },
+        { mailboxId: companion.id, remoteId: 'INBOX',   name: 'Inbox',   type: 'inbox',   uidValidity },
+        { mailboxId: companion.id, remoteId: 'Sent',    name: 'Sent',    type: 'sent',    uidValidity },
+        { mailboxId: companion.id, remoteId: 'Drafts',  name: 'Drafts',  type: 'drafts',  uidValidity },
+        { mailboxId: companion.id, remoteId: 'Archive', name: 'Archive', type: 'archive', uidValidity },
+        { mailboxId: companion.id, remoteId: 'Trash',   name: 'Trash',   type: 'trash',   uidValidity },
+        { mailboxId: companion.id, remoteId: 'Spam',    name: 'Spam',    type: 'spam',    uidValidity },
     ])
 
     return companion.id

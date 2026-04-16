@@ -23,9 +23,10 @@ import outreachRoutes from './routes/outreach'
 import outlookRoutes from './routes/outlook'
 import mailRoutes from './routes/mail'
 import notificationRoutes from './routes/notifications'
+import autodiscoverRoutes from './routes/autodiscover'
 import { createSMTPServer } from './smtp-server'
-import { createInboundSMTPServer } from './smtp-inbound'
 import { createIMAPServer, loadImapBranding } from './imap-server'
+import { createMXServer } from './mx-server'
 import { runReadinessChecks } from './lib/health'
 import { supabaseAnonClient } from './lib/supabase'
 
@@ -75,6 +76,8 @@ app.use('/t/', trackingLimiter)
 
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
+// Outlook autodiscover sends XML bodies; accept them as raw text
+app.use(express.text({ type: ['application/xml', 'text/xml'], limit: '100kb' }))
 
 // Prevent browsers from caching API responses
 app.use('/api/', (_req, res, next) => {
@@ -155,10 +158,17 @@ const PUBLIC_PATHS = [
     '/api/system/mail-server-info',
 ]
 
+const PUBLIC_PATH_PREFIXES = [
+    '/api/system/mail-config/',
+]
+
 app.use('/api', async (req, res, next) => {
     const path = req.originalUrl.split('?')[0]
 
     if (PUBLIC_PATHS.some(p => path === p)) {
+        return next()
+    }
+    if (PUBLIC_PATH_PREFIXES.some(p => path.startsWith(p))) {
         return next()
     }
 
@@ -183,11 +193,22 @@ app.use('/api', async (req, res, next) => {
     next()
 })
 
+type MailServer = { start: () => void; close: () => Promise<void> }
+let runningSmtpServer: MailServer | null = null
+let runningImapServer: MailServer | null = null
+let runningMxServer: MailServer | null = null
+
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.on(signal, () => {
-        void closeDatabaseConnection().finally(() => {
-            process.exit(0)
-        })
+        console.log(`[shutdown] Received ${signal}, closing mail servers and DB...`)
+        const closers: Promise<void>[] = []
+        if (runningSmtpServer) closers.push(runningSmtpServer.close().catch(() => undefined))
+        if (runningImapServer) closers.push(runningImapServer.close().catch(() => undefined))
+        if (runningMxServer) closers.push(runningMxServer.close().catch(() => undefined))
+        const timeout = new Promise<void>((resolve) => setTimeout(resolve, 5000))
+        void Promise.race([Promise.all(closers), timeout])
+            .then(() => closeDatabaseConnection())
+            .finally(() => process.exit(0))
     })
 }
 
@@ -205,6 +226,10 @@ app.use('/api/outreach', outreachRoutes)
 app.use('/api/outlook', outlookRoutes)
 app.use('/api/mail', mailRoutes)
 app.use('/api/notifications', notificationRoutes)
+
+// Mail client autodiscovery — Thunderbird/Outlook use paths outside /api,
+// so mounted on root. Apple .mobileconfig is under /api/system/mail-config/.
+app.use('/', autodiscoverRoutes)
 
 app.use('/t', trackRoutes)
 
@@ -251,20 +276,22 @@ if (!process.env.VERCEL) {
         const enableMailServer = process.env.ENABLE_MAIL_SERVER === 'true'
         if (enableMailServer || !process.env.RAILWAY_ENVIRONMENT) {
             try {
-                const smtpServer = createSMTPServer()
-                const inboundServer = createInboundSMTPServer()
-                const imapServer = createIMAPServer()
-                smtpServer.start()
-                inboundServer.start()
-                loadImapBranding().then(() => imapServer.start()).catch((err) => {
-                    console.warn('⚠️  IMAP branding load failed, starting IMAP server anyway:', (err as Error).message)
-                    imapServer.start()
-                })
+                runningSmtpServer = createSMTPServer()
+                runningImapServer = createIMAPServer()
+                runningMxServer = createMXServer()
+                runningSmtpServer.start()
+                runningMxServer.start()
+                loadImapBranding()
+                    .then(() => runningImapServer!.start())
+                    .catch((err) => {
+                        console.warn('⚠️  IMAP branding load failed, starting IMAP server anyway:', (err as Error).message)
+                        runningImapServer!.start()
+                    })
             } catch (err) {
-                console.warn('⚠️  SMTP/IMAP servers failed to start:', (err as Error).message)
+                console.warn('⚠️  SMTP/IMAP/MX servers failed to start:', (err as Error).message)
             }
         } else {
-            console.log('ℹ️  SMTP/IMAP servers disabled on Railway (set ENABLE_MAIL_SERVER=true to enable)')
+            console.log('ℹ️  SMTP/IMAP/MX servers disabled on Railway (set ENABLE_MAIL_SERVER=true to enable)')
         }
     })
 }

@@ -1140,6 +1140,8 @@ export const mailFolders = pgTable('mail_folders', {
     type: text('type').default('custom'), // 'inbox', 'sent', 'drafts', 'trash', 'spam', 'custom'
     unreadCount: integer('unread_count').default(0).notNull(),
     totalCount: integer('total_count').default(0).notNull(),
+    uidValidity: integer('uid_validity').default(1).notNull(),
+    uidNext: integer('uid_next').default(1).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
