@@ -98,14 +98,25 @@ export function AccountSwitcher({ compact = false, showSignOut = false, onSignOu
                     `}
                 >
                     {showSignOut ? (
-                        <>
-                            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-semibold text-sm">
-                                {userInitial}
-                            </div>
-                            <span className="hidden sm:block text-sm font-medium text-foreground">
-                                {userName}
-                            </span>
-                        </>
+                        selectedMailbox ? (
+                            <>
+                                <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl ${getProviderColor(selectedMailbox.provider)} flex items-center justify-center text-white font-semibold text-sm`}>
+                                    {getProviderIcon(selectedMailbox.provider)}
+                                </div>
+                                <span className="hidden sm:block text-sm font-medium text-foreground truncate max-w-[180px]">
+                                    {selectedMailbox.email}
+                                </span>
+                            </>
+                        ) : (
+                            <>
+                                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-semibold text-sm">
+                                    {userInitial}
+                                </div>
+                                <span className="hidden sm:block text-sm font-medium text-foreground">
+                                    {userName}
+                                </span>
+                            </>
+                        )
                     ) : selectedMailbox ? (
                         <>
                             <div className={`w-8 h-8 rounded-full ${getProviderColor(selectedMailbox.provider)} flex items-center justify-center text-white text-sm font-bold`}>
