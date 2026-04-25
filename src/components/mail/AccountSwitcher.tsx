@@ -30,7 +30,7 @@ export function AccountSwitcher({ compact = false, showSignOut = false, onSignOu
         )
     }
 
-    if (mailboxes.length === 0) {
+    if (mailboxes.length === 0 && !showSignOut) {
         return (
             <>
                 <button
@@ -50,6 +50,11 @@ export function AccountSwitcher({ compact = false, showSignOut = false, onSignOu
 
     const userInitial = user?.user_metadata?.firstName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || 'U'
     const userName = user?.user_metadata?.firstName || user?.email?.split('@')[0] || 'User'
+    const mailboxContextLabel = selectedMailbox
+        ? selectedMailbox.email.toLowerCase() === user?.email?.toLowerCase()
+            ? `Mailbox: ${selectedMailbox.email}`
+            : `Viewing: ${selectedMailbox.email}`
+        : 'No mailbox selected'
 
     const hasMultipleSessions = sessions.length > 1
 
@@ -98,25 +103,19 @@ export function AccountSwitcher({ compact = false, showSignOut = false, onSignOu
                     `}
                 >
                     {showSignOut ? (
-                        selectedMailbox ? (
-                            <>
-                                <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl ${getProviderColor(selectedMailbox.provider)} flex items-center justify-center text-white font-semibold text-sm`}>
-                                    {getProviderIcon(selectedMailbox.provider)}
-                                </div>
-                                <span className="hidden sm:block text-sm font-medium text-foreground truncate max-w-[180px]">
-                                    {selectedMailbox.email}
-                                </span>
-                            </>
-                        ) : (
-                            <>
-                                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-semibold text-sm">
-                                    {userInitial}
-                                </div>
-                                <span className="hidden sm:block text-sm font-medium text-foreground">
+                        <>
+                            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-semibold text-sm">
+                                {userInitial}
+                            </div>
+                            <div className="hidden sm:flex flex-col items-start min-w-0">
+                                <span className="text-sm font-medium text-foreground truncate max-w-[180px]">
                                     {userName}
                                 </span>
-                            </>
-                        )
+                                <span className="text-xs text-muted-foreground truncate max-w-[180px]">
+                                    {mailboxContextLabel}
+                                </span>
+                            </div>
+                        </>
                     ) : selectedMailbox ? (
                         <>
                             <div className={`w-8 h-8 rounded-full ${getProviderColor(selectedMailbox.provider)} flex items-center justify-center text-white text-sm font-bold`}>

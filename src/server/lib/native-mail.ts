@@ -3,13 +3,13 @@
  *
  * Every non-admin user on the platform has a native mailbox scoped to their
  * organisation's verified domain. Authentication for SMTP/IMAP uses
- * users.passwordHash (bcrypt) – the same credential used for the web login.
+ * users.passwordHash (bcrypt) - the same credential used for the web login.
  */
 
 import bcrypt from 'bcrypt'
 import { eq, and } from 'drizzle-orm'
 import { db } from '../../db'
-import { users, domains, mailboxes, mailFolders, mailMessages } from '../../db/schema'
+import { users, domains, mailboxes, mailFolders, mailMessages, mailFilters, signatures } from '../../db/schema'
 import { encryptSecret } from './crypto'
 
 const BCRYPT_ROUNDS = 12
@@ -39,12 +39,22 @@ export async function hashPassword(password: string): Promise<string> {
 
 /**
  * Create a native mailbox entry (mailboxes row + default folders) for a user.
- * Safe to call multiple times — checks for an existing native mailbox first.
+ * Safe to call multiple times - checks for an existing native mailbox first.
  */
-export async function createUserMailbox(userId: string, email: string): Promise<string | null> {
+export async function createUserMailbox(userId: string, _email: string): Promise<string | null> {
+    const owner = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+    })
+
+    if (!owner || owner.isAdmin) {
+        return null
+    }
+
+    const normalizedEmail = owner.email.toLowerCase()
     const existing = await db.query.mailboxes.findFirst({
         where: and(
             eq(mailboxes.userId, userId),
+            eq(mailboxes.email, normalizedEmail),
             eq(mailboxes.isNative, true)
         ),
     })
@@ -58,15 +68,15 @@ export async function createUserMailbox(userId: string, email: string): Promise<
 
     const [companion] = await db.insert(mailboxes).values({
         userId,
-        email: email.toLowerCase(),
+        email: normalizedEmail,
         smtpHost: mailHost,
         smtpPort,
-        smtpUsername: email.toLowerCase(),
+        smtpUsername: normalizedEmail,
         smtpPasswordEncrypted: placeholder,
         smtpSecure: false,
         imapHost: mailHost,
         imapPort,
-        imapUsername: email.toLowerCase(),
+        imapUsername: normalizedEmail,
         imapPasswordEncrypted: placeholder,
         imapSecure: false,
         isDefault: true,
@@ -75,33 +85,46 @@ export async function createUserMailbox(userId: string, email: string): Promise<
 
     const uidValidity = Math.floor(Date.now() / 1000)
     await db.insert(mailFolders).values([
-        { mailboxId: companion.id, remoteId: 'INBOX',   name: 'Inbox',   type: 'inbox',   uidValidity },
-        { mailboxId: companion.id, remoteId: 'Sent',    name: 'Sent',    type: 'sent',    uidValidity },
-        { mailboxId: companion.id, remoteId: 'Drafts',  name: 'Drafts',  type: 'drafts',  uidValidity },
+        { mailboxId: companion.id, remoteId: 'INBOX', name: 'Inbox', type: 'inbox', uidValidity },
+        { mailboxId: companion.id, remoteId: 'Sent', name: 'Sent', type: 'sent', uidValidity },
+        { mailboxId: companion.id, remoteId: 'Drafts', name: 'Drafts', type: 'drafts', uidValidity },
         { mailboxId: companion.id, remoteId: 'Archive', name: 'Archive', type: 'archive', uidValidity },
-        { mailboxId: companion.id, remoteId: 'Trash',   name: 'Trash',   type: 'trash',   uidValidity },
-        { mailboxId: companion.id, remoteId: 'Spam',    name: 'Spam',    type: 'spam',    uidValidity },
+        { mailboxId: companion.id, remoteId: 'Trash', name: 'Trash', type: 'trash', uidValidity },
+        { mailboxId: companion.id, remoteId: 'Spam', name: 'Spam', type: 'spam', uidValidity },
     ])
 
     return companion.id
+}
+
+export async function deleteMailboxById(mailboxId: string): Promise<void> {
+    await db.delete(mailMessages).where(eq(mailMessages.mailboxId, mailboxId))
+    await db.delete(mailFilters).where(eq(mailFilters.mailboxId, mailboxId))
+    await db.delete(signatures).where(eq(signatures.mailboxId, mailboxId))
+    await db.delete(mailFolders).where(eq(mailFolders.mailboxId, mailboxId))
+    await db.delete(mailboxes).where(eq(mailboxes.id, mailboxId))
 }
 
 /**
  * Delete a user's native mailbox and all its messages/folders.
  */
 export async function deleteUserMailbox(userId: string): Promise<void> {
+    const owner = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+    })
+
+    if (!owner) return
+
     const companion = await db.query.mailboxes.findFirst({
         where: and(
             eq(mailboxes.userId, userId),
+            eq(mailboxes.email, owner.email.toLowerCase()),
             eq(mailboxes.isNative, true)
         ),
     })
 
     if (!companion) return
 
-    await db.delete(mailMessages).where(eq(mailMessages.mailboxId, companion.id))
-    await db.delete(mailFolders).where(eq(mailFolders.mailboxId, companion.id))
-    await db.delete(mailboxes).where(eq(mailboxes.id, companion.id))
+    await deleteMailboxById(companion.id)
 }
 
 /**
@@ -129,13 +152,12 @@ export async function validateEmailDomainForOrg(email: string, organizationId: s
 export async function findLocalUser(email: string): Promise<{ userId: string } | null> {
     const emailDomain = email.split('@')[1]?.toLowerCase()
     if (!emailDomain) {
-        console.log(`[NativeMail] findLocalUser("${email}") → NO DOMAIN PART`)
+        console.log(`[NativeMail] findLocalUser("${email}") -> NO DOMAIN PART`)
         return null
     }
 
-    console.log(`[NativeMail] findLocalUser("${email}") → checking domain "${emailDomain}"...`)
+    console.log(`[NativeMail] findLocalUser("${email}") -> checking domain "${emailDomain}"...`)
 
-    // Domain must be verified in some org
     const verifiedDomain = await db.query.domains.findFirst({
         where: and(
             eq(domains.name, emailDomain),
@@ -143,25 +165,28 @@ export async function findLocalUser(email: string): Promise<{ userId: string } |
         ),
     })
     if (!verifiedDomain) {
-        // Log all domains to help debug
         const allDomains = await db.query.domains.findMany()
-        console.log(`[NativeMail] findLocalUser("${email}") → domain "${emailDomain}" NOT VERIFIED`)
-        console.log(`[NativeMail]   All domains in DB:`, allDomains.map(d => `${d.name} (status=${d.verificationStatus}, orgId=${d.organizationId})`))
+        console.log(`[NativeMail] findLocalUser("${email}") -> domain "${emailDomain}" NOT VERIFIED`)
+        console.log('[NativeMail]   All domains in DB:', allDomains.map(d => `${d.name} (status=${d.verificationStatus}, orgId=${d.organizationId})`))
         return null
     }
 
-    console.log(`[NativeMail] findLocalUser("${email}") → domain "${emailDomain}" VERIFIED (orgId=${verifiedDomain.organizationId})`)
+    console.log(`[NativeMail] findLocalUser("${email}") -> domain "${emailDomain}" VERIFIED (orgId=${verifiedDomain.organizationId})`)
 
-    // A non-admin user with that exact email must exist
     const user = await db.query.users.findFirst({
         where: eq(users.email, email.toLowerCase()),
     })
 
     if (!user) {
-        console.log(`[NativeMail] findLocalUser("${email}") → USER NOT FOUND in users table`)
+        console.log(`[NativeMail] findLocalUser("${email}") -> USER NOT FOUND in users table`)
         return null
     }
 
-    console.log(`[NativeMail] findLocalUser("${email}") → FOUND userId=${user.id} isAdmin=${user.isAdmin}`)
+    if (user.isAdmin) {
+        console.log(`[NativeMail] findLocalUser("${email}") -> USER IS ADMIN, skipping local mailbox delivery`)
+        return null
+    }
+
+    console.log(`[NativeMail] findLocalUser("${email}") -> FOUND userId=${user.id} isAdmin=${user.isAdmin}`)
     return { userId: user.id }
 }

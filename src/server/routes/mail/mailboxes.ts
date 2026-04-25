@@ -2,20 +2,60 @@ import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { eq, and, desc } from 'drizzle-orm'
 import { db } from '../../../db'
-import { mailboxes, mailFolders, mailMessages, users } from '../../../db/schema'
+import { mailboxes, mailFolders, users } from '../../../db/schema'
 import { encryptSecret } from '../../lib/crypto'
-import { authenticateNativeUser, createUserMailbox } from '../../lib/native-mail'
+import { authenticateNativeUser, createUserMailbox, deleteMailboxById } from '../../lib/native-mail'
 
 const router = Router()
 
 export async function checkUserMailboxAccess(userId: string, mailboxId: string) {
-    const mailbox = await db.query.mailboxes.findFirst({
-        where: and(
-            eq(mailboxes.id, mailboxId),
-            eq(mailboxes.userId, userId)
-        ),
-    })
+    const [user, mailbox] = await Promise.all([
+        db.query.users.findFirst({
+            where: eq(users.id, userId),
+        }),
+        db.query.mailboxes.findFirst({
+            where: and(
+                eq(mailboxes.id, mailboxId),
+                eq(mailboxes.userId, userId)
+            ),
+        }),
+    ])
+
+    if (!mailbox || !user) {
+        return null
+    }
+
+    if (mailbox.isNative && mailbox.email.toLowerCase() !== user.email.toLowerCase()) {
+        return null
+    }
+
     return mailbox
+}
+
+function isCanonicalNativeMailbox(mailbox: { isNative: boolean; email: string }, userEmail: string) {
+    return !mailbox.isNative || mailbox.email.toLowerCase() === userEmail.toLowerCase()
+}
+
+function toMailboxResponse(mailbox: {
+    id: string
+    email: string
+    displayName: string | null
+    isDefault: boolean
+    isActive: boolean
+    isNative: boolean
+    lastSyncAt: Date | null
+    syncError: string | null
+}) {
+    return {
+        id: mailbox.id,
+        email: mailbox.email,
+        displayName: mailbox.displayName,
+        isDefault: mailbox.isDefault,
+        isActive: mailbox.isActive,
+        isNative: mailbox.isNative,
+        lastSyncAt: mailbox.lastSyncAt,
+        syncError: mailbox.isNative ? null : mailbox.syncError,
+    }
 }
 
 router.get('/', async (req: Request, res: Response) => {
@@ -27,6 +67,9 @@ router.get('/', async (req: Request, res: Response) => {
 
         // Safety net: ensure native mailbox exists (should already exist from user creation)
         const user = await db.query.users.findFirst({ where: eq(users.id, userId) })
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' })
+        }
         if (user && !user.isAdmin && user.passwordHash) {
             await createUserMailbox(userId, user.email)
         }
@@ -43,9 +86,7 @@ router.get('/', async (req: Request, res: Response) => {
                 ),
             })
             for (const mb of staleNative) {
-                await db.delete(mailMessages).where(eq(mailMessages.mailboxId, mb.id))
-                await db.delete(mailFolders).where(eq(mailFolders.mailboxId, mb.id))
-                await db.delete(mailboxes).where(eq(mailboxes.id, mb.id))
+                await deleteMailboxById(mb.id)
             }
         }
 
@@ -53,25 +94,17 @@ router.get('/', async (req: Request, res: Response) => {
             where: eq(mailboxes.userId, userId),
             orderBy: [desc(mailboxes.createdAt)],
         })
+        const visibleMailboxes = userMailboxes.filter(mb => isCanonicalNativeMailbox(mb, user.email))
 
         // Clear stale syncError from native mailboxes (they don't use IMAP)
-        const nativeWithError = userMailboxes.filter(mb => mb.isNative && mb.syncError)
+        const nativeWithError = visibleMailboxes.filter(mb => mb.isNative && mb.syncError)
         if (nativeWithError.length > 0) {
             await Promise.all(nativeWithError.map(mb =>
                 db.update(mailboxes).set({ syncError: null }).where(eq(mailboxes.id, mb.id))
             ))
         }
 
-        const safeMailboxes = userMailboxes.map(mb => ({
-            id: mb.id,
-            email: mb.email,
-            displayName: mb.displayName,
-            isDefault: mb.isDefault,
-            isActive: mb.isActive,
-            isNative: mb.isNative,
-            lastSyncAt: mb.lastSyncAt,
-            syncError: mb.isNative ? null : mb.syncError,
-        }))
+        const safeMailboxes = visibleMailboxes.map(toMailboxResponse)
 
         res.json({ mailboxes: safeMailboxes })
     } catch (error) {
@@ -89,29 +122,13 @@ router.get('/:id', async (req: Request, res: Response) => {
             return res.status(401).json({ error: 'Unauthorized' })
         }
 
-        const mailbox = await db.query.mailboxes.findFirst({
-            where: and(
-                eq(mailboxes.id, mailboxId),
-                eq(mailboxes.userId, userId)
-            ),
-        })
+        const mailbox = await checkUserMailboxAccess(userId, mailboxId)
 
         if (!mailbox) {
             return res.status(404).json({ error: 'Mailbox not found' })
         }
 
-        res.json({
-            mailbox: {
-                id: mailbox.id,
-                email: mailbox.email,
-                displayName: mailbox.displayName,
-                isDefault: mailbox.isDefault,
-                isActive: mailbox.isActive,
-                isNative: mailbox.isNative,
-                lastSyncAt: mailbox.lastSyncAt,
-                syncError: mailbox.syncError,
-            },
-        })
+        res.json({ mailbox: toMailboxResponse(mailbox) })
     } catch (error) {
         console.error('Error fetching mailbox:', error)
         res.status(500).json({ error: 'Internal server error' })
@@ -135,57 +152,44 @@ router.post('/connect', async (req: Request, res: Response) => {
             return res.status(401).json({ error: 'Invalid email or password' })
         }
 
-        const existing = await db.query.mailboxes.findFirst({
-            where: and(eq(mailboxes.userId, userId), eq(mailboxes.email, email.toLowerCase())),
+        const requestingUser = await db.query.users.findFirst({
+            where: eq(users.id, userId),
         })
-        if (existing) {
-            return res.status(409).json({ error: 'This account is already connected' })
+        if (!requestingUser) {
+            return res.status(401).json({ error: 'Unauthorized' })
         }
 
-        const mailHost = process.env.MAIL_HOST || 'localhost'
-        const smtpPort = parseInt(process.env.SMTP_SUBMISSION_PORT || '2587')
-        const imapPort = parseInt(process.env.IMAP_PORT || '2993')
-        const encryptedPassword = encryptSecret(password)
+        if (targetUser.id !== userId) {
+            return res.status(403).json({
+                error: 'Local server mailboxes belong to their owner. Sign in as that user instead.',
+            })
+        }
 
-        const hasDefault = await db.query.mailboxes.findFirst({
-            where: and(eq(mailboxes.userId, userId), eq(mailboxes.isDefault, true)),
+        const existing = await db.query.mailboxes.findFirst({
+            where: and(
+                eq(mailboxes.userId, userId),
+                eq(mailboxes.email, requestingUser.email.toLowerCase()),
+                eq(mailboxes.isNative, true)
+            ),
         })
+        if (existing) {
+            return res.json({ mailbox: toMailboxResponse(existing) })
+        }
 
-        const [inserted] = await db.insert(mailboxes).values({
-            userId,
-            email: email.toLowerCase(),
-            displayName: targetUser.email,
-            smtpHost: mailHost,
-            smtpPort,
-            smtpUsername: email.toLowerCase(),
-            smtpPasswordEncrypted: encryptedPassword,
-            smtpSecure: false,
-            imapHost: mailHost,
-            imapPort,
-            imapUsername: email.toLowerCase(),
-            imapPasswordEncrypted: encryptedPassword,
-            imapSecure: false,
-            isDefault: !hasDefault,
-            isNative: true,
-        }).returning()
-
-        await db.insert(mailFolders).values([
-            { mailboxId: inserted.id, remoteId: 'INBOX',   name: 'Inbox',   type: 'inbox' },
-            { mailboxId: inserted.id, remoteId: 'Sent',    name: 'Sent',    type: 'sent' },
-            { mailboxId: inserted.id, remoteId: 'Drafts',  name: 'Drafts',  type: 'drafts' },
-            { mailboxId: inserted.id, remoteId: 'Archive', name: 'Archive', type: 'archive' },
-            { mailboxId: inserted.id, remoteId: 'Trash',   name: 'Trash',   type: 'trash' },
-            { mailboxId: inserted.id, remoteId: 'Spam',    name: 'Spam',    type: 'spam' },
-        ])
+        await createUserMailbox(userId, requestingUser.email)
+        const created = await db.query.mailboxes.findFirst({
+            where: and(
+                eq(mailboxes.userId, userId),
+                eq(mailboxes.email, requestingUser.email.toLowerCase()),
+                eq(mailboxes.isNative, true)
+            ),
+        })
+        if (!created) {
+            return res.status(500).json({ error: 'Failed to provision local mailbox' })
+        }
 
         res.status(201).json({
-            mailbox: {
-                id: inserted.id,
-                email: inserted.email,
-                displayName: inserted.displayName,
-                isDefault: inserted.isDefault,
-                isActive: inserted.isActive,
-            },
+            mailbox: toMailboxResponse(created),
         })
     } catch (error) {
         if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors })
@@ -295,12 +299,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
         const data = schema.parse(req.body)
 
-        const existing = await db.query.mailboxes.findFirst({
-            where: and(
-                eq(mailboxes.id, mailboxId),
-                eq(mailboxes.userId, userId)
-            ),
-        })
+        const existing = await checkUserMailboxAccess(userId, mailboxId)
 
         if (!existing) {
             return res.status(404).json({ error: 'Mailbox not found' })
@@ -351,20 +350,13 @@ router.delete('/:id', async (req: Request, res: Response) => {
             return res.status(401).json({ error: 'Unauthorized' })
         }
 
-        const existing = await db.query.mailboxes.findFirst({
-            where: and(
-                eq(mailboxes.id, mailboxId),
-                eq(mailboxes.userId, userId)
-            ),
-        })
+        const existing = await checkUserMailboxAccess(userId, mailboxId)
 
         if (!existing) {
             return res.status(404).json({ error: 'Mailbox not found' })
         }
 
-        await db.delete(mailMessages).where(eq(mailMessages.mailboxId, mailboxId))
-        await db.delete(mailFolders).where(eq(mailFolders.mailboxId, mailboxId))
-        await db.delete(mailboxes).where(eq(mailboxes.id, mailboxId))
+        await deleteMailboxById(mailboxId)
 
         res.json({ success: true })
     } catch (error) {

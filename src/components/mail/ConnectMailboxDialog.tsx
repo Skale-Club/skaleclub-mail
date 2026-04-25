@@ -86,7 +86,7 @@ export function ConnectMailboxDialog({ open, onOpenChange, onConnected }: Connec
                 <DialogHeader>
                     <DialogTitle>Connect Email Account</DialogTitle>
                     <DialogDescription>
-                        Enter the credentials of an account registered on this server
+                        Enter the credentials for your own mailbox on this server. To open another local mailbox, sign in as that user.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 mt-2">
