@@ -17,14 +17,17 @@ const BCRYPT_ROUNDS = 12
 /**
  * Authenticate a user for SMTP/IMAP access.
  * Returns the user record on success, null on failure.
- * Platform admins (isAdmin=true) cannot authenticate via SMTP/IMAP.
+ *
+ * Both regular users and platform admins can authenticate via SMTP/IMAP
+ * against their own native mailbox — admins still have a native mailbox
+ * tied to their email and may use webmail/SMTP/IMAP normally.
  */
 export async function authenticateNativeUser(email: string, password: string) {
     const user = await db.query.users.findFirst({
         where: eq(users.email, email.toLowerCase()),
     })
 
-    if (!user || !user.passwordHash || user.isAdmin) return null
+    if (!user || !user.passwordHash) return null
 
     const valid = await bcrypt.compare(password, user.passwordHash)
     return valid ? user : null
@@ -46,7 +49,7 @@ export async function createUserMailbox(userId: string, _email: string): Promise
         where: eq(users.id, userId),
     })
 
-    if (!owner || owner.isAdmin) {
+    if (!owner) {
         return null
     }
 
@@ -179,11 +182,6 @@ export async function findLocalUser(email: string): Promise<{ userId: string } |
 
     if (!user) {
         console.log(`[NativeMail] findLocalUser("${email}") -> USER NOT FOUND in users table`)
-        return null
-    }
-
-    if (user.isAdmin) {
-        console.log(`[NativeMail] findLocalUser("${email}") -> USER IS ADMIN, skipping local mailbox delivery`)
         return null
     }
 

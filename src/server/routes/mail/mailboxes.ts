@@ -8,32 +8,53 @@ import { authenticateNativeUser, createUserMailbox, deleteMailboxById } from '..
 
 const router = Router()
 
+/**
+ * Check whether `userId` can access `mailboxId`.
+ *
+ * Rules:
+ *   - Owner can always access their own mailbox.
+ *   - Platform admins (users.isAdmin = true) can access any mailbox in the
+ *     system (impersonation: super-admin reads other users' inboxes from
+ *     their own panel).
+ *   - For non-admin owners of a native mailbox, the email on the mailbox
+ *     must still match the user's email (sanity check; native mailboxes
+ *     are 1:1 with the user record).
+ */
 export async function checkUserMailboxAccess(userId: string, mailboxId: string) {
-    const [user, mailbox] = await Promise.all([
+    const [requester, mailbox] = await Promise.all([
         db.query.users.findFirst({
             where: eq(users.id, userId),
         }),
         db.query.mailboxes.findFirst({
-            where: and(
-                eq(mailboxes.id, mailboxId),
-                eq(mailboxes.userId, userId)
-            ),
+            where: eq(mailboxes.id, mailboxId),
         }),
     ])
 
-    if (!mailbox || !user) {
+    if (!mailbox || !requester) {
         return null
     }
 
-    if (mailbox.isNative && mailbox.email.toLowerCase() !== user.email.toLowerCase()) {
+    // Admin bypass: super-admins can access any mailbox.
+    if (requester.isAdmin) {
+        return mailbox
+    }
+
+    // Non-admins must own the mailbox.
+    if (mailbox.userId !== userId) {
         return null
+    }
+
+    // For native mailboxes, the email must match the owner's email.
+    if (mailbox.isNative) {
+        const owner = await db.query.users.findFirst({
+            where: eq(users.id, mailbox.userId),
+        })
+        if (!owner || mailbox.email.toLowerCase() !== owner.email.toLowerCase()) {
+            return null
+        }
     }
 
     return mailbox
-}
-
-function isCanonicalNativeMailbox(mailbox: { isNative: boolean; email: string }, userEmail: string) {
-    return !mailbox.isNative || mailbox.email.toLowerCase() === userEmail.toLowerCase()
 }
 
 function toMailboxResponse(mailbox: {
@@ -65,46 +86,38 @@ router.get('/', async (req: Request, res: Response) => {
             return res.status(401).json({ error: 'Unauthorized' })
         }
 
-        // Safety net: ensure native mailbox exists (should already exist from user creation)
+        // Safety net: ensure native mailbox exists for the requester (should
+        // already exist from user creation). Applies to admins too — admins
+        // can use webmail like any other user.
         const user = await db.query.users.findFirst({ where: eq(users.id, userId) })
         if (!user) {
             return res.status(404).json({ error: 'User not found' })
         }
-        if (user && !user.isAdmin && user.passwordHash) {
+        if (user.passwordHash) {
             await createUserMailbox(userId, user.email)
         }
 
-        // Clean up stale native mailboxes that belong to an admin's OWN email
-        // (admins don't have a native mailbox for themselves, but they may manage
-        // other users' native mailboxes connected via POST /connect).
-        if (user?.isAdmin) {
-            const staleNative = await db.query.mailboxes.findMany({
-                where: and(
-                    eq(mailboxes.userId, userId),
-                    eq(mailboxes.isNative, true),
-                    eq(mailboxes.email, user.email),
-                ),
-            })
-            for (const mb of staleNative) {
-                await deleteMailboxById(mb.id)
-            }
-        }
-
-        const userMailboxes = await db.query.mailboxes.findMany({
-            where: eq(mailboxes.userId, userId),
-            orderBy: [desc(mailboxes.createdAt)],
-        })
-        const visibleMailboxes = userMailboxes.filter(mb => isCanonicalNativeMailbox(mb, user.email))
+        // Admins see every mailbox in the system (super-admin impersonation:
+        // they can pick any user's inbox from their AccountSwitcher). Regular
+        // users only see their own mailboxes.
+        const userMailboxes = user.isAdmin
+            ? await db.query.mailboxes.findMany({
+                  orderBy: [desc(mailboxes.createdAt)],
+              })
+            : await db.query.mailboxes.findMany({
+                  where: eq(mailboxes.userId, userId),
+                  orderBy: [desc(mailboxes.createdAt)],
+              })
 
         // Clear stale syncError from native mailboxes (they don't use IMAP)
-        const nativeWithError = visibleMailboxes.filter(mb => mb.isNative && mb.syncError)
+        const nativeWithError = userMailboxes.filter(mb => mb.isNative && mb.syncError)
         if (nativeWithError.length > 0) {
             await Promise.all(nativeWithError.map(mb =>
                 db.update(mailboxes).set({ syncError: null }).where(eq(mailboxes.id, mb.id))
             ))
         }
 
-        const safeMailboxes = visibleMailboxes.map(toMailboxResponse)
+        const safeMailboxes = userMailboxes.map(toMailboxResponse)
 
         res.json({ mailboxes: safeMailboxes })
     } catch (error) {
@@ -159,16 +172,25 @@ router.post('/connect', async (req: Request, res: Response) => {
             return res.status(401).json({ error: 'Unauthorized' })
         }
 
-        if (targetUser.id !== userId) {
+        // Non-admins can only provision a native mailbox for themselves.
+        // Admins may provision/refresh a native mailbox on behalf of any user
+        // they have credentials for (super-admin impersonation flow).
+        if (!requestingUser.isAdmin && targetUser.id !== userId) {
             return res.status(403).json({
                 error: 'Local server mailboxes belong to their owner. Sign in as that user instead.',
             })
         }
 
+        // Native mailboxes are owned by the *target* user, not the requester.
+        // This keeps the "users.email = mailboxes.email for native rows"
+        // invariant intact even when an admin provisions on behalf of someone.
+        const ownerUserId = targetUser.id
+        const ownerEmail = targetUser.email.toLowerCase()
+
         const existing = await db.query.mailboxes.findFirst({
             where: and(
-                eq(mailboxes.userId, userId),
-                eq(mailboxes.email, requestingUser.email.toLowerCase()),
+                eq(mailboxes.userId, ownerUserId),
+                eq(mailboxes.email, ownerEmail),
                 eq(mailboxes.isNative, true)
             ),
         })
@@ -176,11 +198,11 @@ router.post('/connect', async (req: Request, res: Response) => {
             return res.json({ mailbox: toMailboxResponse(existing) })
         }
 
-        await createUserMailbox(userId, requestingUser.email)
+        await createUserMailbox(ownerUserId, targetUser.email)
         const created = await db.query.mailboxes.findFirst({
             where: and(
-                eq(mailboxes.userId, userId),
-                eq(mailboxes.email, requestingUser.email.toLowerCase()),
+                eq(mailboxes.userId, ownerUserId),
+                eq(mailboxes.email, ownerEmail),
                 eq(mailboxes.isNative, true)
             ),
         })

@@ -13,6 +13,7 @@ import AdminLayout from './components/admin/AdminLayout'
 import { OrganizationProvider } from './hooks/useOrganization'
 import { ComposeProvider } from './hooks/useCompose'
 import { MailLayout } from './components/mail/MailLayout'
+import { AppErrorBoundary } from './components/AppErrorBoundary'
 import './index.css'
 
 const Login = React.lazy(() => import('./pages/Login'))
@@ -468,6 +469,8 @@ export default App
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
-        <App />
+        <AppErrorBoundary>
+            <App />
+        </AppErrorBoundary>
     </React.StrictMode>
 )
