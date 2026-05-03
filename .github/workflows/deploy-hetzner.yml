@@ -131,9 +131,9 @@ jobs:
               -e ENCRYPTION_KEY="${{ secrets.ENCRYPTION_KEY }}" \
               -e OUTLOOK_TOKEN_ENCRYPTION_KEY="${{ secrets.OUTLOOK_TOKEN_ENCRYPTION_KEY }}" \
               -e MAIL_DOMAIN="${{ secrets.MAIL_DOMAIN }}" \
-              -e MAIL_HOST="${{ secrets.MAIL_HOST }}" \
-              -e MAIL_TLS_CERT_PATH="/etc/letsencrypt/live/${{ secrets.MAIL_HOST }}/fullchain.pem" \
-              -e MAIL_TLS_KEY_PATH="/etc/letsencrypt/live/${{ secrets.MAIL_HOST }}/privkey.pem" \
+              -e MAIL_HOST="mx.skale.club" \
+              -e MAIL_TLS_CERT_PATH="/etc/letsencrypt/live/mx.skale.club/fullchain.pem" \
+              -e MAIL_TLS_KEY_PATH="/etc/letsencrypt/live/mx.skale.club/privkey.pem" \
               -e APP_COMPANY_NAME="${{ secrets.APP_COMPANY_NAME }}" \
               -e APP_APPLICATION_NAME="${{ secrets.APP_APPLICATION_NAME }}" \
               -e SMTP_HOST="${{ secrets.SMTP_HOST }}" \
@@ -224,9 +224,9 @@ jobs:
                   -e ENCRYPTION_KEY="${{ secrets.ENCRYPTION_KEY }}" \
                   -e OUTLOOK_TOKEN_ENCRYPTION_KEY="${{ secrets.OUTLOOK_TOKEN_ENCRYPTION_KEY }}" \
                   -e MAIL_DOMAIN="${{ secrets.MAIL_DOMAIN }}" \
-                  -e MAIL_HOST="${{ secrets.MAIL_HOST }}" \
-                  -e MAIL_TLS_CERT_PATH="/etc/letsencrypt/live/${{ secrets.MAIL_HOST }}/fullchain.pem" \
-                  -e MAIL_TLS_KEY_PATH="/etc/letsencrypt/live/${{ secrets.MAIL_HOST }}/privkey.pem" \
+                  -e MAIL_HOST="mx.skale.club" \
+                  -e MAIL_TLS_CERT_PATH="/etc/letsencrypt/live/mx.skale.club/fullchain.pem" \
+                  -e MAIL_TLS_KEY_PATH="/etc/letsencrypt/live/mx.skale.club/privkey.pem" \
                   -e APP_COMPANY_NAME="${{ secrets.APP_COMPANY_NAME }}" \
                   -e APP_APPLICATION_NAME="${{ secrets.APP_APPLICATION_NAME }}" \
                   -e SMTP_HOST="${{ secrets.SMTP_HOST }}" \
