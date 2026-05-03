@@ -226,6 +226,30 @@ async function buildFetchResponse(
         } else if (upper === 'RFC822.HEADER' || upper === 'BODY[HEADER]' || upper === 'BODY.PEEK[HEADER]') {
             const header = buildHeader(msg)
             parts.push(`${upper.includes('PEEK') ? 'BODY[HEADER]' : upper} {${Buffer.byteLength(header, 'utf8')}}\r\n${header}`)
+        } else if (upper.startsWith('BODY[HEADER.FIELDS') || upper.startsWith('BODY.PEEK[HEADER.FIELDS')) {
+            const isPeek = upper.startsWith('BODY.PEEK')
+            const fieldsMatch = upper.match(/HEADER\.FIELDS(?:\.NOT)?\s+\(([^)]+)\)/)
+            const requestedFields = fieldsMatch ? fieldsMatch[1].split(/\s+/) : []
+            const to = (msg.toAddresses as Array<{ name?: string; address?: string }> | null) || []
+            const cc = (msg.ccAddresses as Array<{ name?: string; address?: string }> | null) || []
+            const date = (msg.remoteDate || msg.receivedAt || new Date()).toUTCString()
+            let header = ''
+            for (const field of requestedFields) {
+                if (field === 'DATE') header += `Date: ${date}\r\n`
+                else if (field === 'FROM') header += `From: ${msg.fromName ? `"${msg.fromName}" ` : ''}<${msg.fromAddress || ''}>\r\n`
+                else if (field === 'SUBJECT' && msg.subject) header += `Subject: ${msg.subject}\r\n`
+                else if (field === 'TO') { const s = to.map(a => a.name ? `"${a.name}" <${a.address}>` : a.address).join(', '); if (s) header += `To: ${s}\r\n` }
+                else if (field === 'CC') { const s = cc.map(a => a.name ? `"${a.name}" <${a.address}>` : a.address).join(', '); if (s) header += `Cc: ${s}\r\n` }
+                else if (field === 'MESSAGE-ID') header += `Message-ID: ${msg.messageId || `<${msg.id}@skaleclub.mail>`}\r\n`
+                else if (field === 'IN-REPLY-TO' && msg.inReplyTo) header += `In-Reply-To: ${msg.inReplyTo}\r\n`
+                else if (field === 'REFERENCES' && msg.references) header += `References: ${msg.references}\r\n`
+            }
+            header += '\r\n'
+            const responseKey = `BODY[HEADER.FIELDS (${fieldsMatch?.[1] || ''})]`
+            parts.push(`${responseKey} {${Buffer.byteLength(header, 'utf8')}}\r\n${header}`)
+            if (!isPeek && !msg.isRead) {
+                await db.update(mailMessages).set({ isRead: true, updatedAt: new Date() }).where(eq(mailMessages.id, msg.id))
+            }
         } else if (upper === 'RFC822.TEXT' || upper === 'BODY[TEXT]' || upper === 'BODY.PEEK[TEXT]') {
             const body = (msg.plainBody || msg.htmlBody || '')
             parts.push(`${upper.includes('PEEK') ? 'BODY[TEXT]' : upper} {${Buffer.byteLength(body, 'utf8')}}\r\n${body}`)
