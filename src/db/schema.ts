@@ -1186,7 +1186,7 @@ export const mailMessages = pgTable('mail_messages', {
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
-    mailboxUidUnique: uniqueIndex('mail_message_mailbox_uid_unique').on(table.mailboxId, table.remoteUid),
+    folderUidUnique: uniqueIndex('mail_message_folder_uid_unique').on(table.folderId, table.remoteUid),
     idxMailMessagesMailboxId: index('idx_mail_messages_mailbox_id').on(table.mailboxId),
     idxMailMessagesFolderId: index('idx_mail_messages_folder_id').on(table.folderId),
 }))
