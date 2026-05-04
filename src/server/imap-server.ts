@@ -356,9 +356,21 @@ async function handleCommand(session: IMAPSession, tag: string, command: string,
         return
     }
 
-    // ── NOOP ──
-    if (cmd === 'NOOP') {
-        sendLine(socket, `${tag} OK NOOP completed`)
+    // ── NOOP / CHECK ──
+    // RFC 3501 §6.1.2 / §6.4.1: servers SHOULD send any pending untagged
+    // responses (EXISTS, RECENT, EXPUNGE, FETCH) before the tagged OK.
+    // Thunderbird uses NOOP and CHECK to poll for new mail when not in IDLE.
+    if (cmd === 'NOOP' || cmd === 'CHECK') {
+        if (session.state === 'selected' && session.selectedFolderId) {
+            const newCount = await countFolderMessages(session.selectedFolderId)
+            if (newCount !== session.knownMessageCount) {
+                const delta = Math.max(0, newCount - session.knownMessageCount)
+                sendLine(socket, `* ${newCount} EXISTS`)
+                sendLine(socket, `* ${delta} RECENT`)
+                session.knownMessageCount = newCount
+            }
+        }
+        sendLine(socket, `${tag} OK ${cmd} completed`)
         return
     }
 
@@ -883,7 +895,11 @@ async function handleCommand(session: IMAPSession, tag: string, command: string,
             try {
                 const newCount = await countFolderMessages(session.selectedFolderId!)
                 if (newCount !== session.knownMessageCount) {
+                    const delta = Math.max(0, newCount - session.knownMessageCount)
+                    // RFC 3501: send EXISTS then RECENT so clients (e.g. Thunderbird)
+                    // know there are new messages to fetch.
                     sendLine(session.socket, `* ${newCount} EXISTS`)
+                    sendLine(session.socket, `* ${delta} RECENT`)
                     session.knownMessageCount = newCount
                 }
             } catch (err) {
