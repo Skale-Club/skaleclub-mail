@@ -247,6 +247,22 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 const clientDist = join(process.cwd(), 'dist', 'client')
 
 if (existsSync(clientDist)) {
+    // sw.js and registerSW.js must never be cached by HTTP intermediaries.
+    // The browser's SW update algorithm compares the byte content of the
+    // new sw.js against the installed copy; if an HTTP cache returns the
+    // old sw.js the browser thinks nothing changed and won't install the
+    // new build's service worker, causing stale-chunk blank screens.
+    app.get('/sw.js', (_req, res) => {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+        res.setHeader('Content-Type', 'application/javascript')
+        res.sendFile(join(clientDist, 'sw.js'))
+    })
+    app.get('/registerSW.js', (_req, res) => {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+        res.setHeader('Content-Type', 'application/javascript')
+        res.sendFile(join(clientDist, 'registerSW.js'))
+    })
+
     app.use(express.static(clientDist))
     // SPA fallback — serve index.html for all non-API routes
     app.use((_req: express.Request, res: express.Response) => {
