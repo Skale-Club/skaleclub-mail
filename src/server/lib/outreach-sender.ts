@@ -11,6 +11,8 @@ import { decryptSecret } from './crypto'
 import { interpolateTemplate, type LeadForTemplate } from './template-variables'
 import { injectTracking } from './tracking'
 import { sendMessageWithOutlook } from './outlook'
+import { generateUnsubscribeLink } from '../routes/outreach/unsubscribe'
+import { generateOutreachToken } from './outreach-tokens'
 
 interface SendOutreachEmailParams {
     account: typeof emailAccounts.$inferSelect
@@ -30,6 +32,7 @@ interface SendResult {
     error?: string
     finalHtml?: string
     finalText?: string
+    trackingToken?: string
 }
 
 export function createSmtpTransporter(account: typeof emailAccounts.$inferSelect): nodemailer.Transporter {
@@ -108,6 +111,10 @@ export async function sendOutreachEmail(params: SendOutreachEmailParams): Promis
         const htmlTemplate = abVariant === 'b' && step.htmlBodyB ? step.htmlBodyB : step.htmlBody
         const plainTemplate = abVariant === 'b' && step.plainBodyB ? step.plainBodyB : step.plainBody
 
+        const baseUrl = trackingBaseUrl || process.env.FRONTEND_URL || 'http://localhost:9000'
+        const unsubscribeUrl = generateUnsubscribeLink(campaignLeadId, campaign.id, baseUrl)
+        const trackingToken = generateOutreachToken({ kind: 'track', clid: campaignLeadId, cid: campaign.id })
+
         const leadForTemplate: LeadForTemplate = {
             email: lead.email,
             firstName: lead.firstName,
@@ -123,17 +130,30 @@ export async function sendOutreachEmail(params: SendOutreachEmailParams): Promis
             customFields: lead.customFields as Record<string, any> | null,
         }
 
-        const subject = interpolateTemplate(subjectTemplate || '', leadForTemplate)
-        let html = htmlTemplate ? interpolateTemplate(htmlTemplate, leadForTemplate) : undefined
-        const text = plainTemplate ? interpolateTemplate(plainTemplate, leadForTemplate) : undefined
+        // P0-03: {{unsubscribeUrl}} resolves via the template context (Plan 14-05 added support in template-variables.ts).
+        const tplContext = { unsubscribeUrl }
+        const subject = interpolateTemplate(subjectTemplate || '', leadForTemplate, tplContext)
+        let html = htmlTemplate ? interpolateTemplate(htmlTemplate, leadForTemplate, tplContext) : undefined
+        const text = plainTemplate ? interpolateTemplate(plainTemplate, leadForTemplate, tplContext) : undefined
 
         if (html && (trackOpens || trackClicks)) {
-            const baseUrl = trackingBaseUrl || process.env.FRONTEND_URL || 'http://localhost:9000'
-            const trackingToken = campaignLeadId
+            // Use the signed HMAC tracking token (NOT the raw campaignLeadId) so /t/open/:token
+            // and /t/click/:token can lookup outreach_emails.tracking_token (see Plan 14-05 track.ts edit).
             html = injectTracking(html, trackingToken, baseUrl, trackOpens ?? false, trackClicks ?? false)
         }
 
+        // P0-03: Inject List-Unsubscribe headers for Gmail/Yahoo bulk-sender compliance (RFC 8058 one-click).
+        // Build the mailto fallback from the campaign's reply-to domain, else fall back to MAIL_DOMAIN env.
+        const replyToDomain = campaign.replyToEmail?.split('@')[1] || process.env.MAIL_DOMAIN || 'example.com'
+        const headers: Record<string, string> = {
+            'List-Unsubscribe': `<${unsubscribeUrl}>, <mailto:unsubscribe@${replyToDomain}?subject=unsubscribe>`,
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        }
+
         if (account.provider === 'outlook' && account.outlookMailboxId) {
+            // NOTE: sendMessageWithOutlook does not currently accept arbitrary headers (Graph API
+            // limits header customization). List-Unsubscribe via Outlook is a known P1 limitation
+            // documented in deferred ideas (phase 15). For SMTP accounts the headers go through.
             await sendMessageWithOutlook({
                 organizationId: account.organizationId,
                 mailboxId: account.outlookMailboxId,
@@ -148,6 +168,7 @@ export async function sendOutreachEmail(params: SendOutreachEmailParams): Promis
                 success: true,
                 finalHtml: html,
                 finalText: text,
+                trackingToken,
             }
         }
 
@@ -163,6 +184,7 @@ export async function sendOutreachEmail(params: SendOutreachEmailParams): Promis
             html,
             text,
             replyTo: campaign.replyToEmail || undefined,
+            headers,
         }
 
         const info = await transporter.sendMail(mailOptions)
@@ -172,6 +194,7 @@ export async function sendOutreachEmail(params: SendOutreachEmailParams): Promis
             messageId: info.messageId,
             finalHtml: html,
             finalText: text,
+            trackingToken,
         }
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error sending email'
@@ -193,6 +216,7 @@ export async function recordOutreachEmail(params: {
     htmlBody: string | null
     abVariant: 'a' | 'b' | null
     messageId?: string
+    trackingToken: string   // now REQUIRED — passed by processOutreachSequences (Plan 14-06)
 }): Promise<typeof outreachEmails.$inferSelect> {
     const [record] = await db.insert(outreachEmails).values({
         organizationId: params.organizationId,
@@ -205,8 +229,7 @@ export async function recordOutreachEmail(params: {
         htmlBody: params.htmlBody,
         abVariant: params.abVariant,
         messageId: params.messageId,
-        // TEMP: placeholder token until Plan 14-05 replaces with HMAC (concatenated to satisfy UNIQUE)
-        trackingToken: `${params.campaignLeadId}:${params.sequenceStepId}`,
+        trackingToken: params.trackingToken,    // Replaces the 14-03 TEMP placeholder.
         status: 'sent',
         sentAt: new Date(),
     }).returning()

@@ -245,6 +245,9 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
                 htmlBody: sendResult.finalHtml ?? null,
                 abVariant,
                 messageId: sendResult.messageId,
+                // 14-05: transient — Plan 14-06 Task 2 removes this entire call in favor of
+                // idempotent-claim INSERT (the trackingToken will be on the placeholder row).
+                trackingToken: sendResult.trackingToken!,
             })
 
             const isFirstContact = !campaignLead.firstContactedAt
