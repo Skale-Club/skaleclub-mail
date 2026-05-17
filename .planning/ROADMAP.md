@@ -141,10 +141,10 @@ Plans:
 **Goal:** Make the outreach module functional end-to-end and compliant with bulk-sender requirements (Gmail/Yahoo, CAN-SPAM, GDPR). Close the 11 P0 findings from `.planning/debug/outreach-system-deep-audit.md` (2026-05-16, including the user-reported P0-11 "tela preta" bug appended on the same day).
 **Requirements:** P0-01, P0-02, P0-03, P0-04, P0-05, P0-06, P0-07, P0-08, P0-09, P0-10, P0-11 (treated as requirement IDs since REQUIREMENTS.md predates this phase)
 **Depends on:** Phases 10-13 (v1.2 mail server stack — merged in `3bcc241`)
-**Plans:** 6 plans
+**Plans:** 1/6 plans executed
 
 Plans:
-- [ ] 14-01-PLAN.md — Fix middleware 403 (P0-04) — unblocks every other plan
+- [x] 14-01-PLAN.md — Fix middleware 403 (P0-04) — unblocks every other plan
 - [ ] 14-02-PLAN.md — NewCampaignPage + route (P0-11)
 - [ ] 14-03-PLAN.md — Migration 020 + schema cascade FKs + new columns (P0-10 schema, P0-02 prereq, P0-07 prereq)
 - [ ] 14-04-PLAN.md — addLeadsToCampaign fixes + deleteCampaign tx wrap (P0-01, P0-09, P0-10 code)
