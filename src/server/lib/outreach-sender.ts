@@ -205,6 +205,8 @@ export async function recordOutreachEmail(params: {
         htmlBody: params.htmlBody,
         abVariant: params.abVariant,
         messageId: params.messageId,
+        // TEMP: placeholder token until Plan 14-05 replaces with HMAC (concatenated to satisfy UNIQUE)
+        trackingToken: `${params.campaignLeadId}:${params.sequenceStepId}`,
         status: 'sent',
         sentAt: new Date(),
     }).returning()
