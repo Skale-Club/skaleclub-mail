@@ -367,6 +367,38 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
 
             await incrementAccountStats(emailAccount.id, 'totalSent')
             // NOTE: incrementAccountStats('totalSent') increments BOTH totalSent AND currentDailySent in a single UPDATE
+            // and also sets emailAccounts.lastSentAt = NOW() so the next canSendFromAccount call
+            // for this inbox returns false until minMinutesBetweenEmails has elapsed.
+
+            // Phase 16 — INBOX-THROTTLE: spread out the NEXT pending lead on the same inbox
+            // so it doesn't become eligible at the same tick. Find the next eligible lead
+            // in this batch sharing this emailAccountId; jitter its nextScheduledAt by a
+            // random number of minutes in [min, max). No extra query — we walk the batch
+            // we already loaded at line 81.
+            const sameInboxNext = pendingLeads.find(cl =>
+                cl.id !== campaignLead.id
+                && cl.assignedEmailAccountId === emailAccount.id
+                && cl.nextScheduledAt != null
+                && cl.nextScheduledAt.getTime() <= now.getTime()
+            )
+            if (sameInboxNext) {
+                const jittered = applySendJitter(
+                    emailAccount.minMinutesBetweenEmails,
+                    emailAccount.maxMinutesBetweenEmails,
+                    new Date(),
+                )
+                await db.update(campaignLeads)
+                    .set({ nextScheduledAt: jittered })
+                    .where(eq(campaignLeads.id, sameInboxNext.id))
+                // Mutate the in-memory copy so the rest of this tick's loop sees the new schedule.
+                sameInboxNext.nextScheduledAt = jittered
+                console.log('[outreach.processor]', JSON.stringify({
+                    action: 'jitter_next',
+                    emailAccountId: emailAccount.id,
+                    campaignLeadId: sameInboxNext.id,
+                    jitteredAt: jittered.toISOString(),
+                }))
+            }
 
             if (isFirstContact) {
                 await incrementCampaignStats(campaign.id, 'leadsContacted')
