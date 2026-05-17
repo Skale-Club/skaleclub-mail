@@ -205,6 +205,10 @@ export async function sendOutreachEmail(params: SendOutreachEmailParams): Promis
     }
 }
 
+// TODO(phase-15): remove if still unused. Plan 14-06 Task 2 replaced the only caller
+// (processOutreachSequences) with an inline idempotent-claim INSERT+UPDATE flow.
+// Kept as an export for now in case future plans need a "record after send" helper,
+// but if phase 15 confirms no callers added, delete the entire function.
 export async function recordOutreachEmail(params: {
     organizationId: string
     campaignId: string
