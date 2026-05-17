@@ -20,6 +20,7 @@ import systemRoutes from './routes/system'
 import trackRoutes from './routes/track'
 import templateRoutes from './routes/templates'
 import outreachRoutes from './routes/outreach'
+import unsubscribeRoutes from './routes/outreach/unsubscribe'
 import outlookRoutes from './routes/outlook'
 import mailRoutes from './routes/mail'
 import notificationRoutes from './routes/notifications'
@@ -73,6 +74,15 @@ const trackingLimiter = rateLimit({
     message: { error: 'Too many requests, please try again later.' },
 })
 app.use('/t/', trackingLimiter)
+
+// Public unsubscribe endpoint — pre-empts P1-20. Tighter limit than /t/ because
+// /o/u/ is human-interactive (one click per recipient), not pixel-hit volume.
+const unsubscribeLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    message: { error: 'Too many unsubscribe requests, please try again later.' },
+})
+app.use('/o/u/', unsubscribeLimiter)
 
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
@@ -230,6 +240,10 @@ app.use('/api/notifications', notificationRoutes)
 // Mail client autodiscovery — Thunderbird/Outlook use paths outside /api,
 // so mounted on root. Apple .mobileconfig is under /api/system/mail-config/.
 app.use('/', autodiscoverRoutes)
+
+// Public unsubscribe endpoint — mounted OUTSIDE /api so the JWT middleware does
+// not 401 recipients clicking the link from their inbox. The HMAC token IS the auth.
+app.use('/o/u', unsubscribeRoutes)
 
 app.use('/t', trackRoutes)
 
