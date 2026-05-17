@@ -447,7 +447,10 @@ export async function resetDailyLimits(): Promise<void> {
         .set({ currentDailySent: 0 })
         .where(gt(emailAccounts.currentDailySent, 0))
         .returning({ id: emailAccounts.id })
-    console.log(`[resetDailyLimits] Reset daily send counter for ${result.length} accounts`)
+    console.log('[outreach.processor]', JSON.stringify({
+        action: 'reset_daily_limits',
+        accounts: result.length,
+    }))
 }
 
 // P0-06: Postgres advisory lock — prevents two container instances (or a blue-green deploy
