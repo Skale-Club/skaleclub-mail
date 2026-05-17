@@ -18,6 +18,9 @@ import { db } from '../../db'
 import { emailAccounts, outreachEmails, campaignLeads, leads, campaigns, suppressions } from '../../db/schema'
 import { eq, and, isNotNull, sql, desc } from 'drizzle-orm'
 import { decryptSecret } from '../lib/crypto'
+import { createLogger } from '../lib/logger'
+
+const log = createLogger('outreach.bounce')
 
 interface BounceInfo {
     recipientEmail: string
@@ -288,6 +291,16 @@ export async function markAsBounced(
             }).onConflictDoNothing()
         }
     }
+
+    log.info({
+        action: 'outreach.bounce.detected',
+        outreachEmailId,
+        campaignId,
+        leadId,
+        emailAccountId: accountId,
+        organizationId,
+        reason: reason.slice(0, 200),
+    }, 'marked as bounced')
 }
 
 export async function processBounces(): Promise<{ processed: number; bounces: number; errors: number }> {
@@ -350,7 +363,7 @@ export async function processBounces(): Promise<{ processed: number; bounces: nu
                         const bounceInfo = parseBounceMessage(parsed as any)
 
                         if (!bounceInfo.recipientEmail) {
-                            console.warn(`Could not extract recipient email from bounce message`)
+                            log.warn({ action: 'outreach.bounce.parse_failed_no_recipient' }, 'could not extract recipient from bounce')
                             continue
                         }
 
@@ -366,7 +379,11 @@ export async function processBounces(): Promise<{ processed: number; bounces: nu
                         }
 
                         if (!outreachEmail) {
-                            console.warn(`No outreach email found for bounce: ${bounceInfo.recipientEmail}`)
+                            log.warn({
+                                action: 'outreach.bounce.unmatched',
+                                recipientEmail: bounceInfo.recipientEmail,
+                                emailAccountId: account.id,
+                            }, 'no outreach email matched bounce recipient')
                             continue
                         }
 
@@ -376,7 +393,10 @@ export async function processBounces(): Promise<{ processed: number; bounces: nu
                         })
 
                         if (!campaignLead?.lead) {
-                            console.warn(`Campaign lead not found for outreach email: ${outreachEmail.id}`)
+                            log.warn({
+                                action: 'outreach.bounce.campaign_lead_missing',
+                                outreachEmailId: outreachEmail.id,
+                            }, 'campaign lead row missing for bounce target')
                             continue
                         }
 
@@ -406,7 +426,13 @@ export async function processBounces(): Promise<{ processed: number; bounces: nu
                             // Ignore flag errors
                         }
                     } catch (error) {
-                        console.error(`Error processing bounce message ${uid}:`, error)
+                        const err = error instanceof Error ? error : new Error(String(error))
+                        log.error({
+                            action: 'outreach.bounce.message_error',
+                            uid,
+                            emailAccountId: account.id,
+                            error: { message: err.message, stack: err.stack },
+                        }, 'failed to process bounce message')
                         result.errors++
                     }
                 }
@@ -414,7 +440,13 @@ export async function processBounces(): Promise<{ processed: number; bounces: nu
                 lock.release()
             }
         } catch (error) {
-            console.error(`Error processing bounces for account ${account.email}:`, error)
+            const err = error instanceof Error ? error : new Error(String(error))
+            log.error({
+                action: 'outreach.bounce.account_error',
+                emailAccountId: account.id,
+                email: account.email,
+                error: { message: err.message, stack: err.stack },
+            }, 'account bounce-processing failed')
             result.errors++
         } finally {
             if (client) {
@@ -460,7 +492,10 @@ export async function processBounceFromWebhook(data: {
     }
 
     if (!outreachEmail) {
-        console.warn(`No outreach email found for webhook bounce: ${recipientEmail}`)
+        log.warn({
+            action: 'outreach.bounce.webhook_unmatched',
+            recipientEmail,
+        }, 'no outreach email matched webhook bounce')
         return
     }
 
@@ -470,7 +505,10 @@ export async function processBounceFromWebhook(data: {
     })
 
     if (!campaignLead?.lead) {
-        console.warn(`Campaign lead not found for outreach email: ${outreachEmail.id}`)
+        log.warn({
+            action: 'outreach.bounce.webhook_campaign_lead_missing',
+            outreachEmailId: outreachEmail.id,
+        }, 'campaign lead row missing for webhook bounce target')
         return
     }
 

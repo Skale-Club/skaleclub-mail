@@ -16,6 +16,9 @@ import { db } from '../../db'
 import { emailAccounts, outreachEmails, campaignLeads, leads, campaigns } from '../../db/schema'
 import { eq, and, isNotNull, sql, gte } from 'drizzle-orm'
 import { decryptSecret } from '../lib/crypto'
+import { createLogger } from '../lib/logger'
+
+const log = createLogger('outreach.replies')
 
 interface ProcessRepliesResult {
     processed: number
@@ -75,7 +78,13 @@ export async function processReplies(): Promise<ProcessRepliesResult> {
             result.replies += replyCount
         } catch (error) {
             result.errors++
-            console.error(`[processReplies] Error processing account ${account.email}:`, error)
+            const err = error instanceof Error ? error : new Error(String(error))
+            log.error({
+                action: 'outreach.replies.account_error',
+                emailAccountId: account.id,
+                email: account.email,
+                error: { message: err.message, stack: err.stack },
+            }, 'account processing failed')
         }
     }
 
@@ -113,12 +122,12 @@ async function processAccountReplies(account: EmailAccountWithImap): Promise<num
             const MAX_PER_TICK = 500
             let uids: number[] = allUids
             if (allUids.length > MAX_PER_TICK) {
-                console.log('[outreach.replies]', JSON.stringify({
-                    action: 'defer_overflow',
+                log.warn({
+                    action: 'outreach.replies.defer_overflow',
                     emailAccountId: account.id,
                     totalUids: allUids.length,
                     processing: MAX_PER_TICK,
-                }))
+                }, 'IMAP search exceeded per-tick cap')
                 uids = allUids.slice(0, MAX_PER_TICK)
             }
 
@@ -162,8 +171,8 @@ async function processAccountReplies(account: EmailAccountWithImap): Promise<num
                     if (auto.auto) {
                         if (matched) {
                             await markAsAutoReply(matched.outreachEmail.id)
-                            console.log('[outreach.replies]', JSON.stringify({
-                                action: 'match',
+                            log.info({
+                                action: 'outreach.replies.match',
                                 decision: 'auto_reply',
                                 signal: auto.signal,
                                 matchStrategy: matched.strategy,
@@ -171,15 +180,15 @@ async function processAccountReplies(account: EmailAccountWithImap): Promise<num
                                 campaignId: matched.outreachEmail.campaignId,
                                 leadId: matched.outreachEmail.leadId,
                                 campaignLeadId: matched.outreachEmail.campaignLeadId,
-                            }))
+                            }, 'auto-reply matched to outreach email')
                         } else {
-                            console.log('[outreach.replies]', JSON.stringify({
-                                action: 'match',
+                            log.info({
+                                action: 'outreach.replies.match',
                                 decision: 'auto_reply',
                                 signal: auto.signal,
                                 matchStrategy: 'unmatched',
                                 emailAccountId: account.id,
-                            }))
+                            }, 'auto-reply not matched')
                         }
                         try {
                             await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true })
@@ -196,34 +205,38 @@ async function processAccountReplies(account: EmailAccountWithImap): Promise<num
                             matched.outreachEmail.emailAccountId,
                         )
                         replyCount++
-                        console.log('[outreach.replies]', JSON.stringify({
-                            action: 'match',
+                        log.info({
+                            action: 'outreach.replies.match',
                             decision: 'replied',
                             matchStrategy: matched.strategy,
                             emailAccountId: account.id,
                             campaignId: matched.outreachEmail.campaignId,
                             leadId: matched.outreachEmail.leadId,
                             campaignLeadId: matched.outreachEmail.campaignLeadId,
-                        }))
+                        }, 'reply matched and marked')
                         try {
                             await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true })
                         } catch { /* ignore */ }
                     } else {
-                        console.log('[outreach.replies]', JSON.stringify({
-                            action: 'match',
+                        log.info({
+                            action: 'outreach.replies.match',
                             decision: 'unmatched',
                             emailAccountId: account.id,
-                            extra: {
-                                hasInReplyTo: inReplyTo !== null,
-                                hasReferences: references !== null,
-                                hasFrom: fromAddress !== null,
-                            },
-                        }))
+                            hasInReplyTo: inReplyTo !== null,
+                            hasReferences: references !== null,
+                            hasFrom: fromAddress !== null,
+                        }, 'message did not match any outreach email')
                         // Do NOT flag unmatched messages as Seen — they may be legitimate human emails
                         // unrelated to outreach. Leaving them unread preserves user-visible state.
                     }
                 } catch (error) {
-                    console.error(`[outreach.replies] uid=${uid} error:`, error)
+                    const err = error instanceof Error ? error : new Error(String(error))
+                    log.error({
+                        action: 'outreach.replies.uid_error',
+                        uid,
+                        emailAccountId: account.id,
+                        error: { message: err.message, stack: err.stack },
+                    }, 'failed to process UID')
                 }
             }
         } finally {
