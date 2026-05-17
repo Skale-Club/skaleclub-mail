@@ -141,14 +141,14 @@ Plans:
 **Goal:** Make the outreach module functional end-to-end and compliant with bulk-sender requirements (Gmail/Yahoo, CAN-SPAM, GDPR). Close the 11 P0 findings from `.planning/debug/outreach-system-deep-audit.md` (2026-05-16, including the user-reported P0-11 "tela preta" bug appended on the same day).
 **Requirements:** P0-01, P0-02, P0-03, P0-04, P0-05, P0-06, P0-07, P0-08, P0-09, P0-10, P0-11 (treated as requirement IDs since REQUIREMENTS.md predates this phase)
 **Depends on:** Phases 10-13 (v1.2 mail server stack — merged in `3bcc241`)
-**Plans:** 4/6 plans executed
+**Plans:** 5/6 plans executed
 
 Plans:
 - [x] 14-01-PLAN.md — Fix middleware 403 (P0-04) — unblocks every other plan
 - [x] 14-02-PLAN.md — NewCampaignPage + route (P0-11)
 - [x] 14-03-PLAN.md — Migration 020 + schema cascade FKs + new columns (P0-10 schema, P0-02 prereq, P0-07 prereq)
 - [x] 14-04-PLAN.md — addLeadsToCampaign fixes + deleteCampaign tx wrap (P0-01, P0-09, P0-10 code)
-- [ ] 14-05-PLAN.md — HMAC tokens, unsubscribe mount, List-Unsubscribe headers, tracking fork (P0-02, P0-03)
+- [x] 14-05-PLAN.md — HMAC tokens, unsubscribe mount, List-Unsubscribe headers, tracking fork (P0-02, P0-03)
 - [ ] 14-06-PLAN.md — Processor idempotency + advisory lock + bounce SQL fix + suppression writes (P0-05, P0-06, P0-07, P0-08)
 
 > **Note:** Numbered 14 to follow v1.2's phases 10-13 (mail server hardening, code-merged 2026-04-15). ROADMAP.md here is the residual v1.1 doc — v1.2/v1.3 phase scaffolding lives under `.planning/phases/` while the formal roadmap rewrite is pending. See STATE.md for current milestone status.
