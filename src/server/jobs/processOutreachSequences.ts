@@ -10,6 +10,7 @@
  */
 
 import { createHash } from 'crypto'
+import { performance } from 'node:perf_hooks'
 import { db } from '../../db'
 import { campaigns, sequenceSteps, campaignLeads, leads, emailAccounts, outreachEmails, suppressions } from '../../db/schema'
 import { eq, and, lte, gt, inArray, notInArray, sql } from 'drizzle-orm'
@@ -22,6 +23,32 @@ import {
     applySendJitter,
 } from '../lib/outreach-sender'
 import { generateOutreachToken } from '../lib/outreach-tokens'
+import { createLogger, OUTREACH_PROCESSOR_SLOW_MS } from '../lib/logger'
+
+const log = createLogger('outreach.processor')
+
+// Phase 17-02 — In-memory ring buffer of the last N processor tick latencies (ms).
+// Plan 17-03's health endpoint consumes this via getRecentTickLatencies() to compute
+// p50/p95 without needing a DB table. Not durable across restarts (acceptable per
+// 17-CONTEXT.md §"Processor tick metrics").
+const TICK_HISTORY_SIZE = 100
+const tickHistory: number[] = []
+
+function recordTick(latencyMs: number): void {
+    tickHistory.push(latencyMs)
+    if (tickHistory.length > TICK_HISTORY_SIZE) {
+        tickHistory.shift()
+    }
+}
+
+/**
+ * Phase 17 — exposes the last 100 processor tick latencies (ms) for the
+ * health endpoint to compute p50/p95. In-memory ring buffer; not durable
+ * across restarts (acceptable per 17-CONTEXT.md §"Processor tick metrics").
+ */
+export function getRecentTickLatencies(): readonly number[] {
+    return tickHistory.slice()
+}
 
 type Campaign = typeof campaigns.$inferSelect
 type Lead = typeof leads.$inferSelect
@@ -74,10 +101,9 @@ function selectAbVariant(step: SequenceStep, leadId: string): 'a' | 'b' {
     return (hashInt % 100) < threshold ? 'a' : 'b'
 }
 
-// Phase 16 — standardized skip-reason log shape. Phase 17 will replace this
-// with pino structured logging; for now we use JSON.stringify so grep-able log
-// search in production gives uniform results. All `reason` values are enumerated
-// in CONTEXT.md so ops dashboards can pivot by reason.
+// Phase 16 — standardized skip-reason log shape. Phase 17-02 promoted the carrier
+// to pino structured logging; the enumerated `reason` values are preserved so ops
+// dashboards can pivot by reason without re-mapping.
 type SkipReason =
     | 'rate_limit_per_inbox'
     | 'daily_limit_reached'
@@ -100,11 +126,15 @@ function logSkip(reason: SkipReason, ctx: {
     emailAccountId?: string
     extra?: Record<string, unknown>
 }): void {
-    console.log('[outreach.processor]', JSON.stringify({
-        action: 'skip',
+    log.info({
+        action: 'outreach.send.skipped',
         reason,
-        ...ctx,
-    }))
+        campaignId: ctx.campaignId,
+        leadId: ctx.leadId,
+        campaignLeadId: ctx.campaignLeadId,
+        emailAccountId: ctx.emailAccountId,
+        ...(ctx.extra ?? {}),
+    }, `send skipped: ${reason}`)
 }
 
 export async function processOutreachSequences(): Promise<{ processed: number; sent: number; errors: number }> {
@@ -325,7 +355,14 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
             })
 
             if (!sendResult.success) {
-                console.error(`[processOutreachSequences] Send failed for campaignLead ${campaignLead.id}: ${sendResult.error}`)
+                log.error({
+                    action: 'outreach.send.failed',
+                    campaignId: campaign.id,
+                    leadId: lead.id,
+                    campaignLeadId: campaignLead.id,
+                    emailAccountId: emailAccount.id,
+                    error: { message: sendResult.error || 'Unknown send error' },
+                }, 'send failed')
                 await db.update(outreachEmails)
                     .set({
                         status: 'failed',
@@ -392,12 +429,12 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
                     .where(eq(campaignLeads.id, sameInboxNext.id))
                 // Mutate the in-memory copy so the rest of this tick's loop sees the new schedule.
                 sameInboxNext.nextScheduledAt = jittered
-                console.log('[outreach.processor]', JSON.stringify({
-                    action: 'jitter_next',
+                log.debug({
+                    action: 'outreach.processor.jitter_next',
                     emailAccountId: emailAccount.id,
                     campaignLeadId: sameInboxNext.id,
                     jitteredAt: jittered.toISOString(),
-                }))
+                }, 'jittered next eligible send')
             }
 
             if (isFirstContact) {
@@ -434,7 +471,12 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
 
             result.sent++
         } catch (error) {
-            console.error(`Error processing campaign lead ${campaignLead.id}:`, error)
+            const err = error instanceof Error ? error : new Error(String(error))
+            log.error({
+                action: 'outreach.processor.lead_exception',
+                campaignLeadId: campaignLead.id,
+                error: { message: err.message, stack: err.stack },
+            }, 'lead processing threw')
             result.errors++
         }
     }
@@ -447,10 +489,10 @@ export async function resetDailyLimits(): Promise<void> {
         .set({ currentDailySent: 0 })
         .where(gt(emailAccounts.currentDailySent, 0))
         .returning({ id: emailAccounts.id })
-    console.log('[outreach.processor]', JSON.stringify({
-        action: 'reset_daily_limits',
-        accounts: result.length,
-    }))
+    log.info({
+        action: 'outreach.processor.reset_daily_limits',
+        accountsReset: result.length,
+    }, 'reset daily limits')
 }
 
 // P0-06: Postgres advisory lock — prevents two container instances (or a blue-green deploy
@@ -471,11 +513,30 @@ export async function runOutreachProcessorWithLock(): Promise<{ acquired: boolea
         ? (lockResult as unknown as Array<{ acquired: boolean }>)[0]?.acquired === true
         : (lockResult as unknown as { rows: Array<{ acquired: boolean }> }).rows?.[0]?.acquired === true
     if (!acquired) {
-        console.log('[processOutreachSequences] advisory lock held by another instance — skipping tick')
+        log.debug({
+            action: 'outreach.processor.lock_contended',
+            lockId: LOCK_ID_OUTREACH_PROCESSOR,
+        }, 'advisory lock held by another instance — skipping tick')
         return { acquired: false }
     }
     try {
+        log.info({ action: 'outreach.processor.tick.start' }, 'tick start')
+        const tickStart = performance.now()
         const result = await processOutreachSequences()
+        const latencyMs = Math.round(performance.now() - tickStart)
+        recordTick(latencyMs)
+        const tickLogPayload = {
+            action: 'outreach.processor.tick.complete',
+            latencyMs,
+            processed: result.processed,
+            sent: result.sent,
+            errors: result.errors,
+        }
+        if (latencyMs > OUTREACH_PROCESSOR_SLOW_MS) {
+            log.warn({ ...tickLogPayload, action: 'outreach.processor.tick.slow', threshold: OUTREACH_PROCESSOR_SLOW_MS }, 'processor tick exceeded slow threshold')
+        } else {
+            log.info(tickLogPayload, 'tick complete')
+        }
         return { acquired: true, result }
     } finally {
         await db.execute(sql`SELECT pg_advisory_unlock(${LOCK_ID_OUTREACH_PROCESSOR})`)
@@ -508,5 +569,8 @@ export async function markCompletedCampaigns(): Promise<void> {
         })
         .where(inArray(campaigns.id, completedCampaigns.map(c => c.id)))
 
-    console.log(`[markCompletedCampaigns] Marked ${completedCampaigns.length} campaigns as completed`)
+    log.info({
+        action: 'outreach.processor.campaigns_completed',
+        count: completedCampaigns.length,
+    }, 'marked campaigns completed')
 }
