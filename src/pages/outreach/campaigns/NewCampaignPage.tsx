@@ -59,11 +59,16 @@ export function NewCampaignPage() {
                 }
             )
         },
-        onSuccess: () => {
+        onSuccess: (data) => {
             toast({ title: 'Campaign created', variant: 'success' })
             queryClient.invalidateQueries({ queryKey: ['campaigns'] })
-            // CONTEXT.md fallback: detail page does not exist, redirect to list.
-            setLocation('/outreach/campaigns')
+            // Phase 15: detail page now exists — land the user there.
+            if (data?.campaign?.id) {
+                setLocation(`/outreach/campaigns/${data.campaign.id}`)
+            } else {
+                // Defensive fallback: if the response shape ever changes, don't drop the user on a blank screen.
+                setLocation('/outreach/campaigns')
+            }
         },
         onError: (err: Error) => {
             toast({ title: 'Failed to create campaign', description: err.message, variant: 'destructive' })
