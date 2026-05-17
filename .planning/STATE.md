@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: — Outreach Hardening)
 status: executing
-stopped_at: Completed 17-01-PLAN.md (pino logger + outreach thresholds foundation)
-last_updated: "2026-05-17T15:22:06.779Z"
+stopped_at: Completed 17-03-PLAN.md (outreach health endpoint + shared aggregate helpers + composite index)
+last_updated: "2026-05-17T15:33:18.586Z"
 progress:
   total_phases: 9
   completed_phases: 8
   total_plans: 28
-  completed_plans: 25
+  completed_plans: 26
   percent: 75
 ---
 
@@ -28,14 +28,14 @@ See: .planning/PROJECT.md (updated 2026-04-15)
 ## Current Position
 
 Phase: 17 (observability-foundation) — EXECUTING
-Plan: 1 of ?
-Milestone: v1.2
-All 4 phase codebases merged (commit `3b2cc41`).
+Plan: 3 of 4 complete (17-01 logger + 17-02 pino swap + 17-03 health endpoint done; 17-04 daily digest remaining)
+Milestone: v1.3 (Outreach Hardening)
+All 4 phase codebases (10-13) merged (commit `3b2cc41`).
 Status: Executing Phase 17
 
-**Resume point:** See `.planning/HANDOFF.md` and `.planning/OPERATOR-CHECKLIST.md`.
+**Resume point:** Execute 17-04-PLAN.md (daily outreach digest cron). See `.planning/HANDOFF.md` and `.planning/OPERATOR-CHECKLIST.md` for ops items.
 
-Progress: [███████░░░] 75% (code done, ops pending)
+Progress: [█████████░] 93% (code 26/28 plans done; v1.2 ops pending)
 
 ### v1.2 Phase Status
 
@@ -85,6 +85,7 @@ Full IMAP/SMTP/MX stack, SASL PLAIN/LOGIN, UID ops, autodiscovery routes, UI car
 
 ### Decisions (v1.3 — Outreach Hardening)
 
+- **(17-03) Health endpoint shape + aggregate helper reuse**: `GET /api/admin/outreach/health` returns `{asOf, overall, byOrg, topBouncingCampaigns, alerts, thresholds, _meta}`. Aggregate SQL helpers live in `src/server/lib/outreach-metrics.ts` (pure, no logger calls) and are reused verbatim by Plan 17-04's daily digest. Sample-size floors on bounce alerts (sent>=20 for 1h, sent>=100 for 24h) prevent tiny-window false positives. Composite index `(sent_at, status)` on `outreach_emails` added via migration 022 (CONCURRENTLY IF NOT EXISTS).
 - **(15-01) Campaign detail tabs as component state, not nested wouter routes**: preserves `/outreach/campaigns/:id` as a stable bookmarkable URL; skips installing the shadcn Tabs primitive since `src/components/ui/` doesn't have one. CONTEXT.md §66 authorises the fallback.
 - **(15-01) Stub-then-fill pattern for parallel waves**: `CampaignDetailPage.tsx` imports default-exported placeholder tab children (`LeadsTab`, `SequenceTab`, `StatsTab`) so plans 15-02 and 15-03 can overwrite entire tab files in parallel without touching the parent page or `main.tsx`.
 - **(15-01) queryKey conventions for parallel tabs**: `['campaign', orgId, id]` for the detail fetch; `['campaign-stats', orgId, campaignId]` for OverviewTab stats. Plan 15-03's Stats tab should use a distinct key (e.g. `['campaign-stats-detail', ...]`) to avoid invalidation fights with Overview.
@@ -110,7 +111,7 @@ Full IMAP/SMTP/MX stack, SASL PLAIN/LOGIN, UID ops, autodiscovery routes, UI car
 
 ## Session Continuity
 
-Last session: 2026-05-17T15:22:06.774Z
-Stopped at: Completed 17-01-PLAN.md (pino logger + outreach thresholds foundation)
+Last session: 2026-05-17T15:33:18.582Z
+Stopped at: Completed 17-03-PLAN.md (outreach health endpoint + shared aggregate helpers + composite index)
 Resume file: None
 Next action: execute `.planning/OPERATOR-CHECKLIST.md` section 2 (install certbot on Hetzner) — unblocks Thunderbird TLS connection

@@ -183,12 +183,12 @@ Plans:
 **Goal:** Make the outreach system OPERATIONALLY LEGIBLE. Adopt `pino` for structured JSON logging across all outreach paths (sender, processor, replies, bounces, unsubscribe, track); standardize log shape `{action: "outreach.<area>.<event>", ...context}`; build `/api/admin/outreach/health` endpoint with per-org and per-campaign rolling-window metrics (sent/open/click/bounce/reply rates, processor p50/p95); add daily 09:00 UTC digest cron logging top campaigns + alerts. NO email/slack notifications, NO Prometheus — keep it free and grep-able for now. CONTEXT.md is pre-authored.
 **Requirements:** STRUCTURED-LOGS + HEALTH-ENDPOINT + DAILY-DIGEST
 **Depends on:** Phase 16
-**Plans:** 1/4 plans executed
+**Plans:** 2/4 plans executed
 
 Plans:
 - [x] 17-01-PLAN.md — Create logger.ts (pino + thresholds) and add pino + pino-pretty deps — STRUCTURED-LOGS
 - [ ] 17-02-PLAN.md — Swap all console.* in outreach paths for pino + add tick timing — STRUCTURED-LOGS
-- [ ] 17-03-PLAN.md — Build GET /api/admin/outreach/health endpoint + outreach-metrics.ts helper + sent_at/status index — HEALTH-ENDPOINT
+- [x] 17-03-PLAN.md — Build GET /api/admin/outreach/health endpoint + outreach-metrics.ts helper + sent_at/status index — HEALTH-ENDPOINT
 - [ ] 17-04-PLAN.md — dailyOutreachDigest cron at 09:00 UTC (log-only) — DAILY-DIGEST
 
 ---
