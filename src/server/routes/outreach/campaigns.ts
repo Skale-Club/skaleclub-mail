@@ -547,7 +547,13 @@ router.delete('/:id', async (req: Request, res: Response) => {
             return res.status(403).json({ error: 'Access denied' })
         }
 
-        await db.delete(campaigns).where(eq(campaigns.id, campaignId))
+        // Wrap in transaction for defense-in-depth. The schema-level ON DELETE CASCADE
+        // (migration 020) handles sequences, sequence_steps, campaign_leads, outreach_emails
+        // automatically. If a future relation is added without cascade, add explicit
+        // tx.delete(...) calls here BEFORE the campaigns delete. See audit P0-10.
+        await db.transaction(async (tx) => {
+            await tx.delete(campaigns).where(eq(campaigns.id, campaignId))
+        })
 
         res.json({ success: true })
     } catch (error) {
