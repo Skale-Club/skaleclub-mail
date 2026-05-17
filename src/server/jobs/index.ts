@@ -40,10 +40,13 @@ export function startJobs(): void {
             .catch((err) => console.error('[jobs] processOutreachSequences failed:', err))
     })
 
-    // Reset daily limits at midnight
+    // Phase 16 — INBOX-THROTTLE: reset per-account daily send counter at midnight UTC.
+    // Explicit timezone option pins the schedule to UTC independently of container TZ env
+    // (today alpine defaults to UTC, but pinning here prevents silent breakage if TZ is
+    // set by a future ops change). Pair with processOutreachSequences.resetDailyLimits.
     cron.schedule('0 0 * * *', () => {
         resetDailyLimits().catch((err) => console.error('[jobs] resetDailyLimits failed:', err))
-    })
+    }, { timezone: 'UTC' })
 
     // Process replies every 15 minutes
     cron.schedule('*/15 * * * *', () => {
@@ -55,5 +58,5 @@ export function startJobs(): void {
         processBounces().catch((err) => console.error('[jobs] processBounces failed:', err))
     })
 
-    console.log('[jobs] Scheduled: processQueue (1min), processHeld (5min), cleanup (daily 3am), outreach (5min), resetLimits (daily midnight), replies (15min), bounces (30min)')
+    console.log('[jobs] Scheduled: processQueue (1min), processHeld (5min), cleanup (daily 3am), outreach (5min), resetLimits (daily midnight UTC), replies (15min), bounces (30min)')
 }
