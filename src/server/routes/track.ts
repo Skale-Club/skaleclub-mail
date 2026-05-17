@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { db } from '../../db'
-import { messages, organizations } from '../../db/schema'
-import { eq } from 'drizzle-orm'
+import { messages, organizations, outreachEmails, campaignLeads, campaigns, emailAccounts } from '../../db/schema'
+import { eq, sql } from 'drizzle-orm'
 import { fireWebhooks, incrementStat } from '../lib/tracking'
 
 const router = Router()
@@ -44,6 +44,32 @@ router.get('/open/:token', async (req: Request, res: Response) => {
     // Async tracking — never blocks the response
     const { token } = req.params
     try {
+        // Outreach lookup first (token shape: base64url(payload).base64url(hmac) — see outreach-tokens.ts).
+        // We do NOT HMAC-verify here; the DB lookup `WHERE tracking_token = ?` is the gate.
+        // A forged token simply will not match any row. Skipping verify avoids a CPU op per pixel hit (high volume).
+        const outreachEmail = await db.query.outreachEmails.findFirst({
+            where: eq(outreachEmails.trackingToken, token),
+        })
+
+        if (outreachEmail) {
+            const now = new Date()
+            await db.update(outreachEmails)
+                .set({
+                    openedAt: outreachEmail.openedAt ?? now,
+                    openedCount: sql`${outreachEmails.openedCount} + 1`,
+                    updatedAt: now,
+                })
+                .where(eq(outreachEmails.id, outreachEmail.id))
+
+            await Promise.allSettled([
+                db.update(campaignLeads).set({ totalOpens: sql`${campaignLeads.totalOpens} + 1`, updatedAt: now }).where(eq(campaignLeads.id, outreachEmail.campaignLeadId)),
+                db.update(campaigns).set({ totalOpens: sql`${campaigns.totalOpens} + 1`, updatedAt: now }).where(eq(campaigns.id, outreachEmail.campaignId)),
+                db.update(emailAccounts).set({ totalOpens: sql`${emailAccounts.totalOpens} + 1`, updatedAt: now }).where(eq(emailAccounts.id, outreachEmail.emailAccountId)),
+            ])
+            return
+        }
+
+        // Fallback: transactional message lookup (existing behaviour for non-outreach mail).
         const message = await db.query.messages.findFirst({
             where: eq(messages.token, token),
         })
@@ -109,6 +135,30 @@ router.get('/click/:token', async (req: Request, res: Response) => {
 
     // Async tracking
     try {
+        // Outreach lookup first — same rationale as /open above.
+        const outreachEmail = await db.query.outreachEmails.findFirst({
+            where: eq(outreachEmails.trackingToken, token),
+        })
+
+        if (outreachEmail) {
+            const now = new Date()
+            await db.update(outreachEmails)
+                .set({
+                    clickedAt: outreachEmail.clickedAt ?? now,
+                    clickedCount: sql`${outreachEmails.clickedCount} + 1`,
+                    updatedAt: now,
+                })
+                .where(eq(outreachEmails.id, outreachEmail.id))
+
+            await Promise.allSettled([
+                db.update(campaignLeads).set({ totalClicks: sql`${campaignLeads.totalClicks} + 1`, updatedAt: now }).where(eq(campaignLeads.id, outreachEmail.campaignLeadId)),
+                db.update(campaigns).set({ totalClicks: sql`${campaigns.totalClicks} + 1`, updatedAt: now }).where(eq(campaigns.id, outreachEmail.campaignId)),
+                db.update(emailAccounts).set({ totalClicks: sql`${emailAccounts.totalClicks} + 1`, updatedAt: now }).where(eq(emailAccounts.id, outreachEmail.emailAccountId)),
+            ])
+            return
+        }
+
+        // Fallback: transactional message lookup (existing behaviour for non-outreach mail).
         const message = await db.query.messages.findFirst({
             where: eq(messages.token, token),
         })
