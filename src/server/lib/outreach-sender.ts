@@ -76,7 +76,10 @@ export function isWithinSendWindow(campaign: typeof campaigns.$inferSelect, now:
     return currentTimeMinutes >= startTimeMinutes && currentTimeMinutes <= endTimeMinutes
 }
 
-export function canSendFromAccount(account: typeof emailAccounts.$inferSelect): boolean {
+export function canSendFromAccount(
+    account: typeof emailAccounts.$inferSelect,
+    now: Date = new Date()
+): boolean {
     if (account.status !== 'verified') {
         return false
     }
@@ -85,7 +88,37 @@ export function canSendFromAccount(account: typeof emailAccounts.$inferSelect): 
         return false
     }
 
+    // Phase 16 — INBOX-THROTTLE: per-inbox min-spacing enforcement.
+    // lastSentAt is null on never-sent accounts (post-migration-021 default), in which
+    // case the throttle is inapplicable. When set, require min*60s elapsed since the
+    // last send before the next send can be claimed by processOutreachSequences.
+    if (account.lastSentAt) {
+        const minMs = account.minMinutesBetweenEmails * 60_000
+        const earliestNextSend = account.lastSentAt.getTime() + minMs
+        if (earliestNextSend > now.getTime()) {
+            return false
+        }
+    }
+
     return true
+}
+
+/**
+ * Phase 16 — INBOX-THROTTLE: compute a jittered "next eligible send" timestamp.
+ * Returns a Date in the future, offset by a uniform-random number of MINUTES in
+ * [min, max). Used by processOutreachSequences (Plan 16-02) to spread out the
+ * `nextScheduledAt` of pending leads on the same campaign/inbox so they do not
+ * all become eligible at the same cron tick.
+ *
+ * Degenerate range (min === max) returns exactly `min` minutes in the future.
+ * Caller is responsible for clamping min/max to sane values (schema defaults
+ * are min=5, max=30 per email_accounts.minMinutesBetweenEmails column).
+ */
+export function applySendJitter(min: number, max: number, now: Date = new Date()): Date {
+    const lo = Math.max(0, min)
+    const hi = Math.max(lo, max)
+    const minutes = lo + Math.random() * (hi - lo)
+    return new Date(now.getTime() + minutes * 60_000)
 }
 
 export function getNextStepForLead(
