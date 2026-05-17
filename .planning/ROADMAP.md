@@ -153,6 +153,36 @@ Plans:
 
 > **Note:** Numbered 14 to follow v1.2's phases 10-13 (mail server hardening, code-merged 2026-04-15). ROADMAP.md here is the residual v1.1 doc — v1.2/v1.3 phase scaffolding lives under `.planning/phases/` while the formal roadmap rewrite is pending. See STATE.md for current milestone status.
 
+### Phase 15: Campaign detail page (frontend)
+
+**Goal:** Build the missing `/outreach/campaigns/:id` detail page so the funnel from create → manage → activate is end-to-end functional. CampaignsPage links and OutreachDashboard links currently lead to a route that doesn't exist in `src/main.tsx`. Backend endpoints already exist (campaigns/:id, /leads, /sequences, /stats) — this is a frontend completion. Multi-tab UI (Overview / Leads / Sequence / Stats) with optimistic updates. CONTEXT.md is pre-authored.
+**Requirements:** UI-COMPLETION (detail page) + UX-NEXT (post-create redirect updated)
+**Depends on:** Phase 14
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run `/gsd:plan-phase 15` to break down)
+
+### Phase 16: Reply detection v2 + per-inbox throttle
+
+**Goal:** Two related fixes to the outreach job loop. (A) Reply detection v2: 3-tier matching (In-Reply-To → References → from-address heuristic) + auto-reply filter (Auto-Submitted, Precedence, OOO subject) so auto-replies don't stop sequences and lead replies from related aliases are correctly matched. (B) Per-inbox throttle: respect `email_accounts.minMinutesBetweenEmails`/`maxMinutesBetweenEmails` (currently unused → burst sends → spam folder); add `last_sent_at` column via migration 021; apply jitter on scheduling. Single biggest deliverability risk in the system today.
+**Requirements:** REPLY-DETECT-V2 + INBOX-THROTTLE + AUTO-REPLY-FILTER
+**Depends on:** Phase 15 (no code dependency, just sequencing)
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run `/gsd:plan-phase 16` to break down)
+
+### Phase 17: Observability foundation
+
+**Goal:** Make the outreach system OPERATIONALLY LEGIBLE. Adopt `pino` for structured JSON logging across all outreach paths (sender, processor, replies, bounces, unsubscribe, track); standardize log shape `{action: "outreach.<area>.<event>", ...context}`; build `/api/admin/outreach/health` endpoint with per-org and per-campaign rolling-window metrics (sent/open/click/bounce/reply rates, processor p50/p95); add daily 09:00 UTC digest cron logging top campaigns + alerts. NO email/slack notifications, NO Prometheus — keep it free and grep-able for now. CONTEXT.md is pre-authored.
+**Requirements:** STRUCTURED-LOGS + HEALTH-ENDPOINT + DAILY-DIGEST
+**Depends on:** Phase 16
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run `/gsd:plan-phase 17` to break down)
+
 ---
 
 ## Dependency Chain
