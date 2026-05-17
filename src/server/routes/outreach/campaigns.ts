@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { db } from '../../../db'
 import { campaigns, sequences, sequenceSteps, campaignLeads, leads, emailAccounts, organizationUsers, outreachEmails } from '../../../db/schema'
-import { eq, and, sql, inArray, desc } from 'drizzle-orm'
+import { eq, and, sql, inArray, desc, asc } from 'drizzle-orm'
 import { isPlatformAdmin } from '../../lib/admin'
 import { paginate, paginationQuerySchema } from '../../lib/pagination'
 
@@ -953,22 +953,43 @@ router.post('/:campaignId/leads', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'All leads already in campaign', added: 0, existing: existingLeadIds.size })
         }
 
-        // Get first step of sequence
-        const firstStep = await db.query.sequenceSteps.findFirst({
-            where: eq(sequenceSteps.sequenceId,
-                db.select({ id: sequences.id }).from(sequences).where(eq(sequences.campaignId, campaignId)).limit(1)
-            ),
-            orderBy: (steps, { asc }) => [asc(steps.stepOrder)],
+        // Get first step of sequence — two sequential queries (the previous subquery was
+        // a Drizzle anti-pattern that generated invalid SQL and was non-deterministic when
+        // a campaign had multiple sequences). See audit P0-09.
+        const firstSequence = await db.query.sequences.findFirst({
+            where: eq(sequences.campaignId, campaignId),
+            orderBy: [asc(sequences.createdAt)],
         })
 
-        // Add leads to campaign
+        if (!firstSequence) {
+            return res.status(400).json({
+                error: 'Campaign has no sequence — create a sequence with at least one step before adding leads',
+            })
+        }
+
+        const firstStep = await db.query.sequenceSteps.findFirst({
+            where: eq(sequenceSteps.sequenceId, firstSequence.id),
+            orderBy: [asc(sequenceSteps.stepOrder)],
+        })
+
+        if (!firstStep) {
+            return res.status(400).json({
+                error: 'Campaign sequence has no steps — add at least one step before adding leads',
+            })
+        }
+
+        // Add leads to campaign. nextScheduledAt MUST be non-NULL or the processor's
+        // lte(nextScheduledAt, now) filter treats the row as not-yet-due (NULL semantics in SQL).
+        // See audit P0-01.
+        const now = new Date()
         const insertedCampaignLeads = await db.insert(campaignLeads).values(
             newLeadIds.map(leadId => ({
                 campaignId,
                 leadId,
                 assignedEmailAccountId: validatedData.emailAccountId,
-                currentStepId: firstStep?.id,
-                currentStepOrder: firstStep?.stepOrder || 0,
+                currentStepId: firstStep.id,
+                currentStepOrder: firstStep.stepOrder,
+                nextScheduledAt: now,
             }))
         ).returning()
 
