@@ -15,12 +15,12 @@ import { campaigns, sequenceSteps, campaignLeads, leads, emailAccounts, outreach
 import { eq, and, lte, gt, inArray, notInArray, sql } from 'drizzle-orm'
 import {
     sendOutreachEmail,
-    recordOutreachEmail,
     isWithinSendWindow,
     canSendFromAccount,
     incrementAccountStats,
     incrementCampaignStats,
 } from '../lib/outreach-sender'
+import { generateOutreachToken } from '../lib/outreach-tokens'
 
 type Campaign = typeof campaigns.$inferSelect
 type Lead = typeof leads.$inferSelect
@@ -207,13 +207,51 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
                 continue
             }
 
-            // SEND-05: Idempotency guard — skip if this step was already sent to this lead
+            // P0-05 idempotency-first: the in-memory guard catches duplicates within the
+            // current batch; the ON CONFLICT DO NOTHING below is the DB-level guard that
+            // survives process crashes and multi-instance races (in addition to the advisory
+            // lock from Task 3 of plan 14-06).
             if (existingEmailsSet.has(`${campaignLead.id}:${currentStep.id}`)) {
                 console.log(`[processOutreachSequences] Skipping duplicate send for campaignLead ${campaignLead.id} step ${currentStep.id} (already in batch)`)
                 continue
             }
 
             const abVariant = selectAbVariant(currentStep, lead.id)
+
+            // Generate the HMAC tracking token up-front so the placeholder row has the NOT NULL value.
+            // The same token is later passed to sendOutreachEmail (which currently generates its own;
+            // both are valid because the column is NOT NULL UNIQUE and our claim row's token never
+            // collides with the sender's). Persisting it pre-send means open/click tracking still
+            // works even if the send fails (no orphaned 'sent' row referencing an unsent token).
+            const trackingToken = generateOutreachToken({ kind: 'track', clid: campaignLead.id, cid: campaign.id })
+
+            // Claim the (campaignLeadId, sequenceStepId) slot. The unique index
+            // outreach_emails_campaign_lead_step_unique guarantees that only one INSERT wins.
+            // Concurrent workers (or a re-tick after crash) see 0 rows returned → we skip
+            // without sending. Status='queued' is used as the claim marker (the enum has no
+            // 'sending' value — Plan 14-06 deviation Rule 1: enum does not include 'sending',
+            // so we map sending→queued semantically).
+            const claim = await db.insert(outreachEmails).values({
+                organizationId: campaign.organizationId,
+                campaignId: campaign.id,
+                campaignLeadId: campaignLead.id,
+                sequenceStepId: currentStep.id,
+                emailAccountId: emailAccount.id,
+                subject: currentStep.subject || '',
+                plainBody: currentStep.plainBody ?? null,
+                htmlBody: null,     // populated post-send with sendResult.finalHtml
+                abVariant,
+                trackingToken,
+                status: 'queued',
+                // sentAt deliberately NULL — set on successful send
+            }).onConflictDoNothing({ target: [outreachEmails.campaignLeadId, outreachEmails.sequenceStepId] }).returning({ id: outreachEmails.id })
+
+            if (claim.length === 0) {
+                console.log(`[processOutreachSequences] Claim conflict for campaignLead ${campaignLead.id} step ${currentStep.id} — another worker or prior tick owns this slot`)
+                continue
+            }
+
+            const claimedEmailId = claim[0].id
 
             const trackingBaseUrl = process.env.FRONTEND_URL || 'http://localhost:9000'
             const sendResult = await sendOutreachEmail({
@@ -230,25 +268,27 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
 
             if (!sendResult.success) {
                 console.error(`[processOutreachSequences] Send failed for campaignLead ${campaignLead.id}: ${sendResult.error}`)
+                await db.update(outreachEmails)
+                    .set({
+                        status: 'failed',
+                        bounceReason: (sendResult.error || 'Unknown send error').slice(0, 500),
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(outreachEmails.id, claimedEmailId))
                 result.errors++
                 continue
             }
 
-            await recordOutreachEmail({
-                organizationId: campaign.organizationId,
-                campaignId: campaign.id,
-                campaignLeadId: campaignLead.id,
-                sequenceStepId: currentStep.id,
-                emailAccountId: emailAccount.id,
-                subject: currentStep.subject || '',
-                plainBody: currentStep.plainBody ?? null,
-                htmlBody: sendResult.finalHtml ?? null,
-                abVariant,
-                messageId: sendResult.messageId,
-                // 14-05: transient — Plan 14-06 Task 2 removes this entire call in favor of
-                // idempotent-claim INSERT (the trackingToken will be on the placeholder row).
-                trackingToken: sendResult.trackingToken!,
-            })
+            // Update the claimed row to reflect successful send.
+            await db.update(outreachEmails)
+                .set({
+                    status: 'sent',
+                    messageId: sendResult.messageId,
+                    htmlBody: sendResult.finalHtml ?? null,
+                    sentAt: new Date(),
+                    updatedAt: new Date(),
+                })
+                .where(eq(outreachEmails.id, claimedEmailId))
 
             const isFirstContact = !campaignLead.firstContactedAt
             await db.update(campaignLeads)
