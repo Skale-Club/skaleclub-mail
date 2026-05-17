@@ -15,7 +15,7 @@
 import { ImapFlow } from 'imapflow'
 import { simpleParser } from 'mailparser'
 import { db } from '../../db'
-import { emailAccounts, outreachEmails, campaignLeads, leads, campaigns } from '../../db/schema'
+import { emailAccounts, outreachEmails, campaignLeads, leads, campaigns, suppressions } from '../../db/schema'
 import { eq, and, isNotNull, sql, desc } from 'drizzle-orm'
 import { decryptSecret } from '../lib/crypto'
 
@@ -183,10 +183,12 @@ export async function findOutreachEmailByRecipient(
     email: string, 
     accountId: string
 ): Promise<typeof outreachEmails.$inferSelect | null> {
+    // P0-08: campaignLeadId is UUID — LOWER(uuid) raises `function lower(uuid) does not exist`.
+    // We only need case-insensitive comparison on l.email (text); UUIDs compare natively.
     const result = await db.query.outreachEmails.findFirst({
         where: and(
             eq(outreachEmails.emailAccountId, accountId),
-            sql`LOWER(${outreachEmails.campaignLeadId}) IN (
+            sql`${outreachEmails.campaignLeadId} IN (
                 SELECT cl.id FROM campaign_leads cl
                 JOIN leads l ON cl.lead_id = l.id
                 WHERE LOWER(l.email) = LOWER(${email})
@@ -224,6 +226,7 @@ export async function markAsBounced(
     leadId: string,
     campaignId: string,
     accountId: string,
+    organizationId: string,
     reason: string
 ): Promise<void> {
     const now = new Date()
@@ -265,6 +268,26 @@ export async function markAsBounced(
             updatedAt: now
         })
         .where(eq(emailAccounts.id, accountId))
+
+    // P0-07: Hard bounces go into the org-level suppression list so we never re-mail them
+    // from any future campaign in this org. The pattern matches the audit's heuristic
+    // (audit P0-07, fix sugerido). Mirrors the unsubscribe-path insert in unsubscribe.ts
+    // (Plan 14-05) that already covers source='unsubscribe'.
+    const isHardBounce = /permanent|hard|550|551|553|user unknown|no such user|address not found|mailbox unavailable|does not exist|recipient rejected|invalid recipient/i.test(reason)
+    if (isHardBounce) {
+        const lead = await db.query.leads.findFirst({
+            where: eq(leads.id, leadId),
+            columns: { email: true },
+        })
+        if (lead) {
+            await db.insert(suppressions).values({
+                organizationId,
+                emailAddress: lead.email.toLowerCase(),
+                source: 'bounce',
+                reason: reason.slice(0, 500),  // cap to avoid pathological inputs
+            }).onConflictDoNothing()
+        }
+    }
 }
 
 export async function processBounces(): Promise<{ processed: number; bounces: number; errors: number }> {
@@ -371,6 +394,7 @@ export async function processBounces(): Promise<{ processed: number; bounces: nu
                             campaignLead.lead.id,
                             outreachEmail.campaignId,
                             account.id,
+                            outreachEmail.organizationId,
                             fullReason
                         )
 
@@ -462,6 +486,7 @@ export async function processBounceFromWebhook(data: {
         campaignLead.lead.id,
         outreachEmail.campaignId,
         outreachEmail.emailAccountId,
+        outreachEmail.organizationId,
         fullReason
     )
 }
