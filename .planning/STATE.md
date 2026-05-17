@@ -1,25 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
-milestone_name: Mail Server Production Readiness (Thunderbird-Ready)
-status: code_complete_ops_pending
-stopped_at: Phases 10-13 code merged in commit 3b2cc41; operator checklist awaits manual ops
-last_updated: "2026-04-15T23:45:00.000Z"
-last_activity: 2026-04-15
+milestone: v1.3
+milestone_name: — Outreach Hardening)
+status: executing
+stopped_at: Completed 14-02-PLAN.md (NewCampaignPage + route registration)
+last_updated: "2026-05-17T04:20:07.435Z"
 progress:
-  total_phases: 4
-  completed_phases: 0
-  in_progress_phases: 4
-  total_plans: 4
-  completed_plans: 0
-  percent: 75
-  code_complete: true
-  ops_complete: false
-previous_milestone:
-  milestone: v1.1
-  name: Database Health
-  status: completed
+  total_phases: 6
   completed_phases: 5
+  total_plans: 17
+  completed_plans: 14
+  percent: 75
 ---
 
 # Project State
@@ -36,9 +27,11 @@ See: .planning/PROJECT.md (updated 2026-04-15)
 
 ## Current Position
 
+Phase: 14 (outreach-p0-fixes) — EXECUTING
+Plan: 2 of 6
 Milestone: v1.2
 All 4 phase codebases merged (commit `3b2cc41`).
-Status: **code complete; operator checklist awaits manual ops tasks**.
+Status: Ready to execute
 
 **Resume point:** See `.planning/HANDOFF.md` and `.planning/OPERATOR-CHECKLIST.md`.
 
@@ -56,6 +49,7 @@ Progress: [███████░░░] 75% (code done, ops pending)
 ## Completed milestones
 
 ### v1.1 — Database Health (2026-04-01)
+
 - [x] Phase 05: RLS & Migration Safety
 - [x] Phase 06: Index Foundation
 - [x] Phase 07: Pagination
@@ -63,9 +57,11 @@ Progress: [███████░░░] 75% (code done, ops pending)
 - [x] Phase 09: Schema Hardening
 
 ### v1.1 mid-cycle — Mail Server Core (2026-04-15, commit `8316a86`)
+
 Full IMAP/SMTP/MX stack, SASL PLAIN/LOGIN, UID ops, autodiscovery routes, UI card, migration 018.
 
 ### v1.2 code (2026-04-15, commit `3b2cc41`)
+
 - TLS deploy wiring (volume mount + env vars)
 - DKIM signing in relayMessage via nodemailer `dkim` option
 - mailauth SPF/DKIM/DMARC verification in MX receiver
@@ -82,6 +78,10 @@ Full IMAP/SMTP/MX stack, SASL PLAIN/LOGIN, UID ops, autodiscovery routes, UI car
 5. **Optional — promote DMARC policy** from `p=none` to `p=quarantine` after 1-2 weeks clean (`.planning/OPERATOR-CHECKLIST.md` §6).
 
 ## Accumulated Context
+
+### Roadmap Evolution
+
+- 2026-05-16: Phase 14 added — **Outreach P0 fixes** (numbered 14 to follow v1.2 phases 10-13; effectively kicks off informal milestone v1.3 "Outreach Hardening"). Driven by deep audit at `.planning/debug/outreach-system-deep-audit.md` (10 P0 / 20 P1 / 19 P2 findings).
 
 ### Decisions (v1.2)
 
@@ -101,7 +101,7 @@ Full IMAP/SMTP/MX stack, SASL PLAIN/LOGIN, UID ops, autodiscovery routes, UI car
 
 ## Session Continuity
 
-Last session: 2026-04-15T23:45:00Z
-Stopped at: v1.2 code merged and pushed (commit `3b2cc41`); operator checklist authored at `.planning/OPERATOR-CHECKLIST.md`
-Resume file: `.planning/HANDOFF.md`
+Last session: 2026-05-17T04:20:07.432Z
+Stopped at: Completed 14-02-PLAN.md (NewCampaignPage + route registration)
+Resume file: None
 Next action: execute `.planning/OPERATOR-CHECKLIST.md` section 2 (install certbot on Hetzner) — unblocks Thunderbird TLS connection
