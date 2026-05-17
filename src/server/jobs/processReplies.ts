@@ -104,47 +104,126 @@ async function processAccountReplies(account: EmailAccountWithImap): Promise<num
 
         const lock = await client.getMailboxLock('INBOX')
         try {
-            const uids = await client.search({ seen: false }, { uid: true })
-            if (!uids || uids.length === 0) {
+            // Phase 16 — cap IMAP search to last 7 days + 500 UIDs per tick.
+            const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+            const allUids = await client.search({ seen: false, since: sevenDaysAgo }, { uid: true })
+            if (!allUids || allUids.length === 0) {
                 return replyCount
+            }
+            const MAX_PER_TICK = 500
+            let uids: number[] = allUids
+            if (allUids.length > MAX_PER_TICK) {
+                console.log('[outreach.replies]', JSON.stringify({
+                    action: 'defer_overflow',
+                    emailAccountId: account.id,
+                    totalUids: allUids.length,
+                    processing: MAX_PER_TICK,
+                }))
+                uids = allUids.slice(0, MAX_PER_TICK)
             }
 
             for (const uid of uids) {
                 try {
                     const msg = await client.fetchOne(uid.toString(), {
-                        headers: ['in-reply-to', 'references'],
+                        headers: [
+                            'in-reply-to',
+                            'references',
+                            'from',
+                            'subject',
+                            'auto-submitted',
+                            'precedence',
+                            'x-auto-response-suppress',
+                        ],
                     }, { uid: true })
 
                     if (!msg || !msg.headers) continue
 
                     const headerText = msg.headers.toString('utf8')
-                    const inReplyToMatch = headerText.match(/^In-Reply-To:\s*(.+)$/im)
-                    const referencesMatch = headerText.match(/^References:\s*(.+)$/im)
-                    const inReplyTo = inReplyToMatch ? inReplyToMatch[1].trim() : null
-                    const references = referencesMatch ? referencesMatch[1].trim() : null
 
-                    const messageId = inReplyTo || extractFirstReference(references)
-                    if (!messageId) continue
+                    // Parse headers we care about.
+                    const inReplyTo = headerText.match(/^In-Reply-To:\s*(.+)$/im)?.[1]?.trim() ?? null
+                    const references = headerText.match(/^References:\s*(.+)$/im)?.[1]?.trim() ?? null
+                    const fromHeader = headerText.match(/^From:\s*(.+)$/im)?.[1]?.trim() ?? null
+                    // Extract bare email from `Name <email@domain>` or fall back to whole string.
+                    const fromAddress = fromHeader
+                        ? (fromHeader.match(/<([^>]+)>/)?.[1]?.trim() ?? fromHeader.trim())
+                        : null
 
-                    const outreachEmail = await findOutreachEmailByMessageId(messageId)
-                    if (!outreachEmail) continue
+                    // Tier 0 — auto-reply short-circuit.
+                    const auto = isAutoReply({ raw: headerText })
 
-                    await markAsReplied(
-                        outreachEmail.id,
-                        outreachEmail.campaignLeadId,
-                        outreachEmail.leadId,
-                        outreachEmail.campaignId,
-                        outreachEmail.emailAccountId
+                    // Resolve any outreach_email this message refers to (for both the auto-reply tag
+                    // path and the genuine-reply path).
+                    const matched = await matchReplyToOutreach(
+                        { inReplyTo, references, fromAddress },
+                        account.id,
                     )
-                    replyCount++
 
-                    try {
-                        await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true })
-                    } catch {
-                        // Ignore flag errors
+                    if (auto.auto) {
+                        if (matched) {
+                            await markAsAutoReply(matched.outreachEmail.id)
+                            console.log('[outreach.replies]', JSON.stringify({
+                                action: 'match',
+                                decision: 'auto_reply',
+                                signal: auto.signal,
+                                matchStrategy: matched.strategy,
+                                emailAccountId: account.id,
+                                campaignId: matched.outreachEmail.campaignId,
+                                leadId: matched.outreachEmail.leadId,
+                                campaignLeadId: matched.outreachEmail.campaignLeadId,
+                            }))
+                        } else {
+                            console.log('[outreach.replies]', JSON.stringify({
+                                action: 'match',
+                                decision: 'auto_reply',
+                                signal: auto.signal,
+                                matchStrategy: 'unmatched',
+                                emailAccountId: account.id,
+                            }))
+                        }
+                        try {
+                            await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true })
+                        } catch { /* ignore */ }
+                        continue
+                    }
+
+                    if (matched) {
+                        await markAsReplied(
+                            matched.outreachEmail.id,
+                            matched.outreachEmail.campaignLeadId,
+                            matched.outreachEmail.leadId,
+                            matched.outreachEmail.campaignId,
+                            matched.outreachEmail.emailAccountId,
+                        )
+                        replyCount++
+                        console.log('[outreach.replies]', JSON.stringify({
+                            action: 'match',
+                            decision: 'replied',
+                            matchStrategy: matched.strategy,
+                            emailAccountId: account.id,
+                            campaignId: matched.outreachEmail.campaignId,
+                            leadId: matched.outreachEmail.leadId,
+                            campaignLeadId: matched.outreachEmail.campaignLeadId,
+                        }))
+                        try {
+                            await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true })
+                        } catch { /* ignore */ }
+                    } else {
+                        console.log('[outreach.replies]', JSON.stringify({
+                            action: 'match',
+                            decision: 'unmatched',
+                            emailAccountId: account.id,
+                            extra: {
+                                hasInReplyTo: inReplyTo !== null,
+                                hasReferences: references !== null,
+                                hasFrom: fromAddress !== null,
+                            },
+                        }))
+                        // Do NOT flag unmatched messages as Seen — they may be legitimate human emails
+                        // unrelated to outreach. Leaving them unread preserves user-visible state.
                     }
                 } catch (error) {
-                    console.error(`[processReplies] Error processing message ${uid}:`, error)
+                    console.error(`[outreach.replies] uid=${uid} error:`, error)
                 }
             }
         } finally {
