@@ -241,42 +241,6 @@ export async function sendOutreachEmail(params: SendOutreachEmailParams): Promis
     }
 }
 
-// TODO(phase-15): remove if still unused. Plan 14-06 Task 2 replaced the only caller
-// (processOutreachSequences) with an inline idempotent-claim INSERT+UPDATE flow.
-// Kept as an export for now in case future plans need a "record after send" helper,
-// but if phase 15 confirms no callers added, delete the entire function.
-export async function recordOutreachEmail(params: {
-    organizationId: string
-    campaignId: string
-    campaignLeadId: string
-    sequenceStepId: string
-    emailAccountId: string
-    subject: string
-    plainBody: string | null
-    htmlBody: string | null
-    abVariant: 'a' | 'b' | null
-    messageId?: string
-    trackingToken: string   // now REQUIRED — passed by processOutreachSequences (Plan 14-06)
-}): Promise<typeof outreachEmails.$inferSelect> {
-    const [record] = await db.insert(outreachEmails).values({
-        organizationId: params.organizationId,
-        campaignId: params.campaignId,
-        campaignLeadId: params.campaignLeadId,
-        sequenceStepId: params.sequenceStepId,
-        emailAccountId: params.emailAccountId,
-        subject: params.subject,
-        plainBody: params.plainBody,
-        htmlBody: params.htmlBody,
-        abVariant: params.abVariant,
-        messageId: params.messageId,
-        trackingToken: params.trackingToken,    // Replaces the 14-03 TEMP placeholder.
-        status: 'sent',
-        sentAt: new Date(),
-    }).returning()
-
-    return record
-}
-
 export async function updateCampaignLeadProgress(
     campaignLeadId: string,
     nextStep: typeof sequenceSteps.$inferSelect,
