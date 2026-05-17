@@ -19,6 +19,7 @@ import {
     canSendFromAccount,
     incrementAccountStats,
     incrementCampaignStats,
+    applySendJitter,
 } from '../lib/outreach-sender'
 import { generateOutreachToken } from '../lib/outreach-tokens'
 
@@ -71,6 +72,39 @@ function selectAbVariant(step: SequenceStep, leadId: string): 'a' | 'b' {
     const hashInt = parseInt(hash.slice(0, 8), 16)
     const threshold = step.abTestPercentage ?? 50
     return (hashInt % 100) < threshold ? 'a' : 'b'
+}
+
+// Phase 16 — standardized skip-reason log shape. Phase 17 will replace this
+// with pino structured logging; for now we use JSON.stringify so grep-able log
+// search in production gives uniform results. All `reason` values are enumerated
+// in CONTEXT.md so ops dashboards can pivot by reason.
+type SkipReason =
+    | 'rate_limit_per_inbox'
+    | 'daily_limit_reached'
+    | 'suppression'
+    | 'no_active_step'
+    | 'outside_send_window'
+    | 'claim_conflict'
+    | 'unsubscribed'
+    | 'campaign_inactive'
+    | 'campaign_not_found'
+    | 'lead_not_found'
+    | 'no_account'
+    | 'account_not_verified'
+    | 'in_batch_duplicate'
+
+function logSkip(reason: SkipReason, ctx: {
+    campaignId?: string
+    leadId?: string
+    campaignLeadId?: string
+    emailAccountId?: string
+    extra?: Record<string, unknown>
+}): void {
+    console.log('[outreach.processor]', JSON.stringify({
+        action: 'skip',
+        reason,
+        ...ctx,
+    }))
 }
 
 export async function processOutreachSequences(): Promise<{ processed: number; sent: number; errors: number }> {
