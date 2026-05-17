@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: — Outreach Hardening)
 status: executing
-stopped_at: Completed 16-02-PLAN.md (per-inbox throttle wired into processor + standardized skip logs)
-last_updated: "2026-05-17T15:03:46.108Z"
+stopped_at: Completed 17-01-PLAN.md (pino logger + outreach thresholds foundation)
+last_updated: "2026-05-17T15:22:06.779Z"
 progress:
   total_phases: 9
   completed_phases: 8
-  total_plans: 24
-  completed_plans: 24
+  total_plans: 28
+  completed_plans: 25
   percent: 75
 ---
 
@@ -27,11 +27,11 @@ See: .planning/PROJECT.md (updated 2026-04-15)
 
 ## Current Position
 
-Phase: 16 (reply-detection-v2-plus-per-inbox-throttle) — EXECUTING
-Plan: 3 of 4
+Phase: 17 (observability-foundation) — EXECUTING
+Plan: 1 of ?
 Milestone: v1.2
 All 4 phase codebases merged (commit `3b2cc41`).
-Status: Ready to execute
+Status: Executing Phase 17
 
 **Resume point:** See `.planning/HANDOFF.md` and `.planning/OPERATOR-CHECKLIST.md`.
 
@@ -110,7 +110,7 @@ Full IMAP/SMTP/MX stack, SASL PLAIN/LOGIN, UID ops, autodiscovery routes, UI car
 
 ## Session Continuity
 
-Last session: 2026-05-17T15:03:46.103Z
-Stopped at: Completed 16-02-PLAN.md (per-inbox throttle wired into processor + standardized skip logs)
+Last session: 2026-05-17T15:22:06.774Z
+Stopped at: Completed 17-01-PLAN.md (pino logger + outreach thresholds foundation)
 Resume file: None
 Next action: execute `.planning/OPERATOR-CHECKLIST.md` section 2 (install certbot on Hetzner) — unblocks Thunderbird TLS connection
