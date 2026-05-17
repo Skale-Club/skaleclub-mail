@@ -4,7 +4,7 @@ milestone: v1.3
 milestone_name: — Outreach Hardening)
 status: verifying
 stopped_at: Completed 17-04-PLAN.md (daily outreach digest cron) — Phase 17 + v1.3 milestone DONE
-last_updated: "2026-05-17T15:46:34.593Z"
+last_updated: "2026-05-17T15:50:38.131Z"
 progress:
   total_phases: 9
   completed_phases: 9
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-04-15)
 
 ## Current Position
 
-Phase: 17 (observability-foundation) — **COMPLETE**
-Plan: 4 of 4 complete (17-01 logger + 17-02 pino swap + 17-03 health endpoint + 17-04 daily digest ALL done)
+Phase: 17
+Plan: Not started
 Milestone: v1.3 (Outreach Hardening) — **all code complete**
 All 4 phase codebases (10-13) merged (commit `3b2cc41`).
 Status: Phase 17 complete — ready for verification
