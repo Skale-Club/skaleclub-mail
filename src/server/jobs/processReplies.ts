@@ -14,7 +14,7 @@
 import { ImapFlow } from 'imapflow'
 import { db } from '../../db'
 import { emailAccounts, outreachEmails, campaignLeads, leads, campaigns } from '../../db/schema'
-import { eq, and, isNotNull, sql } from 'drizzle-orm'
+import { eq, and, isNotNull, sql, gte } from 'drizzle-orm'
 import { decryptSecret } from '../lib/crypto'
 
 interface ProcessRepliesResult {
@@ -167,6 +167,112 @@ function extractFirstReference(references: string | null): string | null {
     if (!references) return null
     const refs = references.split(/\s+/).filter(Boolean)
     return refs.length > 0 ? refs[0] : null
+}
+
+// Phase 16 — AUTO-REPLY-FILTER. The OOO subject regex covers EN + PT + ES because
+// SkaleClub's target users may run multi-lingual lead lists. Err on stricter side:
+// false negatives (missing an OOO) are recoverable — the lead is just paused for the
+// next step — whereas false positives (treating a real reply as OOO) lose conversion.
+const OOO_SUBJECT_RE = /^(re:\s*)?(out of office|auto[- ]?reply|automatic reply|on vacation|out of the office|fora do escrit[oó]rio|aus[eê]ncia|ausente|fuera de la oficina)/i
+
+export function isAutoReply(input: { raw: string }): {
+    auto: boolean
+    signal?: 'auto_submitted' | 'precedence' | 'x_auto_response' | 'subject_ooo'
+} {
+    const raw = input.raw
+
+    const autoSubmitted = raw.match(/^Auto-Submitted:\s*(.+)$/im)?.[1]?.trim().toLowerCase()
+    if (autoSubmitted === 'auto-replied' || autoSubmitted === 'auto-generated') {
+        return { auto: true, signal: 'auto_submitted' }
+    }
+
+    const precedence = raw.match(/^Precedence:\s*(.+)$/im)?.[1]?.trim().toLowerCase()
+    if (precedence === 'auto_reply' || precedence === 'bulk' || precedence === 'junk') {
+        return { auto: true, signal: 'precedence' }
+    }
+
+    const xAutoResp = raw.match(/^X-Auto-Response-Suppress:\s*(.+)$/im)?.[1]?.trim().toLowerCase()
+    if (xAutoResp === 'all') {
+        return { auto: true, signal: 'x_auto_response' }
+    }
+
+    const subject = raw.match(/^Subject:\s*(.+)$/im)?.[1]?.trim()
+    if (subject && OOO_SUBJECT_RE.test(subject)) {
+        return { auto: true, signal: 'subject_ooo' }
+    }
+
+    return { auto: false }
+}
+
+// Phase 16 — REPLY-DETECT-V2. 3-tier matcher; tries in priority order.
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
+
+export async function matchReplyToOutreach(
+    headers: { inReplyTo: string | null; references: string | null; fromAddress: string | null },
+    accountId: string,
+    now: Date = new Date(),
+): Promise<{ outreachEmail: OutreachEmailWithRelations; strategy: 'in_reply_to' | 'references' | 'from_address' } | null> {
+    // Tier 1: In-Reply-To exact match.
+    if (headers.inReplyTo) {
+        const hit = await findOutreachEmailByMessageId(headers.inReplyTo)
+        if (hit) return { outreachEmail: hit, strategy: 'in_reply_to' }
+    }
+
+    // Tier 2: References chain — split on whitespace, try each token.
+    if (headers.references) {
+        const tokens = headers.references.split(/\s+/).filter(Boolean)
+        for (const tok of tokens) {
+            const hit = await findOutreachEmailByMessageId(tok)
+            if (hit) return { outreachEmail: hit, strategy: 'references' }
+        }
+    }
+
+    // Tier 3: from-address heuristic. Co-conditions:
+    //   - leads.email matches headers.fromAddress (case-insensitive via LOWER())
+    //   - outreach_email exists for that lead on this emailAccountId
+    //   - outreach_email.sentAt within the last 30 days
+    // Returns the most-recent matching outreach_email so the right step is stamped.
+    if (headers.fromAddress) {
+        const cutoff = new Date(now.getTime() - THIRTY_DAYS_MS)
+        const fromLower = headers.fromAddress.toLowerCase().trim()
+
+        const rows = await db
+            .select({
+                id: outreachEmails.id,
+                campaignLeadId: outreachEmails.campaignLeadId,
+                campaignId: outreachEmails.campaignId,
+                emailAccountId: outreachEmails.emailAccountId,
+                leadId: campaignLeads.leadId,
+            })
+            .from(outreachEmails)
+            .innerJoin(campaignLeads, eq(outreachEmails.campaignLeadId, campaignLeads.id))
+            .innerJoin(leads, eq(campaignLeads.leadId, leads.id))
+            .where(
+                and(
+                    eq(outreachEmails.emailAccountId, accountId),
+                    sql`LOWER(${leads.email}) = ${fromLower}`,
+                    gte(outreachEmails.sentAt, cutoff),
+                )
+            )
+            .orderBy(sql`${outreachEmails.sentAt} DESC NULLS LAST`)
+            .limit(1)
+
+        if (rows[0]) {
+            return { outreachEmail: rows[0], strategy: 'from_address' }
+        }
+    }
+
+    return null
+}
+
+// Phase 16 — auto-reply marker. Does NOT change campaign_leads.status (sequence keeps going).
+async function markAsAutoReply(outreachEmailId: string): Promise<void> {
+    await db.update(outreachEmails)
+        .set({
+            bounceReason: 'auto_reply',
+            updatedAt: new Date(),
+        })
+        .where(eq(outreachEmails.id, outreachEmailId))
 }
 
 export async function findOutreachEmailByMessageId(messageId: string): Promise<OutreachEmailWithRelations | null> {
