@@ -360,6 +360,35 @@ export async function resetDailyLimits(): Promise<void> {
     console.log(`[resetDailyLimits] Reset daily send counter for ${result.length} accounts`)
 }
 
+// P0-06: Postgres advisory lock — prevents two container instances (or a blue-green deploy
+// overlap) from running the processor concurrently. Replaces the in-memory mutex previously
+// in jobs/index.ts which only protected within a single Node process.
+//
+// Inspect held locks in production: `SELECT * FROM pg_locks WHERE locktype='advisory';`
+// Decoded lockid for this job: 4014 (phase 14, P0-06 mnemonic).
+const LOCK_ID_OUTREACH_PROCESSOR = 4014
+
+export async function runOutreachProcessorWithLock(): Promise<{ acquired: boolean; result?: { processed: number; sent: number; errors: number } }> {
+    // Try to acquire the advisory lock — returns true if we got it, false if another
+    // connection holds it. postgres-js (see src/db/index.ts) returns rows as a plain array;
+    // we defensively handle the alternative node-pg `{ rows: [...] }` envelope so a driver
+    // swap won't silently break.
+    const lockResult = await db.execute(sql`SELECT pg_try_advisory_lock(${LOCK_ID_OUTREACH_PROCESSOR}) AS acquired`)
+    const acquired = Array.isArray(lockResult)
+        ? (lockResult as unknown as Array<{ acquired: boolean }>)[0]?.acquired === true
+        : (lockResult as unknown as { rows: Array<{ acquired: boolean }> }).rows?.[0]?.acquired === true
+    if (!acquired) {
+        console.log('[processOutreachSequences] advisory lock held by another instance — skipping tick')
+        return { acquired: false }
+    }
+    try {
+        const result = await processOutreachSequences()
+        return { acquired: true, result }
+    } finally {
+        await db.execute(sql`SELECT pg_advisory_unlock(${LOCK_ID_OUTREACH_PROCESSOR})`)
+    }
+}
+
 export async function markCompletedCampaigns(): Promise<void> {
     // Find all active campaigns that have zero incomplete leads
     // Using a NOT EXISTS subquery — single query instead of N queries

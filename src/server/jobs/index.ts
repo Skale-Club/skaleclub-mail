@@ -2,11 +2,19 @@ import cron from 'node-cron'
 import { processQueue } from './processQueue'
 import { processHeldMessages } from './processHeld'
 import { cleanupOldMessages } from './cleanupMessages'
-import { processOutreachSequences, resetDailyLimits } from './processOutreachSequences'
+import { runOutreachProcessorWithLock, resetDailyLimits } from './processOutreachSequences'
 import { processReplies } from './processReplies'
 import { processBounces } from './processBounces'
 
-let isSequenceProcessing = false
+// P0-06: the previous in-memory mutex was removed in plan 14-06. It only protected
+// within a single Node process; multi-instance deploys (blue-green overlap, future
+// horizontal scale) could still double-send. The DB-level lock now lives inside
+// runOutreachProcessorWithLock — see processOutreachSequences.ts.
+//
+// TODO(phase-15): also wrap processReplies and processBounces in advisory locks
+//   (LOCK_ID_REPLY_PROCESSOR = 4016 / LOCK_ID_BOUNCE_PROCESSOR = 4015 — same pattern
+//   as outreach). Lower priority because both jobs are already idempotent at the
+//   per-message level.
 
 export function startJobs(): void {
     console.log('[jobs] Starting background job scheduler...')
@@ -26,16 +34,10 @@ export function startJobs(): void {
         cleanupOldMessages().catch((err) => console.error('[jobs] cleanup failed:', err))
     })
 
-    // Process outreach sequences every 5 minutes
+    // Process outreach sequences every 5 minutes (advisory-locked at the DB layer)
     cron.schedule('*/5 * * * *', () => {
-        if (isSequenceProcessing) {
-            console.log('[jobs] processOutreachSequences already running, skipping tick')
-            return
-        }
-        isSequenceProcessing = true
-        processOutreachSequences()
+        runOutreachProcessorWithLock()
             .catch((err) => console.error('[jobs] processOutreachSequences failed:', err))
-            .finally(() => { isSequenceProcessing = false })
     })
 
     // Reset daily limits at midnight
