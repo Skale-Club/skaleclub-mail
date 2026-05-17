@@ -5,6 +5,7 @@ import { cleanupOldMessages } from './cleanupMessages'
 import { runOutreachProcessorWithLock, resetDailyLimits } from './processOutreachSequences'
 import { processReplies } from './processReplies'
 import { processBounces } from './processBounces'
+import { dailyOutreachDigest } from './dailyOutreachDigest'
 import { createLogger } from '../lib/logger'
 
 const log = createLogger('outreach.jobs')
@@ -81,6 +82,21 @@ export function startJobs(): void {
         })
     }, { timezone: 'UTC' })
 
+    // Phase 17 — Daily outreach digest at 09:00 UTC. Log-only (no email/slack).
+    // Timezone pinned to UTC matching the resetDailyLimits cron above; depends on
+    // outreach-metrics.ts aggregate helpers (Plan 17-03). The digest is one log
+    // line with action='outreach.digest.daily' — grep with:
+    //   docker logs skaleclub-mail 2>&1 | jq 'select(.action=="outreach.digest.daily")'
+    cron.schedule('0 9 * * *', () => {
+        dailyOutreachDigest().catch((err) => {
+            const e = err instanceof Error ? err : new Error(String(err))
+            log.error({
+                action: 'outreach.jobs.dailyOutreachDigest_failed',
+                error: { message: e.message, stack: e.stack },
+            }, 'dailyOutreachDigest failed')
+        })
+    }, { timezone: 'UTC' })
+
     // Process replies every 15 minutes
     cron.schedule('*/15 * * * *', () => {
         processReplies().catch((err) => {
@@ -105,6 +121,6 @@ export function startJobs(): void {
 
     log.info({
         action: 'outreach.jobs.scheduler_ready',
-        schedule: 'processQueue=1min, processHeld=5min, cleanup=daily-3am, outreach=5min, resetLimits=daily-midnight-UTC, replies=15min, bounces=30min',
+        schedule: 'processQueue=1min, processHeld=5min, cleanup=daily-3am, outreach=5min, resetLimits=daily-midnight-UTC, dailyDigest=09:00-UTC, replies=15min, bounces=30min',
     }, 'scheduler ready')
 }
