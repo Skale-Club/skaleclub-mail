@@ -170,13 +170,13 @@ Plans:
 **Goal:** Two related fixes to the outreach job loop. (A) Reply detection v2: 3-tier matching (In-Reply-To → References → from-address heuristic) + auto-reply filter (Auto-Submitted, Precedence, OOO subject) so auto-replies don't stop sequences and lead replies from related aliases are correctly matched. (B) Per-inbox throttle: respect `email_accounts.minMinutesBetweenEmails`/`maxMinutesBetweenEmails` (currently unused → burst sends → spam folder); add `last_sent_at` column via migration 021; apply jitter on scheduling. Single biggest deliverability risk in the system today.
 **Requirements:** REPLY-DETECT-V2 + INBOX-THROTTLE + AUTO-REPLY-FILTER
 **Depends on:** Phase 15 (no code dependency, just sequencing)
-**Plans:** 4 plans
+**Plans:** 2/4 plans executed
 
 Plans:
-- [ ] 16-01-PLAN.md — Migration 021 (email_accounts.last_sent_at) + applySendJitter helper + extend canSendFromAccount — INBOX-THROTTLE
+- [x] 16-01-PLAN.md — Migration 021 (email_accounts.last_sent_at) + applySendJitter helper + extend canSendFromAccount — INBOX-THROTTLE
 - [ ] 16-02-PLAN.md — Wire per-inbox throttle + jitter + structured skip logs in processOutreachSequences.ts — INBOX-THROTTLE
 - [ ] 16-03-PLAN.md — Rewrite processReplies.ts: 3-tier matcher + auto-reply filter + IMAP SINCE cap + structured logs — REPLY-DETECT-V2, AUTO-REPLY-FILTER
-- [ ] 16-04-PLAN.md — Explicit timezone: 'UTC' on resetDailyLimits cron in jobs/index.ts — INBOX-THROTTLE
+- [x] 16-04-PLAN.md — Explicit timezone: 'UTC' on resetDailyLimits cron in jobs/index.ts — INBOX-THROTTLE
 
 ### Phase 17: Observability foundation
 
