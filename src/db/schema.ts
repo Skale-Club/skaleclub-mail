@@ -904,6 +904,10 @@ export const outreachEmails = pgTable('outreach_emails', {
     idxOutreachEmailsCampaignLeadId: index('idx_outreach_emails_campaign_lead_id').on(table.campaignLeadId),
     idxOutreachEmailsSequenceStepId: index('idx_outreach_emails_sequence_step_id').on(table.sequenceStepId),
     idxOutreachEmailsEmailAccountId: index('idx_outreach_emails_email_account_id').on(table.emailAccountId),
+    // Phase 17 — every aggregate query in the health endpoint filters on
+    // (sent_at >= window AND status = ?). Composite index makes those scans
+    // index-only for the common 1h/24h/7d rolling windows.
+    idxOutreachEmailsSentAtStatus: index('idx_outreach_emails_sent_at_status').on(table.sentAt, table.status),
 }))
 
 // Outreach Analytics (daily aggregated stats)
