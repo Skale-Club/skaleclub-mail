@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: — Outreach Hardening)
-status: executing
-stopped_at: Completed 17-02-PLAN.md (outreach pino migration + tick metrics ring buffer)
-last_updated: "2026-05-17T15:36:22.050Z"
+status: verifying
+stopped_at: Completed 17-04-PLAN.md (daily outreach digest cron) — Phase 17 + v1.3 milestone DONE
+last_updated: "2026-05-17T15:46:34.593Z"
 progress:
   total_phases: 9
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 28
-  completed_plans: 27
-  percent: 93
+  completed_plans: 28
+  percent: 100
 ---
 
 # Project State
@@ -27,15 +27,15 @@ See: .planning/PROJECT.md (updated 2026-04-15)
 
 ## Current Position
 
-Phase: 17 (observability-foundation) — EXECUTING
-Plan: 4 of 4 complete (17-01 logger + 17-02 pino swap + 17-03 health endpoint done; 17-04 daily digest remaining)
-Milestone: v1.3 (Outreach Hardening)
+Phase: 17 (observability-foundation) — **COMPLETE**
+Plan: 4 of 4 complete (17-01 logger + 17-02 pino swap + 17-03 health endpoint + 17-04 daily digest ALL done)
+Milestone: v1.3 (Outreach Hardening) — **all code complete**
 All 4 phase codebases (10-13) merged (commit `3b2cc41`).
-Status: Ready to execute
+Status: Phase 17 complete — ready for verification
 
-**Resume point:** Execute 17-04-PLAN.md (daily outreach digest cron). See `.planning/HANDOFF.md` and `.planning/OPERATOR-CHECKLIST.md` for ops items.
+**Resume point:** Verification pass on Phase 17, then attend `.planning/OPERATOR-CHECKLIST.md` items (certbot install on Hetzner, Hetzner port 25 ticket, Thunderbird end-to-end test).
 
-Progress: [██████████] 96% (code 27/28 plans done; v1.2 ops pending)
+Progress: [██████████] 100% (code 28/28 plans done; v1.2 ops still pending)
 
 ### v1.2 Phase Status
 
@@ -88,6 +88,7 @@ Full IMAP/SMTP/MX stack, SASL PLAIN/LOGIN, UID ops, autodiscovery routes, UI car
 - **(17-02) Pino action namespace `outreach.<area>.<event>`**: 6 areas (send, processor, replies, bounce, track, jobs) × ~3-7 events each; the `action` field is the primary `jq` grep key. Skip events kept at `info` level (not debug) because they are the primary "why isn't this campaign sending?" ops signal and must be visible at default LOG_LEVEL=info. Track HMAC tokens truncated to 12 chars + `...` at log call sites (explicit boundary redaction, not lazy global config).
 - **(17-02) Processor tick ring buffer co-located in `processOutreachSequences.ts`** (not a separate `lib/processor-metrics.ts` file): the `recordTick()` call lives 2 lines below the `performance.now()` measurement so co-location prevents temporal coupling bugs. 17-03 writes its own `outreach-metrics.ts` for DB-aggregate concerns — different problem.
 - **(17-03) Health endpoint shape + aggregate helper reuse**: `GET /api/admin/outreach/health` returns `{asOf, overall, byOrg, topBouncingCampaigns, alerts, thresholds, _meta}`. Aggregate SQL helpers live in `src/server/lib/outreach-metrics.ts` (pure, no logger calls) and are reused verbatim by Plan 17-04's daily digest. Sample-size floors on bounce alerts (sent>=20 for 1h, sent>=100 for 24h) prevent tiny-window false positives. Composite index `(sent_at, status)` on `outreach_emails` added via migration 022 (CONCURRENTLY IF NOT EXISTS).
+- **(17-04) Daily outreach digest is LOG-ONLY at 09:00 UTC**: cron `0 9 * * *` with explicit `{ timezone: 'UTC' }` (matches 16-04 resetDailyLimits idiom). Emits ONE pino info line with `action='outreach.digest.daily'` containing the full snapshot (overall + byOrg + topBouncingCampaigns + alerts) plus a `summary` scoreboard block (healthy/warning/critical org counts + alertCount). Reuses 17-03 aggregate helpers verbatim — zero SQL duplication. Job catches its own exceptions (logs `outreach.digest.failed`); cron wrapper has defence-in-depth `.catch` (logs `outreach.jobs.dailyOutreachDigest_failed`). No email/slack/webhook per Phase 17 scope — Phase 18+ wires notifications by reading the same JSON payload.
 - **(15-01) Campaign detail tabs as component state, not nested wouter routes**: preserves `/outreach/campaigns/:id` as a stable bookmarkable URL; skips installing the shadcn Tabs primitive since `src/components/ui/` doesn't have one. CONTEXT.md §66 authorises the fallback.
 - **(15-01) Stub-then-fill pattern for parallel waves**: `CampaignDetailPage.tsx` imports default-exported placeholder tab children (`LeadsTab`, `SequenceTab`, `StatsTab`) so plans 15-02 and 15-03 can overwrite entire tab files in parallel without touching the parent page or `main.tsx`.
 - **(15-01) queryKey conventions for parallel tabs**: `['campaign', orgId, id]` for the detail fetch; `['campaign-stats', orgId, campaignId]` for OverviewTab stats. Plan 15-03's Stats tab should use a distinct key (e.g. `['campaign-stats-detail', ...]`) to avoid invalidation fights with Overview.
@@ -113,7 +114,7 @@ Full IMAP/SMTP/MX stack, SASL PLAIN/LOGIN, UID ops, autodiscovery routes, UI car
 
 ## Session Continuity
 
-Last session: 2026-05-17T15:36:22.046Z
-Stopped at: Completed 17-02-PLAN.md (outreach pino migration + tick metrics ring buffer)
+Last session: 2026-05-17T15:46:34.589Z
+Stopped at: Completed 17-04-PLAN.md (daily outreach digest cron) — Phase 17 + v1.3 milestone DONE
 Resume file: None
 Next action: execute `.planning/OPERATOR-CHECKLIST.md` section 2 (install certbot on Hetzner) — unblocks Thunderbird TLS connection
