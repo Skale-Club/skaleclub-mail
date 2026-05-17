@@ -218,11 +218,9 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
 
             const abVariant = selectAbVariant(currentStep, lead.id)
 
-            // Generate the HMAC tracking token up-front so the placeholder row has the NOT NULL value.
-            // The same token is later passed to sendOutreachEmail (which currently generates its own;
-            // both are valid because the column is NOT NULL UNIQUE and our claim row's token never
-            // collides with the sender's). Persisting it pre-send means open/click tracking still
-            // works even if the send fails (no orphaned 'sent' row referencing an unsent token).
+            // Generate the HMAC tracking token up-front so the placeholder row has the NOT NULL value
+            // AND the same token is passed to sendOutreachEmail so the URL-embedded token matches
+            // the persisted one. Without this contract, track.ts lookups silently miss (Phase 15.1 fix).
             const trackingToken = generateOutreachToken({ kind: 'track', clid: campaignLead.id, cid: campaign.id })
 
             // Claim the (campaignLeadId, sequenceStepId) slot. The unique index
@@ -260,6 +258,7 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
                 campaign,
                 step: currentStep,
                 campaignLeadId: campaignLead.id,
+                trackingToken,
                 trackOpens: campaign.trackOpens,
                 trackClicks: campaign.trackClicks,
                 trackingBaseUrl,

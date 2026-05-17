@@ -12,7 +12,6 @@ import { interpolateTemplate, type LeadForTemplate } from './template-variables'
 import { injectTracking } from './tracking'
 import { sendMessageWithOutlook } from './outlook'
 import { generateUnsubscribeLink } from '../routes/outreach/unsubscribe'
-import { generateOutreachToken } from './outreach-tokens'
 
 interface SendOutreachEmailParams {
     account: typeof emailAccounts.$inferSelect
@@ -20,6 +19,7 @@ interface SendOutreachEmailParams {
     campaign: typeof campaigns.$inferSelect
     step: typeof sequenceSteps.$inferSelect
     campaignLeadId: string
+    trackingToken: string
     trackOpens?: boolean
     trackClicks?: boolean
     trackingBaseUrl?: string
@@ -104,7 +104,7 @@ export function calculateNextScheduledAt(step: typeof sequenceSteps.$inferSelect
 }
 
 export async function sendOutreachEmail(params: SendOutreachEmailParams): Promise<SendResult> {
-    const { account, lead, campaign, step, campaignLeadId, trackOpens, trackClicks, trackingBaseUrl, abVariant } = params
+    const { account, lead, campaign, step, campaignLeadId, trackingToken, trackOpens, trackClicks, trackingBaseUrl, abVariant } = params
 
     try {
         const subjectTemplate = abVariant === 'b' && step.subjectB ? step.subjectB : step.subject
@@ -113,7 +113,10 @@ export async function sendOutreachEmail(params: SendOutreachEmailParams): Promis
 
         const baseUrl = trackingBaseUrl || process.env.FRONTEND_URL || 'http://localhost:9000'
         const unsubscribeUrl = generateUnsubscribeLink(campaignLeadId, campaign.id, baseUrl)
-        const trackingToken = generateOutreachToken({ kind: 'track', clid: campaignLeadId, cid: campaign.id })
+        // Phase 15.1 fix: trackingToken is now passed from the caller (processor) so the token
+        // injected into the email HTML matches the one persisted in outreach_emails.tracking_token.
+        // Previously the sender generated its own token (always different from the processor's claim
+        // token), causing track.ts lookups to silently miss and opens/clicks to stay at 0%.
 
         const leadForTemplate: LeadForTemplate = {
             email: lead.email,
