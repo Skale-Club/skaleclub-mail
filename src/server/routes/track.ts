@@ -3,6 +3,9 @@ import { db } from '../../db'
 import { messages, organizations, outreachEmails, campaignLeads, campaigns, emailAccounts } from '../../db/schema'
 import { eq, sql } from 'drizzle-orm'
 import { fireWebhooks, incrementStat } from '../lib/tracking'
+import { createLogger } from '../lib/logger'
+
+const log = createLogger('outreach.track')
 
 const router = Router()
 
@@ -66,6 +69,13 @@ router.get('/open/:token', async (req: Request, res: Response) => {
                 db.update(campaigns).set({ totalOpens: sql`${campaigns.totalOpens} + 1`, updatedAt: now }).where(eq(campaigns.id, outreachEmail.campaignId)),
                 db.update(emailAccounts).set({ totalOpens: sql`${emailAccounts.totalOpens} + 1`, updatedAt: now }).where(eq(emailAccounts.id, outreachEmail.emailAccountId)),
             ])
+            log.debug({
+                action: 'outreach.track.open',
+                outreachEmailId: outreachEmail.id,
+                campaignId: outreachEmail.campaignId,
+                campaignLeadId: outreachEmail.campaignLeadId,
+                emailAccountId: outreachEmail.emailAccountId,
+            }, 'open recorded')
             return
         }
 
@@ -101,7 +111,12 @@ router.get('/open/:token', async (req: Request, res: Response) => {
             }),
         ])
     } catch (err) {
-        console.error('Open tracking error:', err)
+        const e = err instanceof Error ? err : new Error(String(err))
+        log.error({
+            action: 'outreach.track.open_error',
+            token: token.slice(0, 12) + '...',
+            error: { message: e.message, stack: e.stack },
+        }, 'open tracking failed')
     }
 })
 
@@ -155,6 +170,14 @@ router.get('/click/:token', async (req: Request, res: Response) => {
                 db.update(campaigns).set({ totalClicks: sql`${campaigns.totalClicks} + 1`, updatedAt: now }).where(eq(campaigns.id, outreachEmail.campaignId)),
                 db.update(emailAccounts).set({ totalClicks: sql`${emailAccounts.totalClicks} + 1`, updatedAt: now }).where(eq(emailAccounts.id, outreachEmail.emailAccountId)),
             ])
+            log.debug({
+                action: 'outreach.track.click',
+                outreachEmailId: outreachEmail.id,
+                campaignId: outreachEmail.campaignId,
+                campaignLeadId: outreachEmail.campaignLeadId,
+                emailAccountId: outreachEmail.emailAccountId,
+                targetUrl,
+            }, 'click recorded')
             return
         }
 
@@ -183,7 +206,12 @@ router.get('/click/:token', async (req: Request, res: Response) => {
             }),
         ])
     } catch (err) {
-        console.error('Click tracking error:', err)
+        const e = err instanceof Error ? err : new Error(String(err))
+        log.error({
+            action: 'outreach.track.click_error',
+            token: token.slice(0, 12) + '...',
+            error: { message: e.message, stack: e.stack },
+        }, 'click tracking failed')
     }
 })
 

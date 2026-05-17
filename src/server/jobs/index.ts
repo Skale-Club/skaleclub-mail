@@ -5,6 +5,9 @@ import { cleanupOldMessages } from './cleanupMessages'
 import { runOutreachProcessorWithLock, resetDailyLimits } from './processOutreachSequences'
 import { processReplies } from './processReplies'
 import { processBounces } from './processBounces'
+import { createLogger } from '../lib/logger'
+
+const log = createLogger('outreach.jobs')
 
 // P0-06: the previous in-memory mutex was removed in plan 14-06. It only protected
 // within a single Node process; multi-instance deploys (blue-green overlap, future
@@ -17,27 +20,51 @@ import { processBounces } from './processBounces'
 //   per-message level.
 
 export function startJobs(): void {
-    console.log('[jobs] Starting background job scheduler...')
+    log.info({ action: 'outreach.jobs.scheduler_start' }, 'starting background job scheduler')
 
     // Process email queue every minute
     cron.schedule('* * * * *', () => {
-        processQueue().catch((err) => console.error('[jobs] processQueue failed:', err))
+        processQueue().catch((err) => {
+            const e = err instanceof Error ? err : new Error(String(err))
+            log.error({
+                action: 'outreach.jobs.processQueue_failed',
+                error: { message: e.message, stack: e.stack },
+            }, 'processQueue failed')
+        })
     })
 
     // Process expired held messages every 5 minutes
     cron.schedule('*/5 * * * *', () => {
-        processHeldMessages().catch((err) => console.error('[jobs] processHeld failed:', err))
+        processHeldMessages().catch((err) => {
+            const e = err instanceof Error ? err : new Error(String(err))
+            log.error({
+                action: 'outreach.jobs.processHeld_failed',
+                error: { message: e.message, stack: e.stack },
+            }, 'processHeld failed')
+        })
     })
 
     // Cleanup old messages daily at 3 AM
     cron.schedule('0 3 * * *', () => {
-        cleanupOldMessages().catch((err) => console.error('[jobs] cleanup failed:', err))
+        cleanupOldMessages().catch((err) => {
+            const e = err instanceof Error ? err : new Error(String(err))
+            log.error({
+                action: 'outreach.jobs.cleanup_failed',
+                error: { message: e.message, stack: e.stack },
+            }, 'cleanup failed')
+        })
     })
 
     // Process outreach sequences every 5 minutes (advisory-locked at the DB layer)
     cron.schedule('*/5 * * * *', () => {
         runOutreachProcessorWithLock()
-            .catch((err) => console.error('[jobs] processOutreachSequences failed:', err))
+            .catch((err) => {
+                const e = err instanceof Error ? err : new Error(String(err))
+                log.error({
+                    action: 'outreach.jobs.processOutreachSequences_failed',
+                    error: { message: e.message, stack: e.stack },
+                }, 'processOutreachSequences failed')
+            })
     })
 
     // Phase 16 — INBOX-THROTTLE: reset per-account daily send counter at midnight UTC.
@@ -45,18 +72,39 @@ export function startJobs(): void {
     // (today alpine defaults to UTC, but pinning here prevents silent breakage if TZ is
     // set by a future ops change). Pair with processOutreachSequences.resetDailyLimits.
     cron.schedule('0 0 * * *', () => {
-        resetDailyLimits().catch((err) => console.error('[jobs] resetDailyLimits failed:', err))
+        resetDailyLimits().catch((err) => {
+            const e = err instanceof Error ? err : new Error(String(err))
+            log.error({
+                action: 'outreach.jobs.resetDailyLimits_failed',
+                error: { message: e.message, stack: e.stack },
+            }, 'resetDailyLimits failed')
+        })
     }, { timezone: 'UTC' })
 
     // Process replies every 15 minutes
     cron.schedule('*/15 * * * *', () => {
-        processReplies().catch((err) => console.error('[jobs] processReplies failed:', err))
+        processReplies().catch((err) => {
+            const e = err instanceof Error ? err : new Error(String(err))
+            log.error({
+                action: 'outreach.jobs.processReplies_failed',
+                error: { message: e.message, stack: e.stack },
+            }, 'processReplies failed')
+        })
     })
 
     // Process bounces every 30 minutes
     cron.schedule('*/30 * * * *', () => {
-        processBounces().catch((err) => console.error('[jobs] processBounces failed:', err))
+        processBounces().catch((err) => {
+            const e = err instanceof Error ? err : new Error(String(err))
+            log.error({
+                action: 'outreach.jobs.processBounces_failed',
+                error: { message: e.message, stack: e.stack },
+            }, 'processBounces failed')
+        })
     })
 
-    console.log('[jobs] Scheduled: processQueue (1min), processHeld (5min), cleanup (daily 3am), outreach (5min), resetLimits (daily midnight UTC), replies (15min), bounces (30min)')
+    log.info({
+        action: 'outreach.jobs.scheduler_ready',
+        schedule: 'processQueue=1min, processHeld=5min, cleanup=daily-3am, outreach=5min, resetLimits=daily-midnight-UTC, replies=15min, bounces=30min',
+    }, 'scheduler ready')
 }
