@@ -158,10 +158,10 @@ Plans:
 **Goal:** Build the missing `/outreach/campaigns/:id` detail page so the funnel from create → manage → activate is end-to-end functional. CampaignsPage links and OutreachDashboard links currently lead to a route that doesn't exist in `src/main.tsx`. Backend endpoints already exist (campaigns/:id, /leads, /sequences, /stats) — this is a frontend completion. Multi-tab UI (Overview / Leads / Sequence / Stats) with optimistic updates. CONTEXT.md is pre-authored.
 **Requirements:** UI-COMPLETION (detail page) + UX-NEXT (post-create redirect updated)
 **Depends on:** Phase 14
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
-- [ ] 15-01-PLAN.md — Route + page skeleton + Overview tab + NewCampaignPage redirect — UI-COMPLETION, UX-NEXT
+- [x] 15-01-PLAN.md — Route + page skeleton + Overview tab + NewCampaignPage redirect — UI-COMPLETION, UX-NEXT
 - [ ] 15-02-PLAN.md — Leads tab (paginated table + Add Leads modal) — UI-COMPLETION
 - [ ] 15-03-PLAN.md — Sequence tab + Stats tab (read-only views, no charts) — UI-COMPLETION
 

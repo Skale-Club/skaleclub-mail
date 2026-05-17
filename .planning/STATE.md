@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: — Outreach Hardening)
 status: executing
-stopped_at: Completed 14-06-PLAN.md (P0-05/06/07-bounce/08 — job-processor robustness, final plan of phase 14)
-last_updated: "2026-05-17T05:01:17.745Z"
+stopped_at: Completed 15-01-PLAN.md (CampaignDetailPage skeleton + Overview tab + new-campaign redirect)
+last_updated: "2026-05-17T14:15:51.432Z"
 progress:
-  total_phases: 6
+  total_phases: 9
   completed_phases: 6
-  total_plans: 17
-  completed_plans: 17
+  total_plans: 20
+  completed_plans: 18
   percent: 75
 ---
 
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-04-15)
 
 ## Current Position
 
-Phase: 14
-Plan: Not started
+Phase: 15 (campaign-detail-page) — EXECUTING
+Plan: 2 of 3
 Milestone: v1.2
 All 4 phase codebases merged (commit `3b2cc41`).
 Status: Ready to execute
@@ -83,6 +83,12 @@ Full IMAP/SMTP/MX stack, SASL PLAIN/LOGIN, UID ops, autodiscovery routes, UI car
 
 - 2026-05-16: Phase 14 added — **Outreach P0 fixes** (numbered 14 to follow v1.2 phases 10-13; effectively kicks off informal milestone v1.3 "Outreach Hardening"). Driven by deep audit at `.planning/debug/outreach-system-deep-audit.md` (10 P0 / 20 P1 / 19 P2 findings).
 
+### Decisions (v1.3 — Outreach Hardening)
+
+- **(15-01) Campaign detail tabs as component state, not nested wouter routes**: preserves `/outreach/campaigns/:id` as a stable bookmarkable URL; skips installing the shadcn Tabs primitive since `src/components/ui/` doesn't have one. CONTEXT.md §66 authorises the fallback.
+- **(15-01) Stub-then-fill pattern for parallel waves**: `CampaignDetailPage.tsx` imports default-exported placeholder tab children (`LeadsTab`, `SequenceTab`, `StatsTab`) so plans 15-02 and 15-03 can overwrite entire tab files in parallel without touching the parent page or `main.tsx`.
+- **(15-01) queryKey conventions for parallel tabs**: `['campaign', orgId, id]` for the detail fetch; `['campaign-stats', orgId, campaignId]` for OverviewTab stats. Plan 15-03's Stats tab should use a distinct key (e.g. `['campaign-stats-detail', ...]`) to avoid invalidation fights with Overview.
+
 ### Decisions (v1.2)
 
 - **Hetzner over Vercel for mail**: Vercel Functions are HTTP-only serverless; mail servers need long-lived TCP. Hetzner VPS + Docker + GitHub Actions already in place.
@@ -101,7 +107,7 @@ Full IMAP/SMTP/MX stack, SASL PLAIN/LOGIN, UID ops, autodiscovery routes, UI car
 
 ## Session Continuity
 
-Last session: 2026-05-17T04:49:39.461Z
-Stopped at: Completed 14-06-PLAN.md (P0-05/06/07-bounce/08 — job-processor robustness, final plan of phase 14)
+Last session: 2026-05-17T14:15:51.425Z
+Stopped at: Completed 15-01-PLAN.md (CampaignDetailPage skeleton + Overview tab + new-campaign redirect)
 Resume file: None
 Next action: execute `.planning/OPERATOR-CHECKLIST.md` section 2 (install certbot on Hetzner) — unblocks Thunderbird TLS connection
