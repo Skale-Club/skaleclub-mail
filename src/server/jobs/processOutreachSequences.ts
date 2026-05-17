@@ -181,23 +181,25 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
         try {
             const campaign = campaignsMap.get(campaignLead.campaignId)
             if (!campaign) {
-                console.error(`Campaign ${campaignLead.campaignId} not found`)
+                logSkip('campaign_not_found', { campaignId: campaignLead.campaignId, campaignLeadId: campaignLead.id })
                 result.errors++
                 continue
             }
 
             if (campaign.status !== 'active') {
+                logSkip('campaign_inactive', { campaignId: campaign.id, campaignLeadId: campaignLead.id })
                 continue
             }
 
             const lead = campaignLead.lead
             if (!lead) {
-                console.error(`Lead not found for campaign lead ${campaignLead.id}`)
+                logSkip('lead_not_found', { campaignId: campaign.id, campaignLeadId: campaignLead.id })
                 result.errors++
                 continue
             }
 
             if (lead.unsubscribedAt) {
+                logSkip('unsubscribed', { campaignId: campaign.id, leadId: lead.id, campaignLeadId: campaignLead.id })
                 await db.update(campaignLeads)
                     .set({ status: 'unsubscribed', nextScheduledAt: null })
                     .where(eq(campaignLeads.id, campaignLead.id))
@@ -206,6 +208,7 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
 
             const isSuppressed = suppressedSet.has(`${campaign.organizationId}:${lead.email}`)
             if (isSuppressed) {
+                logSkip('suppression', { campaignId: campaign.id, leadId: lead.id, campaignLeadId: campaignLead.id })
                 await db.update(campaignLeads)
                     .set({ status: 'bounced', nextScheduledAt: null })
                     .where(eq(campaignLeads.id, campaignLead.id))
@@ -213,30 +216,52 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
             }
 
             if (!isWithinSendWindow(campaign, now)) {
+                logSkip('outside_send_window', { campaignId: campaign.id, leadId: lead.id, campaignLeadId: campaignLead.id })
                 continue
             }
 
             const emailAccount = campaignLead.assignedEmailAccount
             if (!emailAccount) {
-                console.error(`No email account assigned for campaign lead ${campaignLead.id}`)
+                logSkip('no_account', { campaignId: campaign.id, leadId: lead.id, campaignLeadId: campaignLead.id })
                 result.errors++
                 continue
             }
 
             if (emailAccount.status !== 'verified') {
-                console.error(`Email account ${emailAccount.id} is not verified`)
+                logSkip('account_not_verified', { campaignId: campaign.id, emailAccountId: emailAccount.id, campaignLeadId: campaignLead.id })
                 result.errors++
                 continue
             }
 
-            if (!canSendFromAccount(emailAccount)) {
-                console.log(`Email account ${emailAccount.id} has reached daily limit`)
+            // Phase 16 — INBOX-THROTTLE wire. canSendFromAccount(account, now) was extended
+            // in Plan 16-01 to check (lastSentAt + minMinutesBetweenEmails*60s > now).
+            // We discriminate the cause to emit the correct skip reason for ops visibility.
+            if (!canSendFromAccount(emailAccount, now)) {
+                if (emailAccount.currentDailySent >= emailAccount.dailySendLimit) {
+                    logSkip('daily_limit_reached', {
+                        campaignId: campaign.id,
+                        emailAccountId: emailAccount.id,
+                        campaignLeadId: campaignLead.id,
+                        extra: { currentDailySent: emailAccount.currentDailySent, dailySendLimit: emailAccount.dailySendLimit },
+                    })
+                } else {
+                    // Implied cause: lastSentAt + min*60s > now (the only other branch in canSendFromAccount).
+                    logSkip('rate_limit_per_inbox', {
+                        campaignId: campaign.id,
+                        emailAccountId: emailAccount.id,
+                        campaignLeadId: campaignLead.id,
+                        extra: {
+                            minMinutesBetweenEmails: emailAccount.minMinutesBetweenEmails,
+                            lastSentAt: emailAccount.lastSentAt?.toISOString() ?? null,
+                        },
+                    })
+                }
                 continue
             }
 
             const currentStep = campaignLead.currentStep
             if (!currentStep) {
-                console.error(`No current step for campaign lead ${campaignLead.id}`)
+                logSkip('no_active_step', { campaignId: campaign.id, leadId: lead.id, campaignLeadId: campaignLead.id })
                 result.errors++
                 continue
             }
@@ -246,7 +271,7 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
             // survives process crashes and multi-instance races (in addition to the advisory
             // lock from Task 3 of plan 14-06).
             if (existingEmailsSet.has(`${campaignLead.id}:${currentStep.id}`)) {
-                console.log(`[processOutreachSequences] Skipping duplicate send for campaignLead ${campaignLead.id} step ${currentStep.id} (already in batch)`)
+                logSkip('in_batch_duplicate', { campaignId: campaign.id, campaignLeadId: campaignLead.id, extra: { sequenceStepId: currentStep.id } })
                 continue
             }
 
@@ -279,7 +304,7 @@ export async function processOutreachSequences(): Promise<{ processed: number; s
             }).onConflictDoNothing({ target: [outreachEmails.campaignLeadId, outreachEmails.sequenceStepId] }).returning({ id: outreachEmails.id })
 
             if (claim.length === 0) {
-                console.log(`[processOutreachSequences] Claim conflict for campaignLead ${campaignLead.id} step ${currentStep.id} — another worker or prior tick owns this slot`)
+                logSkip('claim_conflict', { campaignId: campaign.id, campaignLeadId: campaignLead.id, extra: { sequenceStepId: currentStep.id } })
                 continue
             }
 
