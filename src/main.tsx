@@ -79,6 +79,7 @@ const MessagesPage = React.lazy(() => import('./pages/admin/MessagesPage'))
 const OutreachDashboard = React.lazy(() => import('./pages/outreach/OutreachDashboard'))
 const CampaignsPage = React.lazy(() => import('./pages/outreach/CampaignsPage'))
 const NewCampaignPage = React.lazy(() => import('./pages/outreach/campaigns/NewCampaignPage'))
+const CampaignDetailPage = React.lazy(() => import('./pages/outreach/campaigns/CampaignDetailPage'))
 const LeadsPage = React.lazy(() => import('./pages/outreach/LeadsPage'))
 const InboxesPage = React.lazy(() => import('./pages/outreach/InboxesPage'))
 const NewInboxPage = React.lazy(() => import('./pages/outreach/inboxes/NewInboxPage'))
@@ -451,6 +452,13 @@ function App() {
                                     <AdminCheck>
                                         <OrganizationProvider>
                                             <PageSuspense><NewSequencePage /></PageSuspense>
+                                        </OrganizationProvider>
+                                    </AdminCheck>
+                                </Route>
+                                <Route path="/outreach/campaigns/:id">
+                                    <AdminCheck>
+                                        <OrganizationProvider>
+                                            <PageSuspense><CampaignDetailPage /></PageSuspense>
                                         </OrganizationProvider>
                                     </AdminCheck>
                                 </Route>
